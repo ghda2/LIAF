@@ -1,0 +1,17 @@
+[
+  {
+    "nome": "Consultoria em Compiladores e IA",
+    "descricao": "Arquitetura de sistemas orientados a agentes e LLMs com execução nativa.",
+    "icone": "🧠"
+  },
+  {
+    "nome": "Web Engine & SSG de Ultra Performance",
+    "descricao": "Sites e aplicações com carregamento 100% em RAM (< 3 MB) e zero I/O de disco.",
+    "icone": "⚡"
+  },
+  {
+    "nome": "Single-Binary Packaging & Deploy",
+    "descricao": "Empacotamento estático único via embed.FS sem necessidade de pastas externas.",
+    "icone": "📦"
+  }
+]

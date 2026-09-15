@@ -1,26 +1,35 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<!-- 
-  Site de Demonstração do LIAF Web Engine
-  Totalmente auto-hospedado em um binário único estático!
--->
-<head>
-  <meta charset="UTF-8">
-  <title>LIAF Web Engine - Demonstração</title>
-  <link rel="stylesheet" href="/style.css">
-</head>
-<body>
-  <div class="container">
-    <h1>🚀 LIAF Web Engine</h1>
-    <p>Este site está sendo servido diretamente de um <strong>binário único estático</strong> gerado pela linguagem LIAF.</p>
-    <ul>
-      <li>✓ Auto-Minificação de HTML, CSS e JS em memória</li>
-      <li>✓ Compressão automática Gzip com ETags</li>
-      <li>✓ Suporte nativo a Auto-TLS / Let's Encrypt (estilo Caddy)</li>
-    </ul>
-    <button id="btn">Testar Interatividade JS</button>
-    <p id="output"></p>
+<!-- layout "base.html" -->
+<div class="card">
+  <h1>🚀 Início — LIAF Web Engine & SSG</h1>
+  <p class="subtitle">Motor estático e servidor de ultra-performance operando 100% em memória RAM (~2.4 MB)!</p>
+  
+  <ul class="features">
+    <li>✓ <strong>Markdown & Frontmatter:</strong> Páginas <code>.md</code> convertidas e encaixadas em layouts no boot.</li>
+    <li>✓ <strong>Coleções & Loops:</strong> Iteração nativa com <code>&lt;!-- for item in colecao --&gt;</code>.</li>
+    <li>✓ <strong>Zero Ctrl+F5:</strong> Versionamento automático de CSS/JS com fingerprinting SHA-1.</li>
+    <li>✓ <strong>Single-Binary:</strong> Suporte a empacotamento completo via <code>liafc build --embed</code>.</li>
+  </ul>
+
+  <h2 style="margin-top: 2rem; margin-bottom: 0.5rem; font-size: 1.25rem;">✨ Serviços (Coleção JSON)</h2>
+  <div style="display: grid; gap: 0.75rem; margin-bottom: 1.5rem;">
+  <!-- for item in servicos -->
+    <div style="background: rgba(255,255,255,0.03); padding: 0.85rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">
+      <div style="font-weight: 600; color: #60a5fa;">{{ item.icone }} {{ item.nome }}</div>
+      <div style="font-size: 0.875rem; color: #94a3b8; margin-top: 0.25rem;">{{ item.descricao }}</div>
+    </div>
+  <!-- endfor -->
   </div>
-  <script src="/app.js"></script>
-</body>
-</html>
+
+  <h2 style="margin-top: 1.5rem; margin-bottom: 0.5rem; font-size: 1.25rem;">📝 Artigos Recentes (Markdown em RAM)</h2>
+  <div style="display: grid; gap: 0.75rem; margin-bottom: 1.5rem;">
+  <!-- for post in posts -->
+    <div style="background: rgba(255,255,255,0.03); padding: 0.85rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">
+      <div><a href="{{ post.url }}" style="font-weight: 600; color: #38bdf8; text-decoration: none;">{{ post.title }}</a></div>
+      <div style="font-size: 0.8rem; color: #64748b; margin-top: 0.2rem;">Data: {{ post.date }} • Autor: {{ post.author }}</div>
+    </div>
+  <!-- endfor -->
+  </div>
+
+  <button id="btn">Testar JavaScript</button>
+  <p id="output"></p>
+</div>

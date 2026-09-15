@@ -4,12 +4,13 @@
 *.dll
 *.so
 *.dylib
-liafc
-liafc.exe
-liaf_server.exe
-liaf_linux
-server
-server.exe
+/liafc
+/liafc.exe
+/liaf_server.exe
+/liaf_linux
+/liaf_server_linux
+/server
+/server.exe
 
 # Cache e builds temporários
 .liaf_cache/

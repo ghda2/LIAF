@@ -54,5 +54,8 @@ Compilar e gerar binário estático:
 
 - [`.docs/SPEC.md`](.docs/SPEC.md) — Especificação formal da gramática e tipos.
 - [`.docs/ARCHITECTURE.md`](.docs/ARCHITECTURE.md) — Pipeline do compilador e componentes modulares.
+- [`.docs/AI_AGENT_GUIDE.md`](.docs/AI_AGENT_GUIDE.md) — Guia prático de auto-cura e regras para agentes de IA.
 - [`.docs/ROADMAP.md`](.docs/ROADMAP.md) — Fases de maturidade da linguagem.
 - [`.docs/LEARNINGS.md`](.docs/LEARNINGS.md) — Relatório e métricas do teste em produção.
+- [`.docs/LOG_2026-09-15.md`](.docs/LOG_2026-09-15.md) — Registro completo de evolução e deploy (15/09/2026).
+- [`.agents/skills/liaf/SKILL.md`](.agents/skills/liaf/SKILL.md) — Skill pronta para agentes Antigravity.

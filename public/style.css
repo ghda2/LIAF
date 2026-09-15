@@ -1,0 +1,40 @@
+/* 
+  Estilo de demonstração do LIAF Web Engine
+  O minificador vai remover estes comentários e espaços!
+*/
+
+body {
+  margin: 0px ;
+  padding: 40px ;
+  font-family: system-ui, -apple-system, sans-serif ;
+  background: #0f172a ;
+  color: #f8fafc ;
+}
+
+.container {
+  max-width: 600px ;
+  margin: 0 auto ;
+  background: #1e293b ;
+  padding: 30px ;
+  border-radius: 12px ;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) ;
+}
+
+h1 {
+  color: #38bdf8 ;
+  margin-top: 0 ;
+}
+
+button {
+  background: #38bdf8 ;
+  color: #0f172a ;
+  border: none ;
+  padding: 10px 20px ;
+  border-radius: 6px ;
+  font-weight: bold ;
+  cursor: pointer ;
+}
+
+button:hover {
+  background: #7dd3fc ;
+}

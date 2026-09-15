@@ -1,0 +1,20 @@
+# Binários
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+liafc
+liafc.exe
+liaf_server.exe
+liaf_linux
+server
+server.exe
+
+# Cache e builds temporários
+.liaf_cache/
+.certs/
+
+# OS
+Thumbs.db
+.DS_Store

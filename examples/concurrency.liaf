@@ -1,0 +1,24 @@
+# Exemplo de Concorrência Massiva (Atores & Canais) em LIAF
+
+[fn worker (ch: chan[str] id: int) -> (void)
+  (sleep_ms 50)
+  [send ch (concat "Resultado processado com sucesso pelo Worker #" (str id))]
+/fn worker]
+
+[fn main () -> (void)
+  (println "Iniciando workers concorrentes...")
+  [let ch: chan[str] (make_chan str)]
+
+  [spawn (worker ch 1)]
+  [spawn (worker ch 2)]
+  [spawn (worker ch 3)]
+
+  [let r1: str [recv ch]]
+  [let r2: str [recv ch]]
+  [let r3: str [recv ch]]
+
+  (println r1)
+  (println r2)
+  (println r3)
+  (println "Todos os processos foram concluidos!")
+/fn main]

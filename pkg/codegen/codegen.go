@@ -5,16 +5,20 @@ import (
 	"strings"
 
 	"liaf/pkg/ast"
+	"liaf/pkg/checker"
 )
 
 type Generator struct {
-	prog   *ast.Program
+	mod    *ast.Module
 	sb     strings.Builder
 	indent int
+	info   *checker.Info
+	serial int
 }
 
-func New(prog *ast.Program) *Generator {
-	return &Generator{prog: prog}
+func New(mod *ast.Module) *Generator {
+	info, _ := checker.Check(mod, "")
+	return &Generator{mod: mod, info: info}
 }
 
 func (g *Generator) Generate() string {
@@ -22,51 +26,50 @@ func (g *Generator) Generate() string {
 	g.sb.WriteString("package main\n\n")
 	g.sb.WriteString("import (\n")
 	g.sb.WriteString("\t\"fmt\"\n")
-	g.sb.WriteString("\t\"io\"\n")
-	g.sb.WriteString("\t\"net/http\"\n")
+	g.sb.WriteString("\t\"strconv\"\n")
+	g.sb.WriteString("\t\"strings\"\n")
 	g.sb.WriteString("\t\"time\"\n")
 	g.sb.WriteString("\t\"liaf/pkg/web\"\n")
+	g.sb.WriteString("\trt \"liaf/pkg/runtime\"\n")
 	g.sb.WriteString(")\n\n")
 
-	// Built-in helper functions
+	g.sb.WriteString("var (\n")
+	g.sb.WriteString("\t_ = fmt.Sprint\n")
+	g.sb.WriteString("\t_ = strconv.FormatInt\n")
+	g.sb.WriteString("\t_ = strings.Builder{}\n")
+	g.sb.WriteString("\t_ = time.Sleep\n")
+	g.sb.WriteString("\t_ = web.ServeSite\n")
+	g.sb.WriteString("\t_ = rt.Exists\n")
+	g.sb.WriteString(")\n\n")
+
+	// Built-in helpers da especificação
+	g.sb.WriteString("// --- Built-in Helpers da LIAF v0.2 ---\n")
 	g.sb.WriteString("func _liaf_concat(args ...interface{}) string {\n")
-	g.sb.WriteString("\tres := \"\"\n")
+	g.sb.WriteString("\tvar sb strings.Builder\n")
 	g.sb.WriteString("\tfor _, a := range args {\n")
-	g.sb.WriteString("\t\tres += fmt.Sprint(a)\n")
+	g.sb.WriteString("\t\tsb.WriteString(fmt.Sprint(a))\n")
 	g.sb.WriteString("\t}\n")
-	g.sb.WriteString("\treturn res\n")
+	g.sb.WriteString("\treturn sb.String()\n")
 	g.sb.WriteString("}\n\n")
 
-	g.sb.WriteString("func _liaf_str(v interface{}) string {\n")
-	g.sb.WriteString("\treturn fmt.Sprint(v)\n")
+	g.sb.WriteString("func _liaf_str_from_int(v int64) string {\n")
+	g.sb.WriteString("\treturn strconv.FormatInt(v, 10)\n")
+	g.sb.WriteString("}\n\n")
+
+	g.sb.WriteString("func _liaf_float_from_int(v int64) float64 {\n")
+	g.sb.WriteString("\treturn float64(v)\n")
+	g.sb.WriteString("}\n\n")
+
+	g.sb.WriteString("func _liaf_int_from_str(s string) int64 {\n")
+	g.sb.WriteString("\tres, _ := strconv.ParseInt(strings.TrimSpace(s), 10, 64)\n")
+	g.sb.WriteString("\treturn res\n")
 	g.sb.WriteString("}\n\n")
 
 	g.sb.WriteString("func _liaf_sleep_ms(ms int64) {\n")
 	g.sb.WriteString("\ttime.Sleep(time.Duration(ms) * time.Millisecond)\n")
 	g.sb.WriteString("}\n\n")
 
-	g.sb.WriteString("func _liaf_http_get(url string) string {\n")
-	g.sb.WriteString("\tresp, err := http.Get(url)\n")
-	g.sb.WriteString("\tif err != nil {\n")
-	g.sb.WriteString("\t\treturn fmt.Sprintf(\"{\\\"error\\\": %q}\", err.Error())\n")
-	g.sb.WriteString("\t}\n")
-	g.sb.WriteString("\tdefer resp.Body.Close()\n")
-	g.sb.WriteString("\tb, _ := io.ReadAll(resp.Body)\n")
-	g.sb.WriteString("\treturn string(b)\n")
-	g.sb.WriteString("}\n\n")
-
-	g.sb.WriteString("func _liaf_http_serve(addr string, handler func(string) string) {\n")
-	g.sb.WriteString("\thttp.HandleFunc(\"/\", func(w http.ResponseWriter, r *http.Request) {\n")
-	g.sb.WriteString("\t\tres := handler(r.URL.Path)\n")
-	g.sb.WriteString("\t\tw.Header().Set(\"Content-Type\", \"application/json\")\n")
-	g.sb.WriteString("\t\tfmt.Fprint(w, res)\n")
-	g.sb.WriteString("\t})\n")
-	g.sb.WriteString("\tif err := http.ListenAndServe(addr, nil); err != nil {\n")
-	g.sb.WriteString("\t\tfmt.Printf(\"HTTP Server Error: %v\\n\", err)\n")
-	g.sb.WriteString("\t}\n")
-	g.sb.WriteString("}\n\n")
-
-	for _, decl := range g.prog.Decls {
+	for _, decl := range g.mod.Decls {
 		switch d := decl.(type) {
 		case *ast.StructDecl:
 			g.genStruct(d)
@@ -79,25 +82,27 @@ func (g *Generator) Generate() string {
 }
 
 func (g *Generator) genStruct(s *ast.StructDecl) {
-	g.sb.WriteString(fmt.Sprintf("type %s struct {\n", s.Name))
+	name := sanitizeIdent(s.Name)
+	g.sb.WriteString(fmt.Sprintf("type %s struct {\n", name))
 	for _, f := range s.Fields {
-		g.sb.WriteString(fmt.Sprintf("\t%s %s\n", f.Name, mapType(f.Type)))
+		g.sb.WriteString(fmt.Sprintf("\t%s %s `json:%q`\n", fieldIdent(f.Name), mapType(f.Type), f.Name))
 	}
 	g.sb.WriteString("}\n\n")
 }
 
 func (g *Generator) genFunc(f *ast.FuncDecl) {
+	fnName := sanitizeIdent(f.Name)
 	ret := mapType(f.ReturnType)
 	if ret != "" {
 		ret = " " + ret
 	}
 
-	params := []string{}
+	var params []string
 	for _, p := range f.Params {
-		params = append(params, fmt.Sprintf("%s %s", p.Name, mapType(p.Type)))
+		params = append(params, fmt.Sprintf("%s %s", sanitizeIdent(p.Name), mapType(p.Type)))
 	}
 
-	g.sb.WriteString(fmt.Sprintf("func %s(%s)%s {\n", f.Name, strings.Join(params, ", "), ret))
+	g.sb.WriteString(fmt.Sprintf("func %s(%s)%s {\n", fnName, strings.Join(params, ", "), ret))
 	g.indent++
 
 	for _, stmt := range f.Body {
@@ -108,151 +113,315 @@ func (g *Generator) genFunc(f *ast.FuncDecl) {
 	g.sb.WriteString("}\n\n")
 }
 
-func (g *Generator) genStmt(s ast.Stmt) {
-	g.writeIndent()
+func (g *Generator) writeIndent() {
+	for i := 0; i < g.indent; i++ {
+		g.sb.WriteString("\t")
+	}
+}
 
-	switch node := s.(type) {
+func (g *Generator) genStmt(stmt ast.Stmt) {
+	g.writeIndent()
+	switch s := stmt.(type) {
+	case *ast.LoopControl:
+		g.sb.WriteString(s.Kind + "\n")
+	case *ast.LoopStmt:
+		g.serial++
+		id := g.serial
+		switch s.Kind {
+		case "while":
+			g.sb.WriteString("for " + g.genExpr(s.Condition) + " {\n")
+		case "for-range":
+			g.sb.WriteString(fmt.Sprintf("for %s, _liaf_end_%d := int64(%s), int64(%s); %s < _liaf_end_%d; %s++ {\n", sanitizeIdent(s.Name), id, g.genExpr(s.Start), g.genExpr(s.End), sanitizeIdent(s.Name), id, sanitizeIdent(s.Name)))
+		case "for-each":
+			g.sb.WriteString(fmt.Sprintf("for _, %s := range (%s).Items {\n", sanitizeIdent(s.Name), g.genExpr(s.Collection)))
+		}
+		g.indent++
+		if s.Name != "" {
+			g.writeIndent()
+			g.sb.WriteString("_ = " + sanitizeIdent(s.Name) + "\n")
+		}
+		for _, st := range s.Body {
+			g.genStmt(st)
+		}
+		g.indent--
+		g.writeIndent()
+		g.sb.WriteString("}\n")
+	case *ast.MatchStmt:
+		g.serial++
+		id := fmt.Sprintf("_liaf_result_%d", g.serial)
+		g.sb.WriteString(fmt.Sprintf("if %s := %s; %s.OK {\n", id, g.genExpr(s.Value), id))
+		g.indent++
+		g.writeIndent()
+		g.sb.WriteString(fmt.Sprintf("%s := %s.Value; _ = %s\n", sanitizeIdent(s.OKName), id, sanitizeIdent(s.OKName)))
+		for _, st := range s.OK {
+			g.genStmt(st)
+		}
+		g.indent--
+		g.writeIndent()
+		g.sb.WriteString("} else {\n")
+		g.indent++
+		g.writeIndent()
+		g.sb.WriteString(fmt.Sprintf("%s := %s.Error; _ = %s\n", sanitizeIdent(s.ErrName), id, sanitizeIdent(s.ErrName)))
+		for _, st := range s.Err {
+			g.genStmt(st)
+		}
+		g.indent--
+		g.writeIndent()
+		g.sb.WriteString("}\n")
 	case *ast.LetStmt:
-		g.sb.WriteString(fmt.Sprintf("%s := %s\n", node.Name, g.genExpr(node.Value)))
+		val := g.genExpr(s.Value)
+		varType := mapType(s.Type)
+		g.sb.WriteString(fmt.Sprintf("var %s %s = %s\n", sanitizeIdent(s.Name), varType, val))
+		g.writeIndent()
+		g.sb.WriteString("_ = " + sanitizeIdent(s.Name) + "\n")
+
+	case *ast.SetStmt:
+		val := g.genExpr(s.Value)
+		g.sb.WriteString(fmt.Sprintf("%s = %s\n", sanitizeIdent(s.Name), val))
+
 	case *ast.ReturnStmt:
-		if node.Value != nil {
-			g.sb.WriteString(fmt.Sprintf("return %s\n", g.genExpr(node.Value)))
+		if s.Value != nil {
+			g.sb.WriteString(fmt.Sprintf("return %s\n", g.genExpr(s.Value)))
 		} else {
 			g.sb.WriteString("return\n")
 		}
-	case *ast.SpawnStmt:
-		g.sb.WriteString(fmt.Sprintf("go %s\n", g.genCall(node.Call)))
-	case *ast.SendStmt:
-		g.sb.WriteString(fmt.Sprintf("%s <- %s\n", g.genExpr(node.Channel), g.genExpr(node.Value)))
+
 	case *ast.IfStmt:
-		g.sb.WriteString(fmt.Sprintf("if %s {\n", g.genExpr(node.Condition)))
+		cond := g.genExpr(s.Condition)
+		g.sb.WriteString(fmt.Sprintf("if %s {\n", cond))
 		g.indent++
-		for _, sub := range node.ThenBody {
-			g.genStmt(sub)
+		for _, st := range s.Then {
+			g.genStmt(st)
 		}
 		g.indent--
-		if len(node.ElseBody) > 0 {
+
+		if len(s.Else) > 0 {
 			g.writeIndent()
 			g.sb.WriteString("} else {\n")
 			g.indent++
-			for _, sub := range node.ElseBody {
-				g.genStmt(sub)
+			for _, st := range s.Else {
+				g.genStmt(st)
 			}
 			g.indent--
 		}
 		g.writeIndent()
 		g.sb.WriteString("}\n")
+
+	case *ast.SpawnStmt:
+		callExpr := g.genExpr(s.Call)
+		g.sb.WriteString(fmt.Sprintf("go %s\n", callExpr))
+
+	case *ast.SendStmt:
+		ch := g.genExpr(s.Channel)
+		val := g.genExpr(s.Value)
+		g.sb.WriteString(fmt.Sprintf("%s <- %s\n", ch, val))
+
 	case *ast.ExprStmt:
-		g.sb.WriteString(fmt.Sprintf("%s\n", g.genExpr(node.Expression)))
-	case *ast.RecvExpr:
-		g.sb.WriteString(fmt.Sprintf("<-%s\n", g.genExpr(node.Channel)))
+		val := g.genExpr(s.Expr)
+		if isStandAloneStmt(s.Expr) {
+			g.sb.WriteString(fmt.Sprintf("%s\n", val))
+		} else {
+			g.sb.WriteString(fmt.Sprintf("_ = %s\n", val))
+		}
 	}
 }
 
-func (g *Generator) genExpr(e ast.Expr) string {
-	if e == nil {
+func isStandAloneStmt(expr ast.Expr) bool {
+	switch expr.(type) {
+	case *ast.CallExpr:
+		return true
+	}
+	return false
+}
+
+func (g *Generator) genExpr(expr ast.Expr) string {
+	switch e := expr.(type) {
+	case *ast.IntLiteral:
+		return e.Raw
+	case *ast.FloatLiteral:
+		return e.Raw
+	case *ast.BoolLiteral:
+		if e.Value {
+			return "true"
+		}
+		return "false"
+	case *ast.StringLiteral:
+		return fmt.Sprintf("%q", e.Value)
+	case *ast.IdentExpr:
+		return sanitizeIdent(e.Name)
+	case *ast.CallExpr:
+		return g.genCall(e)
+	case *ast.BinaryOpExpr:
+		return g.genBinaryOp(e)
+	case *ast.RecvExpr:
+		return fmt.Sprintf("<-%s", g.genExpr(e.Channel))
+	default:
 		return ""
 	}
-
-	switch node := e.(type) {
-	case *ast.IntLiteral:
-		return fmt.Sprintf("%d", node.Value)
-	case *ast.FloatLiteral:
-		return fmt.Sprintf("%f", node.Value)
-	case *ast.StringLiteral:
-		return fmt.Sprintf("%q", node.Value)
-	case *ast.BoolLiteral:
-		return fmt.Sprintf("%t", node.Value)
-	case *ast.IdentifierExpr:
-		return node.Name
-	case *ast.RecvExpr:
-		return fmt.Sprintf("<-%s", g.genExpr(node.Channel))
-	case *ast.BinaryOpExpr:
-		opSymbol := mapOp(node.Op)
-		return fmt.Sprintf("(%s %s %s)", g.genExpr(node.Left), opSymbol, g.genExpr(node.Right))
-	case *ast.CallExpr:
-		return g.genCall(node)
-	}
-
-	return ""
 }
 
-func (g *Generator) genCall(call *ast.CallExpr) string {
-	switch call.Fn {
+func (g *Generator) genCall(c *ast.CallExpr) string {
+	if value, ok := g.libraryCall(c); ok {
+		return value
+	}
+	switch c.Func {
+	case "make-chan", "make_chan":
+		elemType := "interface{}"
+		if len(c.Args) > 0 {
+			if id, ok := c.Args[0].(*ast.IdentExpr); ok {
+				elemType = mapTypeName(id.Name)
+			}
+		}
+		return fmt.Sprintf("make(chan %s)", elemType)
+
 	case "println":
-		args := []string{}
-		for _, a := range call.Args {
+		var args []string
+		for _, a := range c.Args {
 			args = append(args, g.genExpr(a))
 		}
 		return fmt.Sprintf("fmt.Println(%s)", strings.Join(args, ", "))
+
 	case "print":
-		args := []string{}
-		for _, a := range call.Args {
+		var args []string
+		for _, a := range c.Args {
 			args = append(args, g.genExpr(a))
 		}
 		return fmt.Sprintf("fmt.Print(%s)", strings.Join(args, ", "))
+
 	case "concat":
-		args := []string{}
-		for _, a := range call.Args {
+		var args []string
+		for _, a := range c.Args {
 			args = append(args, g.genExpr(a))
 		}
 		return fmt.Sprintf("_liaf_concat(%s)", strings.Join(args, ", "))
-	case "str":
-		if len(call.Args) > 0 {
-			return fmt.Sprintf("_liaf_str(%s)", g.genExpr(call.Args[0]))
+
+	case "str-from-int", "str_from_int":
+		if len(c.Args) > 0 {
+			return fmt.Sprintf("_liaf_str_from_int(int64(%s))", g.genExpr(c.Args[0]))
 		}
-		return "\"\""
-	case "sleep_ms":
-		if len(call.Args) > 0 {
-			return fmt.Sprintf("_liaf_sleep_ms(%s)", g.genExpr(call.Args[0]))
+		return `""`
+
+	case "float-from-int", "float_from_int":
+		if len(c.Args) > 0 {
+			return fmt.Sprintf("_liaf_float_from_int(int64(%s))", g.genExpr(c.Args[0]))
+		}
+		return "0.0"
+
+	case "int-from-str", "int_from_str":
+		if len(c.Args) > 0 {
+			return fmt.Sprintf("_liaf_int_from_str(%s)", g.genExpr(c.Args[0]))
+		}
+		return "0"
+
+	case "sleep-ms", "sleep_ms":
+		if len(c.Args) > 0 {
+			return fmt.Sprintf("_liaf_sleep_ms(int64(%s))", g.genExpr(c.Args[0]))
 		}
 		return ""
-	case "make_chan":
-		if len(call.Args) > 0 {
-			if ident, ok := call.Args[0].(*ast.IdentifierExpr); ok {
-				return fmt.Sprintf("make(chan %s)", mapType(ident.Name))
-			}
-		}
-		return "make(chan interface{})"
-	case "http_serve":
-		if len(call.Args) >= 2 {
-			return fmt.Sprintf("_liaf_http_serve(%s, %s)", g.genExpr(call.Args[0]), g.genExpr(call.Args[1]))
-		}
-		return ""
-	case "http_get":
-		if len(call.Args) >= 1 {
-			return fmt.Sprintf("_liaf_http_get(%s)", g.genExpr(call.Args[0]))
-		}
-		return "\"\""
-	case "serve_site":
-		dir := "\"./public\""
-		domain := "\"\""
-		port := "\":8080\""
-		autoTLS := "false"
-		if len(call.Args) > 0 {
-			dir = g.genExpr(call.Args[0])
-		}
-		if len(call.Args) > 1 {
-			domain = g.genExpr(call.Args[1])
-		}
-		if len(call.Args) > 2 {
-			port = g.genExpr(call.Args[2])
-		}
-		if len(call.Args) > 3 {
-			autoTLS = g.genExpr(call.Args[3])
-		}
-		return fmt.Sprintf("web.ServeSite(%s, %s, %s, %s)", dir, domain, port, autoTLS)
-	default:
-		args := []string{}
-		for _, a := range call.Args {
+
+	case "serve-site", "serve_site":
+		var args []string
+		for _, a := range c.Args {
 			args = append(args, g.genExpr(a))
 		}
-		return fmt.Sprintf("%s(%s)", call.Fn, strings.Join(args, ", "))
+		return fmt.Sprintf("web.ServeSite(%s)", strings.Join(args, ", "))
+
+	default:
+		var args []string
+		for _, a := range c.Args {
+			args = append(args, g.genExpr(a))
+		}
+		return fmt.Sprintf("%s(%s)", sanitizeIdent(c.Func), strings.Join(args, ", "))
 	}
 }
 
-func mapType(t string) string {
-	switch t {
+func (g *Generator) genBinaryOp(b *ast.BinaryOpExpr) string {
+	left := g.genExpr(b.Left)
+	right := g.genExpr(b.Right)
+
+	switch b.Op {
+	case "add":
+		return fmt.Sprintf("(%s + %s)", left, right)
+	case "sub":
+		return fmt.Sprintf("(%s - %s)", left, right)
+	case "mul":
+		return fmt.Sprintf("(%s * %s)", left, right)
+	case "div":
+		return fmt.Sprintf("(%s / %s)", left, right)
+	case "eq":
+		return fmt.Sprintf("(%s == %s)", left, right)
+	case "neq":
+		return fmt.Sprintf("(%s != %s)", left, right)
+	case "gt":
+		return fmt.Sprintf("(%s > %s)", left, right)
+	case "lt":
+		return fmt.Sprintf("(%s < %s)", left, right)
+	case "gte":
+		return fmt.Sprintf("(%s >= %s)", left, right)
+	case "lte":
+		return fmt.Sprintf("(%s <= %s)", left, right)
+	case "and":
+		return fmt.Sprintf("(%s && %s)", left, right)
+	case "or":
+		return fmt.Sprintf("(%s || %s)", left, right)
+	default:
+		return fmt.Sprintf("%s(%s, %s)", sanitizeIdent(b.Op), left, right)
+	}
+}
+
+func sanitizeIdent(id string) string {
+	id = strings.ReplaceAll(id, "_", "_u_")
+	id = strings.ReplaceAll(id, "-", "_h_")
+	switch id {
+	case "break", "case", "chan", "const", "continue", "default", "defer", "else", "fallthrough", "for", "func", "go", "goto", "if", "import", "interface", "map", "package", "range", "return", "select", "struct", "switch", "type", "var", "fmt", "rt", "web", "time", "strings", "strconv", "true", "false", "nil":
+		return "_liaf_user_" + id
+	}
+	return id
+}
+
+func fieldIdent(id string) string { return "Field_" + sanitizeIdent(id) }
+
+func mapType(t ast.Type) string {
+	if t == nil {
+		return ""
+	}
+	switch ty := t.(type) {
+	case *ast.PrimitiveType:
+		return mapTypeName(ty.Name)
+	case *ast.NamedType:
+		if ty.Name == "Request" || ty.Name == "Response" {
+			return "web." + ty.Name
+		}
+		return sanitizeIdent(ty.Name)
+	case *ast.AppliedType:
+		switch ty.Constructor {
+		case "chan":
+			if len(ty.Args) > 0 {
+				return fmt.Sprintf("chan %s", mapType(ty.Args[0]))
+			}
+			return "chan interface{}"
+		case "list":
+			if len(ty.Args) > 0 {
+				return fmt.Sprintf("*rt.List[%s]", mapType(ty.Args[0]))
+			}
+			return "[]interface{}"
+		case "map":
+			if len(ty.Args) >= 2 {
+				return fmt.Sprintf("map[%s]%s", mapType(ty.Args[0]), mapType(ty.Args[1]))
+			}
+			return "map[string]interface{}"
+		case "result":
+			return fmt.Sprintf("rt.Result[%s,%s]", mapType(ty.Args[0]), mapType(ty.Args[1]))
+		default:
+			return sanitizeIdent(ty.Constructor)
+		}
+	default:
+		return "interface{}"
+	}
+}
+
+func mapTypeName(name string) string {
+	switch name {
 	case "int":
 		return "int64"
 	case "float":
@@ -261,50 +430,9 @@ func mapType(t string) string {
 		return "string"
 	case "bool":
 		return "bool"
-	case "void", "":
+	case "void":
 		return ""
 	default:
-		if strings.HasPrefix(t, "chan[") && strings.HasSuffix(t, "]") {
-			inner := t[5 : len(t)-1]
-			return fmt.Sprintf("chan %s", mapType(inner))
-		}
-		return t
-	}
-}
-
-func mapOp(op string) string {
-	switch op {
-	case "add":
-		return "+"
-	case "sub":
-		return "-"
-	case "mul":
-		return "*"
-	case "div":
-		return "/"
-	case "eq":
-		return "=="
-	case "neq":
-		return "!="
-	case "gt":
-		return ">"
-	case "lt":
-		return "<"
-	case "gte":
-		return ">="
-	case "lte":
-		return "<="
-	case "and":
-		return "&&"
-	case "or":
-		return "||"
-	default:
-		return op
-	}
-}
-
-func (g *Generator) writeIndent() {
-	for i := 0; i < g.indent; i++ {
-		g.sb.WriteString("\t")
+		return sanitizeIdent(name)
 	}
 }

@@ -1,0 +1,16 @@
+(module collections
+  (fn append-answer (params (items (list int))) (returns void) (effects)
+    (body (do (call list-push items 42))))
+  (fn main (params) (returns void) (effects io)
+    (body
+      (let items (list int) (call make-list int))
+      (do (call append-answer items))
+      (for-each item items (do (call println item)))
+      (let scores (map str int) (call make-map str int))
+      (do (call map-set scores "alice" 100))
+      (match (call map-get scores "alice")
+        (ok score (do (call println score)))
+        (err message (do (call println message))))
+      (match (call list-get items 99)
+        (ok item (do (call println item)))
+        (err message (do (call println message)))))))

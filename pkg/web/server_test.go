@@ -318,6 +318,9 @@ Texto do post em **Markdown** com listas:
 	if rrMD.Code != http.StatusOK {
 		t.Fatalf("Esperava 200 em /blog/artigo, recebido %d", rrMD.Code)
 	}
+	if !strings.Contains(rrMD.Header().Get("Content-Type"), "text/html") {
+		t.Errorf("Esperava Content-Type text/html no artigo markdown, recebido %s", rrMD.Header().Get("Content-Type"))
+	}
 	bodyMD := rrMD.Body.String()
 	if !strings.Contains(bodyMD, "<h1>Introducao ao LIAF</h1>") {
 		t.Errorf("Markdown não renderizou H1 esperado: %s", bodyMD)
@@ -388,4 +391,108 @@ func TestEmbeddedFS(t *testing.T) {
 	}
 }
 
+func TestPublishEndpoint(t *testing.T) {
+	t.Setenv("LIAF_DEPLOY_TOKEN", "test-deployment-token")
+	tmpDir, err := os.MkdirTemp("", "liaf_publish_test_*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
 
+	os.WriteFile(filepath.Join(tmpDir, "index.html"), []byte("<h1>Original</h1>"), 0644)
+
+	server, err := NewServer(ServerOptions{
+		Dir:  tmpDir,
+		Port: ":8080",
+	})
+	if err != nil {
+		t.Fatalf("Erro criando servidor: %v", err)
+	}
+
+	// 1. Publish requires the configured token.
+	newHtml := "<h1>Nova Pagina Publicada via IA</h1>"
+	req := httptest.NewRequest(http.MethodPost, "/_liaf/publish", strings.NewReader(newHtml))
+	req.Header.Set("X-LIAF-Path", "nova-pagina.html")
+	req.Header.Set("Authorization", "Bearer test-deployment-token")
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("Esperava 200 OK no publish, recebido %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// 2. Verifica se o novo asset e servido no VFS instantaneamente
+	reqGet := httptest.NewRequest(http.MethodGet, "/nova-pagina", nil)
+	rrGet := httptest.NewRecorder()
+	server.ServeHTTP(rrGet, reqGet)
+
+	if rrGet.Code != http.StatusOK {
+		t.Fatalf("Esperava 200 OK ao acessar a nova rota /nova-pagina, recebido %d", rrGet.Code)
+	}
+	if !strings.Contains(rrGet.Body.String(), "Nova Pagina Publicada via IA") {
+		t.Errorf("Conteudo publicado nao corresponde: %s", rrGet.Body.String())
+	}
+}
+
+func TestHybridStorageAndRangeStreaming(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "liaf_streaming_test_*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Cria arquivo de vídeo simulado (.mp4)
+	videoData := []byte("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	videoPath := filepath.Join(tmpDir, "video.mp4")
+	if err := os.WriteFile(videoPath, videoData, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	server, err := NewServer(ServerOptions{
+		Dir:  tmpDir,
+		Port: ":8080",
+	})
+	if err != nil {
+		t.Fatalf("Erro criando servidor: %v", err)
+	}
+
+	// 1. Verifica se o asset foi marcado como IsDisk e NÃO gastou RAM
+	asset, found := server.CurrentCache().Get("/video.mp4")
+	if !found {
+		t.Fatalf("Asset /video.mp4 nao encontrado no cache")
+	}
+	if !asset.IsDisk {
+		t.Errorf("Esperava asset.IsDisk == true para .mp4")
+	}
+	if len(asset.Content) > 0 {
+		t.Errorf("Asset em disco nao deve armazenar bytes em Content (gastando RAM), tamanho=%d", len(asset.Content))
+	}
+
+	// 2. Testa requisição completa (HTTP 200)
+	reqFull := httptest.NewRequest(http.MethodGet, "/video.mp4", nil)
+	rrFull := httptest.NewRecorder()
+	server.ServeHTTP(rrFull, reqFull)
+
+	if rrFull.Code != http.StatusOK {
+		t.Fatalf("Esperava 200 OK na requisicao completa de streaming, recebido %d", rrFull.Code)
+	}
+	if rrFull.Body.String() != string(videoData) {
+		t.Errorf("Conteudo do streaming nao corresponde ao arquivo")
+	}
+
+	// 3. Testa Range Request (HTTP 206 Partial Content para seek de vídeo)
+	reqRange := httptest.NewRequest(http.MethodGet, "/video.mp4", nil)
+	reqRange.Header.Set("Range", "bytes=0-9")
+	rrRange := httptest.NewRecorder()
+	server.ServeHTTP(rrRange, reqRange)
+
+	if rrRange.Code != http.StatusPartialContent {
+		t.Fatalf("Esperava 206 Partial Content no Range Request, recebido %d", rrRange.Code)
+	}
+	if rrRange.Body.String() != "0123456789" {
+		t.Errorf("Esperava fatia '0123456789', recebido %q", rrRange.Body.String())
+	}
+	if !strings.HasPrefix(rrRange.Header().Get("Content-Range"), "bytes 0-9/") {
+		t.Errorf("Header Content-Range incorreto: %s", rrRange.Header().Get("Content-Range"))
+	}
+}

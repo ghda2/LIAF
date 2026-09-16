@@ -1,0 +1,11 @@
+(module result-example
+  (fn positive (params (n int)) (returns (result int str)) (effects)
+    (body
+      (if (gt n 0)
+        (then (return (call ok n)))
+        (else (return (call err "Expected positive number"))))))
+  (fn main (params) (returns void) (effects io)
+    (body
+      (match (call positive -1)
+        (ok n (do (call println n)))
+        (err message (do (call println message)))))))

@@ -13,10 +13,33 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"liaf/pkg/markdown"
 	"liaf/pkg/minifier"
 )
+
+const DefaultMaxRAMAssetSize = 512 * 1024 // 512 KB: arquivos acima disso vao para disco/streaming
+
+var heavyMediaExts = map[string]bool{
+	".mp4":  true,
+	".webm": true,
+	".mov":  true,
+	".avi":  true,
+	".mkv":  true,
+	".mp3":  true,
+	".wav":  true,
+	".ogg":  true,
+	".flac": true,
+	".pdf":  true,
+	".zip":  true,
+	".tar":  true,
+	".gz":   true,
+	".7z":   true,
+	".iso":  true,
+	".dmg":  true,
+	".exe":  true,
+}
 
 var defaultMimes = map[string]string{
 	".html":  "text/html; charset=utf-8",
@@ -64,11 +87,15 @@ type CachedAsset struct {
 	GzipContent []byte
 	ETag        string
 	Size        int
+	DiskPath    string
+	IsDisk      bool
+	ModTime     time.Time
 }
 
 type AssetCache struct {
-	mu     sync.RWMutex
-	assets map[string]*CachedAsset
+	mu              sync.RWMutex
+	assets          map[string]*CachedAsset
+	MaxRAMAssetSize int64
 }
 
 var (
@@ -91,7 +118,8 @@ func GetEmbeddedFS() fs.FS {
 
 func NewAssetCache() *AssetCache {
 	return &AssetCache{
-		assets: make(map[string]*CachedAsset),
+		assets:          make(map[string]*CachedAsset),
+		MaxRAMAssetSize: DefaultMaxRAMAssetSize,
 	}
 }
 
@@ -123,6 +151,12 @@ func (ac *AssetCache) LoadDirectory(dirPath string) error {
 
 	// Pass 1: Percorrer todos os arquivos, indexar dados, estáticos, HTML e Markdown
 	err := filepath.Walk(dirPath, func(p string, info os.FileInfo, err error) error {
+		if err == nil && p != dirPath && (strings.HasPrefix(info.Name(), ".") || info.Mode()&os.ModeSymlink != 0) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
 		if err != nil || info.IsDir() {
 			return err
 		}
@@ -133,12 +167,37 @@ func (ac *AssetCache) LoadDirectory(dirPath string) error {
 		}
 
 		relPath := "/" + strings.ReplaceAll(rel, "\\", "/")
-		raw, err := os.ReadFile(p)
+		ext := strings.ToLower(filepath.Ext(p))
+
+		// Tier 2 (Disco / Streaming): Mídias e arquivos grandes não ocupam memória RAM
+		isHeavyMedia := heavyMediaExts[ext]
+		isTooBig := info.Size() > ac.MaxRAMAssetSize && ext != ".html" && ext != ".htm" && ext != ".css" && ext != ".js" && ext != ".json" && ext != ".md" && ext != ".markdown" && ext != ".svg"
+
+		if isHeavyMedia || isTooBig {
+			mimeType := detectContentType(p)
+			etag := fmt.Sprintf("\"disk-%x-%x\"", info.ModTime().UnixNano(), info.Size())
+			modHex := fmt.Sprintf("%x", info.ModTime().Unix())
+			if len(modHex) > 8 {
+				modHex = modHex[:8]
+			}
+			assetHashes[relPath] = modHex
+
+			ac.assets[relPath] = &CachedAsset{
+				Path:        relPath,
+				ContentType: mimeType,
+				ETag:        etag,
+				Size:        int(info.Size()),
+				DiskPath:    p,
+				IsDisk:      true,
+				ModTime:     info.ModTime(),
+			}
+			return nil
+		}
+
+		raw, err := readPublicFile(dirPath, p)
 		if err != nil {
 			return err
 		}
-
-		ext := strings.ToLower(filepath.Ext(p))
 
 		// 1.1 Coleções em JSON (ex: public/data/servicos.json)
 		if strings.HasPrefix(relPath, "/data/") && ext == ".json" {
@@ -161,7 +220,7 @@ func (ac *AssetCache) LoadDirectory(dirPath string) error {
 		if ext == ".md" || ext == ".markdown" {
 			doc := markdown.Parse(string(raw))
 			cleanRoute := strings.TrimSuffix(relPath, ext)
-			
+
 			// Registrar na coleção de posts/artigos
 			postItem := make(map[string]string)
 			for k, v := range doc.Frontmatter {
@@ -243,7 +302,7 @@ func (ac *AssetCache) LoadDirectory(dirPath string) error {
 		renderedHTML := doc.ContentHTML
 		if layoutFile != "" {
 			layoutPath := resolveIncludePath(dirPath, filepath.Dir(mdItem.path), layoutFile)
-			if layoutBytes, err := os.ReadFile(layoutPath); err == nil {
+			if layoutBytes, err := readPublicFile(dirPath, layoutPath); err == nil {
 				// Processa includes do layout base
 				processedLayout := string(processHTML(dirPath, layoutPath, layoutBytes, 0))
 				if slotRegex.MatchString(processedLayout) {
@@ -280,10 +339,10 @@ func (ac *AssetCache) LoadDirectory(dirPath string) error {
 		fingerprinted := fingerprintHTML(path.Dir(item.relPath), []byte(content), assetHashes)
 
 		// 3.4 Minificação e Compressão
-		minified := minifier.Minify(item.path, fingerprinted)
+		minified := minifier.Minify(item.relPath, fingerprinted)
 		gzipped, _ := CompressGzip(minified)
 
-		mimeType := detectContentType(item.path)
+		mimeType := detectContentType(item.relPath)
 		etag := fmt.Sprintf("\"%x\"", sha1.Sum(minified))
 
 		asset := &CachedAsset{
@@ -333,7 +392,7 @@ func processHTML(dirPath, filePath string, raw []byte, depth int) []byte {
 	if match := layoutRegex.FindStringSubmatch(content); len(match) > 1 {
 		layoutFile := match[1]
 		layoutPath := resolveIncludePath(dirPath, filepath.Dir(filePath), layoutFile)
-		if layoutBytes, err := os.ReadFile(layoutPath); err == nil {
+		if layoutBytes, err := readPublicFile(dirPath, layoutPath); err == nil {
 			bodyContent := layoutRegex.ReplaceAllString(content, "")
 			layoutStr := string(processHTML(dirPath, layoutPath, layoutBytes, depth+1))
 			if slotRegex.MatchString(layoutStr) {
@@ -352,7 +411,7 @@ func processHTML(dirPath, filePath string, raw []byte, depth int) []byte {
 		}
 		incFile := sub[1]
 		incPath := resolveIncludePath(dirPath, filepath.Dir(filePath), incFile)
-		incBytes, err := os.ReadFile(incPath)
+		incBytes, err := readPublicFile(dirPath, incPath)
 		if err != nil {
 			return fmt.Sprintf("<!-- erro incluindo %s: %v -->", incFile, err)
 		}
@@ -649,10 +708,10 @@ func (ac *AssetCache) LoadFS(fsys fs.FS) error {
 			content = processVariables(content, item.vars)
 		}
 		fingerprinted := fingerprintHTML(path.Dir(item.relPath), []byte(content), assetHashes)
-		minified := minifier.Minify(item.path, fingerprinted)
+		minified := minifier.Minify(item.relPath, fingerprinted)
 		gzipped, _ := CompressGzip(minified)
 
-		mimeType := detectContentType(item.path)
+		mimeType := detectContentType(item.relPath)
 		etag := fmt.Sprintf("\"%x\"", sha1.Sum(minified))
 
 		asset := &CachedAsset{
@@ -723,4 +782,3 @@ func processHTMLFS(fsys fs.FS, filePath string, raw []byte, depth int) []byte {
 
 	return []byte(content)
 }
-

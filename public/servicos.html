@@ -1,21 +1,33 @@
 <!-- layout "base.html" -->
-<div class="card">
-  <h1>⚙️ Nossos Serviços</h1>
-  <p class="subtitle">Alta performance com o menor footprint do mercado.</p>
-  <div class="grid">
-    <div class="grid-item">
-      <h3>🚀 Web Engine Autônomo</h3>
-      <p>Servidor estático de altíssima velocidade servido 100% da RAM com consumo médio de 2.4 MB.</p>
-    </div>
-    <div class="grid-item">
-      <h3>🔒 Auto-TLS Embutido</h3>
-      <p>Certificados SSL Let's Encrypt geridos nativamente sem ferramentas externas.</p>
-    </div>
-    <div class="grid-item">
-      <h3>🤖 Auto-Cura para IAs</h3>
-      <p>Compilador que emite patches diretos em JSON para agentes autônomos corrigirem bugs.</p>
-    </div>
+<div class="article-full">
+  <span class="lead-category">CADERNO B • SERVIÇOS & EDIÇÕES ESPECIAIS</span>
+  <h1>Edições Especiais & Serviços de Imprensa Digital</h1>
+
+  <div class="article-meta-header">
+    <span>CADERNO TÉCNICO</span>
+    <span>DISPONÍVEL EM MEMÓRIA RAM</span>
+    <span>ASSINATURA ABERTA</span>
   </div>
-  <br>
-  <a href="/" class="btn-link">← Voltar ao Início</a>
+
+  <p>
+    Além da circulação diária, o <em>The LIAF Chronicle</em> mantém serviços especializados de engenharia web, compilação de alta densidade e despacho de conteúdo para equipes de tecnologia autônomas.
+  </p>
+
+  <h2>Catálogo de Edições Especiais</h2>
+  <div style="display: grid; gap: 1.5rem; margin: 2rem 0;">
+  <!-- for item in servicos -->
+    <div style="border: 1px solid var(--border-strong); padding: 1.25rem; background: var(--bg-secondary);">
+      <div style="font-family: var(--font-sans); font-size: 0.75rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted);">
+        SERVIÇO ESPECIAL Nº {{ item.id }}
+      </div>
+      <h3 style="font-family: var(--font-serif); font-size: 1.4rem; margin: 0.3rem 0;">{{ item.icone }} {{ item.nome }}</h3>
+      <p style="font-size: 0.95rem; margin-bottom: 0.5rem; color: var(--text-secondary);">{{ item.descricao }}</p>
+      <div style="font-family: var(--font-mono); font-size: 0.8rem; font-weight: 700;">VALOR ESTIMADO: R$ {{ item.preco }}</div>
+    </div>
+  <!-- endfor -->
+  </div>
+
+  <blockquote>
+    "O compromisso com a excelência técnica é a assinatura indelével de toda boa publicação."
+  </blockquote>
 </div>

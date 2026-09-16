@@ -1,0 +1,20 @@
+(module fs-json
+  (struct User (fields (name str) (score int)))
+  (fn main (params) (returns void) (effects fs io)
+    (body
+      (let user User (call new User "alice" 42))
+      (match (call json-encode user)
+        (ok payload
+          (match (call fs-write-file "liaf-example.json" payload)
+            (ok written
+              (match (call fs-read-file "liaf-example.json")
+                (ok text
+                  (match (call json-decode text User)
+                    (ok restored (do (call println (call field restored name))))
+                    (err message (do (call println message)))))
+                (err message (do (call println message)))))
+            (err message (do (call println message)))))
+        (err message (do (call println message))))
+      (match (call fs-remove "liaf-example.json")
+        (ok removed (do (call println removed)))
+        (err message (do (call println message)))))))

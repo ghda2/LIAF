@@ -1,17 +1,49 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LIAF Web App</title>
+  <title>The LIAF Chronicle — Jornal Independente de Tecnologia & Pensamento</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <!-- include "menu.html" -->
-  <main class="main-container">
-    <!-- content -->
-  </main>
-  <!-- include "footer.html" -->
+  <div class="newspaper-wrapper">
+    <!-- Top Metadata Bar -->
+    <header class="top-meta-bar">
+      <div>EDIÇÃO DIÁRIA Nº 4.819 • DISTRIBUIÇÃO GLOBAL VIA RAM</div>
+      <div id="edition-date">16 DE SETEMBRO DE 2026</div>
+      <button class="theme-toggle-btn" id="theme-btn" aria-label="Alternar modo preto e branco">Modo Escuro</button>
+    </header>
+
+    <!-- Masthead -->
+    <div class="masthead">
+      <div class="masthead-tagline">"Veritas in Memoria — A Verdade sem Intermediários"</div>
+      <h1 class="masthead-title"><a href="/">The LIAF Chronicle</a></h1>
+      <div class="masthead-edition">
+        <span>SÃO PAULO • LONDRES • TÓQUIO</span>
+        <span>LATÊNCIA: &lt; 1 MS</span>
+        <span>PREÇO: LIVRE & ABERTO</span>
+      </div>
+    </div>
+
+    <!-- Seções do Jornal -->
+    <!-- include "menu.html" -->
+
+    <!-- Breaking News Banner -->
+    <div class="breaking-banner">
+      <span class="breaking-tag">URGENTE</span>
+      <span>LIAF Web Engine atinge deploy atômico de artigos em 5 milissegundos sem depender de pipelines tradicionais.</span>
+    </div>
+
+    <!-- Conteúdo Principal -->
+    <main>
+      <!-- content -->
+    </main>
+
+    <!-- Rodapé Clássico de Imprensa -->
+    <!-- include "footer.html" -->
+  </div>
+
   <script src="/app.js"></script>
 </body>
 </html>

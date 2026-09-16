@@ -23,6 +23,9 @@ type Report struct {
 }
 
 func NewReport(diags []Diagnostic) Report {
+	if diags == nil {
+		diags = []Diagnostic{}
+	}
 	status := "success"
 	if len(diags) > 0 {
 		status = "error"

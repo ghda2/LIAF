@@ -1,0 +1,10 @@
+(module loops
+  (fn main (params) (returns void) (effects io)
+    (body
+      (let total int 0)
+      (for-range i 0 10
+        (if (eq i 3) (then (continue)))
+        (if (eq i 7) (then (break)))
+        (set total (add total i)))
+      (while (lt total 20) (set total (add total 1)))
+      (do (call println total)))))

@@ -1,0 +1,5 @@
+[
+  {"id":"loop-filter","prompt":"Print the sum of integers 0 through 9, excluding 3 and stopping before 7. Print only the sum followed by newline.","cases":[{"stdout":"18\n"}]},
+  {"id":"collections-errors","prompt":"Create an integer list, append 42 through a helper function, then read and print the first item. Try reading index 99 and handle the error by printing exactly missing. Print nothing else.","cases":[{"stdout":"42\nmissing\n"}]},
+  {"id":"json-roundtrip","prompt":"Create a User record with name alice and score 42. Serialize it to JSON, write data.json, read it back, decode the User, and print its name. Handle all fallible operations. Print only alice followed by newline on success.","cases":[{"stdout":"alice\n"}]}
+]

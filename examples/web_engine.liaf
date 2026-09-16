@@ -1,6 +1,9 @@
-# Servidor Web Autônomo com Auto-Minificação e Zero Configuração
-
-[fn main () -> (void)
-  (println "Iniciando LIAF Web Engine em producao na porta 7070...")
-  (serve_site "./public" "" "7070" false)
-/fn main]
+; Servidor Web Autônomo LIAF v0.2 com Auto-Minificação e VFS em RAM
+(module web-engine
+  (fn main
+    (params)
+    (returns void)
+    (effects fs io net)
+    (body
+      (do (call println "Iniciando LIAF Web Engine em producao na porta 7070..."))
+      (do (call serve-site "./public" "" "7070" false)))))

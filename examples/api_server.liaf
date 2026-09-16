@@ -1,0 +1,9 @@
+(module api-server
+  (fn handle-users (params (req Request)) (returns Response) (effects)
+    (body (return (call json-response 200 "{\"status\":\"ok\"}"))))
+  (fn main (params) (returns void) (effects fs io net)
+    (body
+      (do (call http-get "/api/users" handle-users))
+      (match (call serve-hybrid "./public" "8080")
+        (ok stopped (do (call println "Server stopped")))
+        (err message (do (call println message)))))))

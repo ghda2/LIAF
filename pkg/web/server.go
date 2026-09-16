@@ -2,26 +2,44 @@ package web
 
 import (
 	"fmt"
+
 	"net/http"
+	"os"
 	"path"
+	"path/filepath"
+
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
 
 type ServerOptions struct {
-	Dir     string
-	Domain  string
-	Port    string
-	AutoTLS bool
+	Dir             string
+	Domain          string
+	Port            string
+	AutoTLS         bool
+	MaxRAMAssetSize int64
+	MaxPublishSize  int64
+	DeployToken     string
 }
 
 type Server struct {
-	cache   atomic.Pointer[AssetCache]
-	options ServerOptions
+	cache      atomic.Pointer[AssetCache]
+	options    ServerOptions
+	mutationMu sync.Mutex
 }
 
 func NewServer(opts ServerOptions) (*Server, error) {
+	if opts.MaxRAMAssetSize <= 0 {
+		opts.MaxRAMAssetSize = DefaultMaxRAMAssetSize
+	}
+	if opts.MaxPublishSize <= 0 {
+		opts.MaxPublishSize = 32 << 20
+	}
+	if opts.DeployToken == "" {
+		opts.DeployToken = os.Getenv("LIAF_DEPLOY_TOKEN")
+	}
 	s := &Server{
 		options: opts,
 	}
@@ -35,7 +53,14 @@ func NewServer(opts ServerOptions) (*Server, error) {
 
 // Reload recarrega todos os arquivos da pasta em RAM atomicamente sem downtime.
 func (s *Server) Reload() error {
+	s.mutationMu.Lock()
+	defer s.mutationMu.Unlock()
+	return s.reloadLocked()
+}
+
+func (s *Server) reloadLocked() error {
 	newCache := NewAssetCache()
+	newCache.MaxRAMAssetSize = s.options.MaxRAMAssetSize
 	if err := newCache.LoadDirectory(s.options.Dir); err != nil {
 		return err
 	}
@@ -49,18 +74,15 @@ func (s *Server) CurrentCache() *AssetCache {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Endpoint de Hot-Reload seguro em memória
-	if r.URL.Path == "/_liaf/reload" {
-		start := time.Now()
-		if err := s.Reload(); err != nil {
-			http.Error(w, fmt.Sprintf(`{"status":"error","message":%q}`, err.Error()), http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"status":"ok","message":"VFS recarregado em RAM","files":%d,"duration_ms":%d}`, s.CurrentCache().Count(), time.Since(start).Milliseconds())
+	if strings.HasPrefix(r.URL.Path, "/_liaf/") {
+		s.serveAdmin(w, r)
 		return
 	}
-
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		http.Error(w, "Method not allowed", 405)
+		return
+	}
 	cache := s.CurrentCache()
 
 	// Bloqueia qualquer tentativa de Directory/Path Traversal
@@ -110,7 +132,48 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Tier 2 (Disco / Streaming): Mídias pesadas servidas diretamente de disco com Range Requests (HTTP 206)
+	if asset.IsDisk && asset.DiskPath != "" {
+		root, err := os.OpenRoot(s.options.Dir)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		defer root.Close()
+		rel, err := filepath.Rel(s.options.Dir, asset.DiskPath)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		file, err := root.Open(rel)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		defer file.Close()
+		stat, err := file.Stat()
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+
+		w.Header().Set("ETag", fmt.Sprintf("\"disk-%x-%x\"", stat.ModTime().UnixNano(), stat.Size()))
+		w.Header().Set("Content-Type", asset.ContentType)
+		w.Header().Set("X-Powered-By", "LIAF Web Engine (Streaming)")
+
+		if r.URL.Query().Get("v") != "" {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "public, max-age=86400")
+		}
+
+		http.ServeContent(w, r, path.Base(asset.Path), stat.ModTime(), file)
+		return
+	}
+
 	// 1. ETag & Cache Validation (304 Not Modified)
+	w.Header().Set("ETag", asset.ETag)
+	w.Header().Set("Vary", "Accept-Encoding")
 	if match := r.Header.Get("If-None-Match"); match != "" && match == asset.ETag {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -140,13 +203,17 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Encoding", "gzip")
 		w.Header().Set("Vary", "Accept-Encoding")
 		w.WriteHeader(http.StatusOK)
-		w.Write(asset.GzipContent)
+		if r.Method != http.MethodHead {
+			w.Write(asset.GzipContent)
+		}
 		return
 	}
 
 	// 3. Fallback to uncompressed
 	w.WriteHeader(http.StatusOK)
-	w.Write(asset.Content)
+	if r.Method != http.MethodHead {
+		w.Write(asset.Content)
+	}
 }
 
 func (s *Server) Start() error {
@@ -159,7 +226,7 @@ func (s *Server) Start() error {
 	}
 
 	fmt.Printf("⚡ [LIAF Web Engine] %d arquivos carregados, minificados e comprimidos em RAM\n", s.CurrentCache().Count())
-	fmt.Printf("🔄 [LIAF VFS] Hot-reload disponível em POST/GET /_liaf/reload\n")
+	fmt.Printf("🔄 [LIAF VFS] Hot-reload autenticado em POST /_liaf/reload\n")
 
 	// Modo Auto-TLS (Caddy Style)
 	if s.options.AutoTLS && s.options.Domain != "" && s.options.Domain != "localhost" {

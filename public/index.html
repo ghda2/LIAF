@@ -1,35 +1,114 @@
 <!-- layout "base.html" -->
-<div class="card">
-  <h1>🚀 Início — LIAF Web Engine & SSG</h1>
-  <p class="subtitle">Motor estático e servidor de ultra-performance operando 100% em memória RAM (~2.4 MB)!</p>
-  
-  <ul class="features">
-    <li>✓ <strong>Markdown & Frontmatter:</strong> Páginas <code>.md</code> convertidas e encaixadas em layouts no boot.</li>
-    <li>✓ <strong>Coleções & Loops:</strong> Iteração nativa com <code>&lt;!-- for item in colecao --&gt;</code>.</li>
-    <li>✓ <strong>Zero Ctrl+F5:</strong> Versionamento automático de CSS/JS com fingerprinting SHA-1.</li>
-    <li>✓ <strong>Single-Binary:</strong> Suporte a empacotamento completo via <code>liafc build --embed</code>.</li>
-  </ul>
+<div class="newspaper-grid">
+  <!-- Coluna Principal (Manchete e Artigos) -->
+  <div class="main-column">
+    <!-- Manchete de Capa -->
+    <article class="lead-story">
+      <span class="lead-category">MANCHETE PRINCIPAL • TECNOLOGIA & SISTEMAS</span>
+      <h2 class="lead-title"><a href="/blog/deploy-sem-git">A Morte do Build Lento: Linguagem Nativa Supera Pilhas Clássicas com Deploy em Milissegundos</a></h2>
+      <div class="lead-byline">POR REDAÇÃO CENTRAL • PUBLICADO EM 16 DE SETEMBRO DE 2026 • 4 MIN DE LEITURA</div>
+      
+      <p class="lead-excerpt">
+        "O paradigma de compilações intermediárias em disco e dependências gigantescas de runtimes cede espaço para sistemas autônomos que operam 100% em memória volátil, consumindo frações irrisórias de recursos."
+      </p>
 
-  <h2 style="margin-top: 2rem; margin-bottom: 0.5rem; font-size: 1.25rem;">✨ Serviços (Coleção JSON)</h2>
-  <div style="display: grid; gap: 0.75rem; margin-bottom: 1.5rem;">
-  <!-- for item in servicos -->
-    <div style="background: rgba(255,255,255,0.03); padding: 0.85rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">
-      <div style="font-weight: 600; color: #60a5fa;">{{ item.icone }} {{ item.nome }}</div>
-      <div style="font-size: 0.875rem; color: #94a3b8; margin-top: 0.25rem;">{{ item.descricao }}</div>
+      <div class="lead-content">
+        <p>
+          Em um cenário dominado por motores estáticos que exigem minutos de processamento em pipelines remotos e servidores de aplicação que consomem centenas de megabytes apenas em repouso, uma nova linhagem de compiladores determinísticos prova que a simplicidade mecânica ainda é a chave para o desempenho absoluto na rede mundial de computadores.
+        </p>
+        <p>
+          Ao unir geração de páginas sob demanda, controle atômico de cache HTTP com ETags calculados no boot e despacho de mídias pesadas via streaming direto do sistema de arquivos, a tecnologia em operação elimina intermediários desnecessários e transforma uma máquina modesta em um veículo editorial de alta escala capaz de suportar dezenas de milhares de leitores simultâneos com menos de dois megabytes de memória RAM.
+        </p>
+      </div>
+    </article>
+
+    <!-- Sub-artigos em Grade de 2 Colunas -->
+    <div class="sub-articles-grid">
+      <article class="article-card">
+        <span class="lead-category">ARQUITETURA</span>
+        <h3 class="article-card-title"><a href="/blog/primeiro-post">Do Byte ao Navegador: Por que o VFS em RAM Transforma o Acesso Web</a></h3>
+        <div class="article-card-meta">POR ARQUITETURA LIAF • 15 SET 2026</div>
+        <p class="article-card-snippet">
+          Como a eliminação completa de I/O de disco durante as requisições HTTP assegura respostas na casa dos microssegundos e estabilidade imutável.
+        </p>
+      </article>
+
+      <article class="article-card">
+        <span class="lead-category">AUTONOMIA</span>
+        <h3 class="article-card-title"><a href="/teste-ia">Despacho da Inteligência Artificial: A Publicação sem Intervenção Humana</a></h3>
+        <div class="article-card-meta">POR AGENTE DE IA • 16 SET 2026</div>
+        <p class="article-card-snippet">
+          Uma crônica gerada, formatada e publicada diretamente no servidor via API REST autenticada, sem necessidade de chaves SSH manuais.
+        </p>
+      </article>
     </div>
-  <!-- endfor -->
+
+    <!-- Seção de Cadernos e Matérias Arquivadas -->
+    <div style="margin-top: 2.5rem; border-top: 2px solid var(--border-strong); padding-top: 1rem;">
+      <h3 class="sidebar-section-header">ARQUIVO DE MATÉRIAS PUBLICADAS (MARKDOWN EM VFS)</h3>
+      <div style="display: grid; gap: 1rem; margin-top: 1rem;">
+        <!-- for post in posts -->
+        <div style="border-bottom: 1px dotted var(--border-dashed); padding-bottom: 0.75rem;">
+          <div style="font-family: var(--font-sans); font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted);">
+            REGISTRO: {{ post.date }} • AUTOR: {{ post.author }}
+          </div>
+          <h4 style="font-size: 1.2rem; font-weight: 700; margin: 0.2rem 0;">
+            <a href="{{ post.url }}" style="color: inherit; text-decoration: none;">{{ post.title }}</a>
+          </h4>
+        </div>
+        <!-- endfor -->
+      </div>
+    </div>
   </div>
 
-  <h2 style="margin-top: 1.5rem; margin-bottom: 0.5rem; font-size: 1.25rem;">📝 Artigos Recentes (Markdown em RAM)</h2>
-  <div style="display: grid; gap: 0.75rem; margin-bottom: 1.5rem;">
-  <!-- for post in posts -->
-    <div style="background: rgba(255,255,255,0.03); padding: 0.85rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">
-      <div><a href="{{ post.url }}" style="font-weight: 600; color: #38bdf8; text-decoration: none;">{{ post.title }}</a></div>
-      <div style="font-size: 0.8rem; color: #64748b; margin-top: 0.2rem;">Data: {{ post.date }} • Autor: {{ post.author }}</div>
+  <!-- Coluna Lateral (Opinião, Boletim e Manifesto) -->
+  <aside class="sidebar-column">
+    <h3 class="sidebar-section-header">COLUNA DE OPINIÃO</h3>
+    
+    <div class="opinion-item">
+      <div class="opinion-author">GABRIEL SANTOS</div>
+      <div class="opinion-headline"><a href="/sobre">"A soberania sobre o próprio código e infraestrutura é o único refúgio duradouro contra a inflação de complexidade das grandes nuvens."</a></div>
     </div>
-  <!-- endfor -->
-  </div>
 
-  <button id="btn">Testar JavaScript</button>
-  <p id="output"></p>
+    <div class="opinion-item">
+      <div class="opinion-author">EDITORIAL DA REDAÇÃO</div>
+      <div class="opinion-headline"><a href="/sobre">"Por que escolhemos apenas o preto e branco: a clareza da forma sobre o ruído da distração moderna."</a></div>
+    </div>
+
+    <div class="opinion-item">
+      <div class="opinion-author">OBSERVATÓRIO DE PERFORMANCE</div>
+      <div class="opinion-headline"><a href="/servicos">"Métricas reais comparadas: 1.9 MB de pegada de memória contra 120 MB dos gigantes tradicionais."</a></div>
+    </div>
+
+    <!-- Caixa Editorial -->
+    <div class="editorial-box">
+      <h4>MANIFESTO MONOCROMÁTICO</h4>
+      <p>
+        Este jornal não utiliza cores supérfluas, nem rastreadores invasivos de terceiros, nem scripts pesados de telemetria. Cada caractere é renderizado em alto contraste para máxima legibilidade, respeito à atenção do leitor e mínimo consumo energético.
+      </p>
+    </div>
+
+    <!-- Boletim de Cotações / Estatísticas -->
+    <div style="border: 1px solid var(--border-light); padding: 1rem; font-family: var(--font-mono); font-size: 0.75rem; margin-top: 1.5rem;">
+      <div style="font-weight: 700; border-bottom: 1px solid var(--border-strong); padding-bottom: 0.3rem; margin-bottom: 0.5rem; text-transform: uppercase;">
+        TELEMETRIA DA MÁQUINA
+      </div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 0.3rem;">
+        <span>RESIDENT SET (RSS):</span>
+        <strong>~1.9 MB</strong>
+      </div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 0.3rem;">
+        <span>HTTP HOT-RELOAD:</span>
+        <strong>&lt; 5 MS</strong>
+      </div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 0.3rem;">
+        <span>MÉTODO DE ENTREGA:</span>
+        <strong>TIER 1 (VFS)</strong>
+      </div>
+      <div style="display: flex; justify-content: space-between;">
+        <span>ENCODE NATIVO:</span>
+        <strong>GZIP / ETAG</strong>
+      </div>
+    </div>
+  </aside>
 </div>

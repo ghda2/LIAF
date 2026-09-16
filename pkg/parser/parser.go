@@ -5,22 +5,30 @@ import (
 	"strconv"
 
 	"liaf/pkg/ast"
-	"liaf/pkg/diagnostic"
 	"liaf/pkg/lexer"
+	"liaf/pkg/token"
 )
 
-type Parser struct {
-	l         *lexer.Lexer
-	curToken  lexer.Token
-	peekToken lexer.Token
-	errors    []diagnostic.Diagnostic
-	filename  string
+type Diagnostic struct {
+	File    string `json:"file"`
+	Line    int    `json:"line"`
+	Col     int    `json:"col"`
+	Message string `json:"message"`
+	Code    string `json:"code"`
 }
 
-func New(l *lexer.Lexer, filename string) *Parser {
+type Parser struct {
+	l           *lexer.Lexer
+	file        string
+	curToken    token.Token
+	peekToken   token.Token
+	Diagnostics []Diagnostic
+}
+
+func New(l *lexer.Lexer, file string) *Parser {
 	p := &Parser{
-		l:        l,
-		filename: filename,
+		l:    l,
+		file: file,
 	}
 	p.nextToken()
 	p.nextToken()
@@ -32,526 +40,638 @@ func (p *Parser) nextToken() {
 	p.peekToken = p.l.NextToken()
 }
 
-func (p *Parser) Errors() []diagnostic.Diagnostic {
-	return p.errors
+func (p *Parser) curTokenIs(t token.TokenType) bool {
+	return p.curToken.Type == t
 }
 
-func (p *Parser) addDiagnostic(code, node, msg, expected, received, patch string, line, col int) {
-	p.errors = append(p.errors, diagnostic.Diagnostic{
-		Code:           code,
-		File:           p.filename,
-		Line:           line,
-		Col:            col,
-		Node:           node,
-		Message:        msg,
-		Expected:       expected,
-		Received:       received,
-		SuggestedPatch: patch,
+func (p *Parser) peekTokenIs(t token.TokenType) bool {
+	return p.peekToken.Type == t
+}
+
+func (p *Parser) expectCur(t token.TokenType) bool {
+	if p.curTokenIs(t) {
+		p.nextToken()
+		return true
+	}
+	p.addError(fmt.Sprintf("Esperado token %q, mas obteve %q (%s)", t, p.curToken.Literal, p.curToken.Type), "E_UNEXPECTED_TOKEN")
+	return false
+}
+
+func (p *Parser) addError(msg string, code string) {
+	p.Diagnostics = append(p.Diagnostics, Diagnostic{
+		File:    p.file,
+		Line:    p.curToken.Line,
+		Col:     p.curToken.Col,
+		Message: msg,
+		Code:    code,
 	})
+	panic(parseAbort{})
 }
 
-func (p *Parser) ParseProgram() *ast.Program {
-	prog := &ast.Program{Decls: []ast.TopLevelDecl{}}
+type parseAbort struct{}
 
-	for p.curToken.Type != lexer.TOKEN_EOF {
-		if p.curToken.Type == lexer.TOKEN_LBRACKET {
-			switch p.peekToken.Type {
-			case lexer.TOKEN_FN:
-				fn := p.parseFuncDecl()
-				if fn != nil {
-					prog.Decls = append(prog.Decls, fn)
-				}
-			case lexer.TOKEN_STRUCT:
-				st := p.parseStructDecl()
-				if st != nil {
-					prog.Decls = append(prog.Decls, st)
-				}
-			default:
-				p.addDiagnostic(
-					"INVALID_TOP_LEVEL_DECL",
-					"Program",
-					fmt.Sprintf("Esperado 'fn' ou 'struct' após '[', recebido '%s'", p.peekToken.Literal),
-					"fn | struct",
-					p.peekToken.Literal,
-					"[fn ...]",
-					p.curToken.Line,
-					p.curToken.Col,
-				)
-				p.nextToken()
+// ParseModule analisa o arquivo completo, exigindo a declaração do módulo
+func (p *Parser) ParseModule() (result *ast.Module) {
+	defer func() {
+		if v := recover(); v != nil {
+			if _, ok := v.(parseAbort); !ok {
+				panic(v)
 			}
+			result = nil
+		}
+	}()
+	if !p.curTokenIs(token.LPAREN) {
+		p.addError("Todo programa LIAF v0.2 deve iniciar com '('", "E_EXPECTED_LPAREN")
+		return nil
+	}
+	startLine, startCol := p.curToken.Line, p.curToken.Col
+	p.nextToken() // consome '('
+
+	if !p.curTokenIs(token.MODULE) {
+		p.addError(fmt.Sprintf("Esperado 'module' no início do programa, mas obteve %q", p.curToken.Literal), "E_EXPECTED_MODULE")
+		return nil
+	}
+	p.nextToken() // consome 'module'
+
+	if !p.curTokenIs(token.IDENT) {
+		p.addError("Esperado identificador para o nome do módulo", "E_EXPECTED_MODULE_NAME")
+		return nil
+	}
+	modName := p.curToken.Literal
+	p.nextToken() // consome nome do modulo
+
+	mod := &ast.Module{
+		Name: modName,
+		Line: startLine,
+		Col:  startCol,
+	}
+
+	for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+		decl := p.parseTopLevel()
+		if decl != nil {
+			mod.Decls = append(mod.Decls, decl)
 		} else {
-			p.addDiagnostic(
-				"UNEXPECTED_TOKEN",
-				"Program",
-				fmt.Sprintf("Declaração de nível superior deve começar com '[', recebido '%s'", p.curToken.Literal),
-				"[",
-				p.curToken.Literal,
-				"[fn ...",
-				p.curToken.Line,
-				p.curToken.Col,
-			)
 			p.nextToken()
 		}
 	}
 
-	return prog
+	if !p.expectCur(token.RPAREN) {
+		return nil
+	}
+
+	if !p.curTokenIs(token.EOF) {
+		p.addError(fmt.Sprintf("Tokens excedentes após o fechamento do módulo: %q", p.curToken.Literal), "E_TRAILING_TOKENS")
+	}
+
+	return mod
 }
 
-// [fn name (p1: t1 p2: t2) -> (ret_t) ... /fn name]
-func (p *Parser) parseFuncDecl() *ast.FuncDecl {
+func (p *Parser) parseTopLevel() ast.TopLevel {
+	if !p.curTokenIs(token.LPAREN) {
+		p.addError(fmt.Sprintf("Declaração de nível superior deve iniciar com '(', obteve %q", p.curToken.Literal), "E_EXPECTED_LPAREN")
+		return nil
+	}
+	p.nextToken() // consome '('
+
+	switch p.curToken.Type {
+	case token.IMPORT:
+		return p.parseImport()
+	case token.STRUCT:
+		return p.parseStruct()
+	case token.FN:
+		return p.parseFunc()
+	default:
+		p.addError(fmt.Sprintf("Declaração inválida: esperado 'import', 'struct' ou 'fn', mas obteve %q", p.curToken.Literal), "E_INVALID_TOPLEVEL")
+		return nil
+	}
+}
+
+func (p *Parser) parseImport() *ast.ImportDecl {
 	line, col := p.curToken.Line, p.curToken.Col
-	p.nextToken() // consome '['
+	p.nextToken() // consome 'import'
+
+	if !p.curTokenIs(token.STRING) {
+		p.addError("Esperada string para o caminho do import", "E_EXPECTED_IMPORT_PATH")
+		return nil
+	}
+	path := p.curToken.Literal
+	p.nextToken()
+
+	if !p.expectCur(token.RPAREN) {
+		return nil
+	}
+	return &ast.ImportDecl{Path: path, Line: line, Col: col}
+}
+
+func (p *Parser) parseStruct() *ast.StructDecl {
+	line, col := p.curToken.Line, p.curToken.Col
+	p.nextToken() // consome 'struct'
+
+	if !p.curTokenIs(token.IDENT) {
+		p.addError("Esperado identificador para o nome da struct", "E_EXPECTED_STRUCT_NAME")
+		return nil
+	}
+	name := p.curToken.Literal
+	p.nextToken()
+
+	if !p.expectCur(token.LPAREN) {
+		return nil
+	}
+	if !p.expectCur(token.FIELDS) {
+		return nil
+	}
+
+	var fields []ast.Field
+	for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+		f := p.parseField()
+		if f != nil {
+			fields = append(fields, *f)
+		}
+	}
+	if !p.expectCur(token.RPAREN) {
+		return nil
+	}
+	if !p.expectCur(token.RPAREN) {
+		return nil
+	}
+
+	return &ast.StructDecl{Name: name, Fields: fields, Line: line, Col: col}
+}
+
+func (p *Parser) parseField() *ast.Field {
+	if !p.expectCur(token.LPAREN) {
+		return nil
+	}
+	line, col := p.curToken.Line, p.curToken.Col
+	if !p.curTokenIs(token.IDENT) {
+		p.addError("Esperado nome do campo da struct", "E_EXPECTED_FIELD_NAME")
+		return nil
+	}
+	fieldName := p.curToken.Literal
+	p.nextToken()
+
+	fType := p.parseType()
+	if fType == nil {
+		return nil
+	}
+
+	if !p.expectCur(token.RPAREN) {
+		return nil
+	}
+	return &ast.Field{Name: fieldName, Type: fType, Line: line, Col: col}
+}
+
+func (p *Parser) parseFunc() *ast.FuncDecl {
+	line, col := p.curToken.Line, p.curToken.Col
 	p.nextToken() // consome 'fn'
 
-	if p.curToken.Type != lexer.TOKEN_IDENT {
-		p.addDiagnostic("EXPECTED_IDENTIFIER", "FuncDecl", "Nome da função esperado após 'fn'", "Identifier", p.curToken.Literal, "my_func", p.curToken.Line, p.curToken.Col)
+	if !p.curTokenIs(token.IDENT) {
+		p.addError("Esperado identificador para o nome da função", "E_EXPECTED_FN_NAME")
 		return nil
 	}
 	fnName := p.curToken.Literal
-	p.nextToken() // consome o nome
+	p.nextToken()
 
-	// Parâmetros: (p1: t1 p2: t2)
 	params := p.parseParams()
+	retType := p.parseReturns()
+	effects := p.parseEffects()
+	body := p.parseBody()
 
-	// Retorno opcional -> (ret_t)
-	retType := "void"
-	if p.curToken.Type == lexer.TOKEN_ARROW {
-		p.nextToken() // consome '->'
-		if p.curToken.Type == lexer.TOKEN_LPAREN {
-			p.nextToken() // consome '('
-			retType = p.parseType()
-			if p.curToken.Type == lexer.TOKEN_RPAREN {
-				p.nextToken()
-			}
-		}
-	}
-
-	// Corpo da função
-	var body []ast.Stmt
-	for {
-		if p.curToken.Type == lexer.TOKEN_EOF {
-			p.addDiagnostic("UNCLOSED_BLOCK", "FuncDecl", fmt.Sprintf("Bloco da função '%s' não foi fechado antes do fim do arquivo", fnName), fmt.Sprintf("/fn %s]", fnName), "EOF", fmt.Sprintf("/fn %s]", fnName), p.curToken.Line, p.curToken.Col)
-			break
-		}
-
-		// Checar se é o fechamento: /fn name]
-		if p.curToken.Type == lexer.TOKEN_SLASH {
-			p.nextToken() // consome '/'
-			if p.curToken.Type == lexer.TOKEN_FN {
-				p.nextToken() // consome 'fn'
-				closedName := p.curToken.Literal
-				p.nextToken() // consome nome
-				if closedName != fnName {
-					p.addDiagnostic(
-						"TAG_NAME_MISMATCH",
-						"FuncDecl",
-						fmt.Sprintf("Nome no fechamento '/fn %s' não corresponde a '/fn %s'", closedName, fnName),
-						fnName,
-						closedName,
-						fmt.Sprintf("/fn %s]", fnName),
-						p.curToken.Line,
-						p.curToken.Col,
-					)
-				}
-				if p.curToken.Type == lexer.TOKEN_RBRACKET {
-					p.nextToken() // consome ']'
-				} else {
-					p.addDiagnostic("EXPECTED_RBRACKET", "FuncDecl", "Esperado ']' ao fechar bloco de função", "]", p.curToken.Literal, "]", p.curToken.Line, p.curToken.Col)
-				}
-				break
-			}
-		}
-
-		stmt := p.parseStmt()
-		if stmt != nil {
-			body = append(body, stmt)
-		}
+	if !p.expectCur(token.RPAREN) {
+		return nil
 	}
 
 	return &ast.FuncDecl{
 		Name:       fnName,
 		Params:     params,
 		ReturnType: retType,
+		Effects:    effects,
 		Body:       body,
 		Line:       line,
 		Col:        col,
 	}
 }
 
-// [struct Name f1: t1 f2: t2 /struct Name]
-func (p *Parser) parseStructDecl() *ast.StructDecl {
-	line, col := p.curToken.Line, p.curToken.Col
-	p.nextToken() // consome '['
-	p.nextToken() // consome 'struct'
-
-	if p.curToken.Type != lexer.TOKEN_IDENT {
-		p.addDiagnostic("EXPECTED_IDENTIFIER", "StructDecl", "Nome da struct esperado", "Identifier", p.curToken.Literal, "MyStruct", p.curToken.Line, p.curToken.Col)
+func (p *Parser) parseParams() []ast.Param {
+	if !p.expectCur(token.LPAREN) {
 		return nil
 	}
-	stName := p.curToken.Literal
-	p.nextToken()
+	if !p.expectCur(token.PARAMS) {
+		return nil
+	}
 
-	var fields []ast.Param
-	for {
-		if p.curToken.Type == lexer.TOKEN_EOF {
+	var params []ast.Param
+	for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+		if !p.expectCur(token.LPAREN) {
 			break
 		}
-		if p.curToken.Type == lexer.TOKEN_SLASH {
-			p.nextToken() // '/'
-			if p.curToken.Type == lexer.TOKEN_STRUCT {
-				p.nextToken() // 'struct'
-				closedName := p.curToken.Literal
-				p.nextToken() // nome
-				if closedName != stName {
-					p.addDiagnostic("TAG_NAME_MISMATCH", "StructDecl", fmt.Sprintf("Nome de fechamento '/struct %s' não corresponde a '/struct %s'", closedName, stName), stName, closedName, fmt.Sprintf("/struct %s]", stName), p.curToken.Line, p.curToken.Col)
-				}
-				if p.curToken.Type == lexer.TOKEN_RBRACKET {
-					p.nextToken()
-				}
-				break
-			}
+		pLine, pCol := p.curToken.Line, p.curToken.Col
+		if !p.curTokenIs(token.IDENT) {
+			p.addError("Esperado nome do parâmetro", "E_EXPECTED_PARAM_NAME")
+			break
+		}
+		pName := p.curToken.Literal
+		p.nextToken()
+
+		pType := p.parseType()
+		if pType == nil {
+			break
 		}
 
-		if p.curToken.Type == lexer.TOKEN_IDENT && p.peekToken.Type == lexer.TOKEN_COLON {
-			fName := p.curToken.Literal
-			p.nextToken() // ident
-			p.nextToken() // ':'
-			fType := p.parseType()
-			fields = append(fields, ast.Param{Name: fName, Type: fType})
-		} else {
-			p.nextToken()
+		if !p.expectCur(token.RPAREN) {
+			break
 		}
+		params = append(params, ast.Param{Name: pName, Type: pType, Line: pLine, Col: pCol})
 	}
 
-	return &ast.StructDecl{
-		Name:   stName,
-		Fields: fields,
-		Line:   line,
-		Col:    col,
-	}
-}
-
-func (p *Parser) parseParams() []ast.Param {
-	var params []ast.Param
-	if p.curToken.Type != lexer.TOKEN_LPAREN {
-		return params
-	}
-	p.nextToken() // consome '('
-
-	for p.curToken.Type != lexer.TOKEN_RPAREN && p.curToken.Type != lexer.TOKEN_EOF {
-		if p.curToken.Type == lexer.TOKEN_IDENT {
-			pName := p.curToken.Literal
-			p.nextToken()
-			if p.curToken.Type == lexer.TOKEN_COLON {
-				p.nextToken()
-				pType := p.parseType()
-				params = append(params, ast.Param{Name: pName, Type: pType})
-			}
-		} else {
-			p.nextToken()
-		}
-	}
-
-	if p.curToken.Type == lexer.TOKEN_RPAREN {
-		p.nextToken() // consome ')'
-	}
+	p.expectCur(token.RPAREN)
 	return params
 }
 
-func (p *Parser) parseStmt() ast.Stmt {
-	if p.curToken.Type == lexer.TOKEN_LBRACKET {
-		switch p.peekToken.Type {
-		case lexer.TOKEN_LET:
-			return p.parseLetStmt()
-		case lexer.TOKEN_RETURN:
-			return p.parseReturnStmt()
-		case lexer.TOKEN_SPAWN:
-			return p.parseSpawnStmt()
-		case lexer.TOKEN_SEND:
-			return p.parseSendStmt()
-		case lexer.TOKEN_IF:
-			return p.parseIfStmt()
-		case lexer.TOKEN_RECV:
-			// [recv ch] as a statement
-			line, col := p.curToken.Line, p.curToken.Col
-			p.nextToken() // '['
-			p.nextToken() // 'recv'
-			chExpr := p.parseExpr()
-			if p.curToken.Type == lexer.TOKEN_RBRACKET {
-				p.nextToken()
-			}
-			return &ast.RecvExpr{Channel: chExpr, Line: line, Col: col}
-		default:
-			// Pode ser expressão dentro de colchetes ou erro
+func (p *Parser) parseReturns() ast.Type {
+	if !p.expectCur(token.LPAREN) {
+		return nil
+	}
+	if !p.expectCur(token.RETURNS) {
+		return nil
+	}
+
+	retType := p.parseType()
+
+	p.expectCur(token.RPAREN)
+	return retType
+}
+
+func (p *Parser) parseEffects() []string {
+	if !p.expectCur(token.LPAREN) {
+		return nil
+	}
+	if !p.expectCur(token.EFFECTS) {
+		return nil
+	}
+
+	var effects []string
+	for p.curTokenIs(token.IDENT) || p.curTokenIs(token.SPAWN) {
+		effects = append(effects, p.curToken.Literal)
+		p.nextToken()
+	}
+
+	p.expectCur(token.RPAREN)
+	return effects
+}
+
+func (p *Parser) parseBody() []ast.Stmt {
+	if !p.expectCur(token.LPAREN) {
+		return nil
+	}
+	if !p.expectCur(token.BODY) {
+		return nil
+	}
+
+	var stmts []ast.Stmt
+	for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+		stmt := p.parseStatement()
+		if stmt != nil {
+			stmts = append(stmts, stmt)
 		}
-	} else if p.curToken.Type == lexer.TOKEN_LPAREN {
-		expr := p.parseExpr()
-		line, col := expr.Pos()
-		return &ast.ExprStmt{Expression: expr, Line: line, Col: col}
 	}
 
+	p.expectCur(token.RPAREN)
+	return stmts
+}
+
+func (p *Parser) parseStatement() ast.Stmt {
+	if !p.expectCur(token.LPAREN) {
+		return nil
+	}
+	line, col := p.curToken.Line, p.curToken.Col
+
+	switch p.curToken.Type {
+	case token.WHILE, token.FOR_RANGE, token.FOR_EACH:
+		return p.parseLoop(line, col)
+	case token.BREAK, token.CONTINUE:
+		kind := p.curToken.Literal
+		p.nextToken()
+		p.expectCur(token.RPAREN)
+		return &ast.LoopControl{Kind: kind, Line: line, Col: col}
+	case token.MATCH:
+		return p.parseMatch(line, col)
+	case token.LET:
+		return p.parseLetStmt(line, col)
+	case token.SET:
+		return p.parseSetStmt(line, col)
+	case token.RETURN:
+		return p.parseReturnStmt(line, col)
+	case token.IF:
+		return p.parseIfStmt(line, col)
+	case token.SPAWN:
+		return p.parseSpawnStmt(line, col)
+	case token.SEND:
+		return p.parseSendStmt(line, col)
+	case token.DO:
+		return p.parseExprStmt(line, col)
+	default:
+		p.addError(fmt.Sprintf("Comando desconhecido: %q", p.curToken.Literal), "E_UNKNOWN_STATEMENT")
+		return nil
+	}
+}
+
+func (p *Parser) parseLetStmt(line, col int) *ast.LetStmt {
 	p.nextToken()
-	return nil
-}
 
-// [let x: int 10]
-func (p *Parser) parseLetStmt() *ast.LetStmt {
-	line, col := p.curToken.Line, p.curToken.Col
-	p.nextToken() // '['
-	p.nextToken() // 'let'
-
+	if !p.curTokenIs(token.IDENT) {
+		p.addError("Esperado identificador no let", "E_EXPECTED_LET_IDENT")
+		return nil
+	}
 	name := p.curToken.Literal
-	p.nextToken() // name
+	p.nextToken()
 
-	var typeName string
-	if p.curToken.Type == lexer.TOKEN_COLON {
-		p.nextToken() // ':'
-		typeName = p.parseType()
+	varType := p.parseType()
+	if varType == nil {
+		return nil
 	}
 
-	val := p.parseExpr()
-
-	if p.curToken.Type == lexer.TOKEN_RBRACKET {
-		p.nextToken() // ']'
-	} else {
-		p.addDiagnostic("EXPECTED_RBRACKET", "LetStmt", "Esperado ']' ao final de [let ...]", "]", p.curToken.Literal, "]", p.curToken.Line, p.curToken.Col)
+	val := p.parseExpression()
+	if val == nil {
+		return nil
 	}
 
-	return &ast.LetStmt{
-		Name:  name,
-		Type:  typeName,
-		Value: val,
-		Line:  line,
-		Col:   col,
+	if !p.expectCur(token.RPAREN) {
+		return nil
 	}
+
+	return &ast.LetStmt{Name: name, Type: varType, Value: val, Line: line, Col: col}
 }
 
-// [return expr]
-func (p *Parser) parseReturnStmt() *ast.ReturnStmt {
-	line, col := p.curToken.Line, p.curToken.Col
-	p.nextToken() // '['
-	p.nextToken() // 'return'
+func (p *Parser) parseSetStmt(line, col int) *ast.SetStmt {
+	p.nextToken()
+
+	if !p.curTokenIs(token.IDENT) {
+		p.addError("Esperado identificador no set", "E_EXPECTED_SET_IDENT")
+		return nil
+	}
+	name := p.curToken.Literal
+	p.nextToken()
+
+	val := p.parseExpression()
+	if val == nil {
+		return nil
+	}
+
+	if !p.expectCur(token.RPAREN) {
+		return nil
+	}
+
+	return &ast.SetStmt{Name: name, Value: val, Line: line, Col: col}
+}
+
+func (p *Parser) parseReturnStmt(line, col int) *ast.ReturnStmt {
+	p.nextToken()
 
 	var val ast.Expr
-	if p.curToken.Type != lexer.TOKEN_RBRACKET {
-		val = p.parseExpr()
+	if !p.curTokenIs(token.RPAREN) {
+		val = p.parseExpression()
 	}
 
-	if p.curToken.Type == lexer.TOKEN_RBRACKET {
-		p.nextToken() // ']'
+	if !p.expectCur(token.RPAREN) {
+		return nil
 	}
 
-	return &ast.ReturnStmt{
-		Value: val,
-		Line:  line,
-		Col:   col,
-	}
+	return &ast.ReturnStmt{Value: val, Line: line, Col: col}
 }
 
-// [spawn (fn_name args...)]
-func (p *Parser) parseSpawnStmt() *ast.SpawnStmt {
-	line, col := p.curToken.Line, p.curToken.Col
-	p.nextToken() // '['
-	p.nextToken() // 'spawn'
+func (p *Parser) parseIfStmt(line, col int) *ast.IfStmt {
+	p.nextToken()
 
-	expr := p.parseExpr()
-	call, ok := expr.(*ast.CallExpr)
-	if !ok {
-		p.addDiagnostic("INVALID_SPAWN", "SpawnStmt", "'spawn' requer uma chamada de função entre parênteses", "(func args...)", p.curToken.Literal, "(worker ch)", line, col)
+	cond := p.parseExpression()
+	if cond == nil {
+		return nil
 	}
 
-	if p.curToken.Type == lexer.TOKEN_RBRACKET {
-		p.nextToken() // ']'
+	if !p.expectCur(token.LPAREN) {
+		return nil
+	}
+	if !p.expectCur(token.THEN) {
+		return nil
 	}
 
-	return &ast.SpawnStmt{
-		Call: call,
-		Line: line,
-		Col:  col,
-	}
-}
-
-// [send ch val]
-func (p *Parser) parseSendStmt() *ast.SendStmt {
-	line, col := p.curToken.Line, p.curToken.Col
-	p.nextToken() // '['
-	p.nextToken() // 'send'
-
-	ch := p.parseExpr()
-	val := p.parseExpr()
-
-	if p.curToken.Type == lexer.TOKEN_RBRACKET {
-		p.nextToken() // ']'
-	}
-
-	return &ast.SendStmt{
-		Channel: ch,
-		Value:   val,
-		Line:    line,
-		Col:     col,
-	}
-}
-
-// [if cond ... [else ... /else] /if]
-func (p *Parser) parseIfStmt() *ast.IfStmt {
-	line, col := p.curToken.Line, p.curToken.Col
-	p.nextToken() // '['
-	p.nextToken() // 'if'
-
-	cond := p.parseExpr()
-	var thenBody []ast.Stmt
-	var elseBody []ast.Stmt
-
-	for {
-		if p.curToken.Type == lexer.TOKEN_EOF {
-			p.addDiagnostic("UNCLOSED_BLOCK", "IfStmt", "Bloco 'if' não foi fechado com /if]", "/if]", "EOF", "/if]", p.curToken.Line, p.curToken.Col)
-			break
+	var thenStmts []ast.Stmt
+	for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+		st := p.parseStatement()
+		if st != nil {
+			thenStmts = append(thenStmts, st)
 		}
+	}
+	if !p.expectCur(token.RPAREN) {
+		return nil
+	}
 
-		if p.curToken.Type == lexer.TOKEN_SLASH && p.peekToken.Type == lexer.TOKEN_IF {
-			p.nextToken() // '/'
-			p.nextToken() // 'if'
-			if p.curToken.Type == lexer.TOKEN_RBRACKET {
-				p.nextToken()
+	var elseStmts []ast.Stmt
+	if p.curTokenIs(token.LPAREN) && p.peekTokenIs(token.ELSE) {
+		p.nextToken()
+		p.nextToken()
+		for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+			st := p.parseStatement()
+			if st != nil {
+				elseStmts = append(elseStmts, st)
 			}
-			break
 		}
+		if !p.expectCur(token.RPAREN) {
+			return nil
+		}
+	}
 
-		if p.curToken.Type == lexer.TOKEN_LBRACKET && p.peekToken.Type == lexer.TOKEN_ELSE {
-			p.nextToken() // '['
-			p.nextToken() // 'else'
-			for {
-				if p.curToken.Type == lexer.TOKEN_EOF {
-					break
-				}
-				if p.curToken.Type == lexer.TOKEN_SLASH && p.peekToken.Type == lexer.TOKEN_ELSE {
-					p.nextToken() // '/'
-					p.nextToken() // 'else'
-					if p.curToken.Type == lexer.TOKEN_RBRACKET {
-						p.nextToken()
-					}
-					break
-				}
-				stmt := p.parseStmt()
-				if stmt != nil {
-					elseBody = append(elseBody, stmt)
-				}
-			}
-			continue
-		}
-
-		stmt := p.parseStmt()
-		if stmt != nil {
-			thenBody = append(thenBody, stmt)
-		}
+	if !p.expectCur(token.RPAREN) {
+		return nil
 	}
 
 	return &ast.IfStmt{
 		Condition: cond,
-		ThenBody:  thenBody,
-		ElseBody:  elseBody,
+		Then:      thenStmts,
+		Else:      elseStmts,
 		Line:      line,
 		Col:       col,
 	}
 }
 
-func (p *Parser) parseExpr() ast.Expr {
+func (p *Parser) parseSpawnStmt(line, col int) *ast.SpawnStmt {
+	p.nextToken()
+
+	expr := p.parseExpression()
+	call, ok := expr.(*ast.CallExpr)
+	if !ok {
+		p.addError("spawn requer uma expressão 'call'", "E_EXPECTED_CALL_IN_SPAWN")
+		return nil
+	}
+
+	if !p.expectCur(token.RPAREN) {
+		return nil
+	}
+
+	return &ast.SpawnStmt{Call: call, Line: line, Col: col}
+}
+
+func (p *Parser) parseSendStmt(line, col int) *ast.SendStmt {
+	p.nextToken()
+
+	ch := p.parseExpression()
+	val := p.parseExpression()
+
+	if !p.expectCur(token.RPAREN) {
+		return nil
+	}
+
+	return &ast.SendStmt{Channel: ch, Value: val, Line: line, Col: col}
+}
+
+func (p *Parser) parseExprStmt(line, col int) *ast.ExprStmt {
+	p.nextToken()
+
+	expr := p.parseExpression()
+	if expr == nil {
+		return nil
+	}
+
+	if !p.expectCur(token.RPAREN) {
+		return nil
+	}
+
+	return &ast.ExprStmt{Expr: expr, Line: line, Col: col}
+}
+
+func (p *Parser) parseExpression() ast.Expr {
 	line, col := p.curToken.Line, p.curToken.Col
 
 	switch p.curToken.Type {
-	case lexer.TOKEN_INT:
-		val, _ := strconv.ParseInt(p.curToken.Literal, 10, 64)
+	case token.INT:
+		val, err := strconv.ParseInt(p.curToken.Literal, 10, 64)
+		if err != nil {
+			p.addError("Inteiro fora do intervalo int64", "E_INVALID_NUMBER")
+		}
+		lit := &ast.IntLiteral{Value: val, Raw: p.curToken.Literal, Line: line, Col: col}
 		p.nextToken()
-		return &ast.IntLiteral{Value: val, Line: line, Col: col}
-	case lexer.TOKEN_FLOAT:
-		val, _ := strconv.ParseFloat(p.curToken.Literal, 64)
+		return lit
+
+	case token.FLOAT:
+		val, err := strconv.ParseFloat(p.curToken.Literal, 64)
+		if err != nil {
+			p.addError("Float fora do intervalo float64", "E_INVALID_NUMBER")
+		}
+		lit := &ast.FloatLiteral{Value: val, Raw: p.curToken.Literal, Line: line, Col: col}
 		p.nextToken()
-		return &ast.FloatLiteral{Value: val, Line: line, Col: col}
-	case lexer.TOKEN_STRING:
-		val := p.curToken.Literal
-		p.nextToken()
-		return &ast.StringLiteral{Value: val, Line: line, Col: col}
-	case lexer.TOKEN_BOOL:
+		return lit
+
+	case token.BOOL:
 		val := p.curToken.Literal == "true"
+		lit := &ast.BoolLiteral{Value: val, Line: line, Col: col}
 		p.nextToken()
-		return &ast.BoolLiteral{Value: val, Line: line, Col: col}
-	case lexer.TOKEN_IDENT:
+		return lit
+
+	case token.STRING:
+		lit := &ast.StringLiteral{Value: p.curToken.Literal, Line: line, Col: col}
+		p.nextToken()
+		return lit
+
+	case token.IDENT:
+		ident := &ast.IdentExpr{Name: p.curToken.Literal, Line: line, Col: col}
+		p.nextToken()
+		return ident
+
+	case token.LPAREN:
+		p.nextToken()
+		innerLine, innerCol := p.curToken.Line, p.curToken.Col
+
+		if p.curTokenIs(token.CALL) {
+			p.nextToken()
+			if !p.curTokenIs(token.IDENT) {
+				p.addError("Esperado identificador de função em call", "E_EXPECTED_CALL_IDENT")
+				return nil
+			}
+			fnName := p.curToken.Literal
+			p.nextToken()
+
+			var args []ast.Expr
+			for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+				arg := p.parseExpression()
+				if arg != nil {
+					args = append(args, arg)
+				}
+			}
+			if !p.expectCur(token.RPAREN) {
+				return nil
+			}
+			return &ast.CallExpr{Func: fnName, Args: args, Line: innerLine, Col: innerCol}
+		}
+
+		if token.IsOperator(p.curToken.Type) {
+			op := p.curToken.Literal
+			p.nextToken()
+
+			left := p.parseExpression()
+			right := p.parseExpression()
+
+			if !p.expectCur(token.RPAREN) {
+				return nil
+			}
+			return &ast.BinaryOpExpr{Op: op, Left: left, Right: right, Line: innerLine, Col: innerCol}
+		}
+
+		if p.curTokenIs(token.RECV) {
+			p.nextToken()
+			ch := p.parseExpression()
+			if !p.expectCur(token.RPAREN) {
+				return nil
+			}
+			return &ast.RecvExpr{Channel: ch, Line: innerLine, Col: innerCol}
+		}
+
+		p.addError(fmt.Sprintf("Expressão composta inválida iniciada por %q", p.curToken.Literal), "E_INVALID_EXPR")
+		return nil
+
+	default:
+		p.addError(fmt.Sprintf("Token inesperado ao iniciar expressão: %q", p.curToken.Literal), "E_UNEXPECTED_TOKEN")
+		return nil
+	}
+}
+
+func (p *Parser) parseType() ast.Type {
+	line, col := p.curToken.Line, p.curToken.Col
+
+	if p.curTokenIs(token.IDENT) {
 		name := p.curToken.Literal
 		p.nextToken()
-		return &ast.IdentifierExpr{Name: name, Line: line, Col: col}
-	case lexer.TOKEN_LBRACKET:
-		if p.peekToken.Type == lexer.TOKEN_RECV {
-			p.nextToken() // '['
-			p.nextToken() // 'recv'
-			chExpr := p.parseExpr()
-			if p.curToken.Type == lexer.TOKEN_RBRACKET {
-				p.nextToken()
-			}
-			return &ast.RecvExpr{Channel: chExpr, Line: line, Col: col}
+		switch name {
+		case "int", "float", "str", "bool", "void":
+			return &ast.PrimitiveType{Name: name, Line: line, Col: col}
+		default:
+			return &ast.NamedType{Name: name, Line: line, Col: col}
 		}
-	case lexer.TOKEN_LPAREN:
-		p.nextToken() // consome '('
-		opOrFn := p.curToken.Literal
+	}
+
+	if p.curTokenIs(token.LPAREN) {
+		p.nextToken()
+		if !p.curTokenIs(token.IDENT) {
+			p.addError("Esperado construtor de tipo (chan, list, map, option, result)", "E_EXPECTED_TYPE_CONSTRUCTOR")
+			return nil
+		}
+		constructor := p.curToken.Literal
 		p.nextToken()
 
-		// Operadores binários prefixados
-		if isBinaryOp(opOrFn) {
-			left := p.parseExpr()
-			right := p.parseExpr()
-			if p.curToken.Type == lexer.TOKEN_RPAREN {
-				p.nextToken() // ')'
-			}
-			return &ast.BinaryOpExpr{
-				Op:    opOrFn,
-				Left:  left,
-				Right: right,
-				Line:  line,
-				Col:   col,
+		var args []ast.Type
+		for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+			arg := p.parseType()
+			if arg != nil {
+				args = append(args, arg)
 			}
 		}
 
-		// Chamada de função genérica
-		var args []ast.Expr
-		for p.curToken.Type != lexer.TOKEN_RPAREN && p.curToken.Type != lexer.TOKEN_EOF {
-			args = append(args, p.parseExpr())
+		if !p.expectCur(token.RPAREN) {
+			return nil
 		}
-		if p.curToken.Type == lexer.TOKEN_RPAREN {
-			p.nextToken() // ')'
-		}
-		return &ast.CallExpr{
-			Fn:   opOrFn,
-			Args: args,
-			Line: line,
-			Col:  col,
-		}
+
+		return &ast.AppliedType{Constructor: constructor, Args: args, Line: line, Col: col}
 	}
 
-	p.nextToken()
+	p.addError(fmt.Sprintf("Tipo inválido: %q", p.curToken.Literal), "E_INVALID_TYPE")
 	return nil
-}
-
-func isBinaryOp(op string) bool {
-	switch op {
-	case "add", "sub", "mul", "div", "eq", "neq", "gt", "lt", "gte", "lte", "and", "or":
-		return true
-	default:
-		return false
-	}
-}
-
-func (p *Parser) parseType() string {
-	if p.curToken.Type != lexer.TOKEN_IDENT {
-		return ""
-	}
-	t := p.curToken.Literal
-	p.nextToken()
-	if t == "chan" && p.curToken.Type == lexer.TOKEN_LBRACKET {
-		p.nextToken() // consome '['
-		inner := p.parseType()
-		if p.curToken.Type == lexer.TOKEN_RBRACKET {
-			p.nextToken() // consome ']'
-		}
-		return fmt.Sprintf("%s[%s]", t, inner)
-	}
-	return t
 }

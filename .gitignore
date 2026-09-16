@@ -1,3 +1,11 @@
+# Variáveis de Ambiente e Segredos
+.env
+.env.*
+!.env.example
+
+# Documentação interna, logs e rascunhos de desenvolvimento
+.docs/
+
 # Binários
 *.exe
 *.exe~
@@ -12,10 +20,18 @@
 /server
 /server.exe
 
-# Cache e builds temporários
+# Pipelines internos e automações locais
+/pipeline
+
+# Cache, builds e dados temporários
 .liaf_cache/
 .certs/
+__pycache__/
+*.pyc
 
-# OS
+# IDEs e Sistema Operacional
+.vscode/
+.idea/
 Thumbs.db
 .DS_Store
+

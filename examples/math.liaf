@@ -1,0 +1,32 @@
+; Programa canônico em LIAF v0.2: Matemática e Funções
+(module math-demo
+  (fn sum
+    (params
+      (a int)
+      (b int))
+    (returns int)
+    (effects)
+    (body
+      (return (add a b))))
+  (fn multiply
+    (params
+      (x int)
+      (y int))
+    (returns int)
+    (effects)
+    (body
+      (return (mul x y))))
+  (fn main
+    (params)
+    (returns void)
+    (effects io)
+    (body
+      (let total int (call sum 25 17))
+      (let product int (call multiply total 2))
+      (do (call println (call concat "Soma: " (call str-from-int total))))
+      (do (call println (call concat "Produto dobrado: " (call str-from-int product))))
+      (if (gt product 50)
+        (then
+          (do (call println "Resultado maior que 50!")))
+        (else
+          (do (call println "Resultado menor ou igual a 50.")))))))

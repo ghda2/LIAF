@@ -1,17 +1,22 @@
 package lexer
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
-	"unicode"
+	"unicode/utf8"
+
+	"liaf/pkg/token"
 )
 
 type Lexer struct {
 	input        string
-	position     int  // current position in input (points to current char)
-	readPosition int  // current reading position in input (after current char)
-	ch           byte // current char under examination
-	line         int
-	col          int
+	position     int  // posição atual do caractere (índice em bytes)
+	readPosition int  // próxima posição de leitura
+	ch           rune // caractere atual
+	line         int  // linha atual (1-based)
+	col          int  // coluna atual (1-based)
+	Errors       []string
 }
 
 func New(input string) *Lexer {
@@ -27,173 +32,213 @@ func New(input string) *Lexer {
 func (l *Lexer) readChar() {
 	if l.readPosition >= len(l.input) {
 		l.ch = 0
+		l.position = l.readPosition
+		l.readPosition++
+		l.col++
 	} else {
-		l.ch = l.input[l.readPosition]
+		r, size := utf8.DecodeRuneInString(l.input[l.readPosition:])
+		l.ch = r
+		l.position = l.readPosition
+		l.readPosition += size
+		l.col++
 	}
-	l.position = l.readPosition
-	l.readPosition++
-	l.col++
 }
 
-func (l *Lexer) peekChar() byte {
+func (l *Lexer) peekChar() rune {
 	if l.readPosition >= len(l.input) {
 		return 0
 	}
-	return l.input[l.readPosition]
+	r, _ := utf8.DecodeRuneInString(l.input[l.readPosition:])
+	return r
 }
 
-func (l *Lexer) NextToken() Token {
+func (l *Lexer) skipWhitespaceAndComments() {
+	for {
+		if l.ch == ' ' || l.ch == '\t' || l.ch == '\r' {
+			l.readChar()
+		} else if l.ch == '\n' {
+			l.line++
+			l.col = 0
+			l.readChar()
+		} else if l.ch == ';' {
+			// Comentário até o fim da linha
+			for l.ch != '\n' && l.ch != 0 {
+				l.readChar()
+			}
+		} else {
+			break
+		}
+	}
+}
+
+func (l *Lexer) NextToken() token.Token {
 	l.skipWhitespaceAndComments()
 
 	tokLine := l.line
 	tokCol := l.col
 
-	var tok Token
+	var tok token.Token
 
 	switch l.ch {
-	case '[':
-		tok = Token{Type: TOKEN_LBRACKET, Literal: "[", Line: tokLine, Col: tokCol}
-	case ']':
-		tok = Token{Type: TOKEN_RBRACKET, Literal: "]", Line: tokLine, Col: tokCol}
-	case '(':
-		tok = Token{Type: TOKEN_LPAREN, Literal: "(", Line: tokLine, Col: tokCol}
-	case ')':
-		tok = Token{Type: TOKEN_RPAREN, Literal: ")", Line: tokLine, Col: tokCol}
-	case ':':
-		tok = Token{Type: TOKEN_COLON, Literal: ":", Line: tokLine, Col: tokCol}
-	case '/':
-		tok = Token{Type: TOKEN_SLASH, Literal: "/", Line: tokLine, Col: tokCol}
-	case '-':
-		if l.peekChar() == '>' {
-			l.readChar()
-			tok = Token{Type: TOKEN_ARROW, Literal: "->", Line: tokLine, Col: tokCol}
-		} else {
-			tok = Token{Type: TOKEN_ILLEGAL, Literal: string(l.ch), Line: tokLine, Col: tokCol}
-		}
-	case '"':
-		strVal := l.readString()
-		return Token{Type: TOKEN_STRING, Literal: strVal, Line: tokLine, Col: tokCol}
 	case 0:
-		tok = Token{Type: TOKEN_EOF, Literal: "", Line: tokLine, Col: tokCol}
+		if l.position < len(l.input) {
+			l.readChar()
+			return token.Token{Type: token.ILLEGAL, Literal: "NUL", Line: tokLine, Col: tokCol}
+		}
+		tok = token.Token{Type: token.EOF, Literal: "", Line: tokLine, Col: tokCol}
+	case '(':
+		tok = token.Token{Type: token.LPAREN, Literal: "(", Line: tokLine, Col: tokCol}
+		l.readChar()
+	case ')':
+		tok = token.Token{Type: token.RPAREN, Literal: ")", Line: tokLine, Col: tokCol}
+		l.readChar()
+	case '"':
+		str, ok := l.readString()
+		if !ok {
+			tok = token.Token{Type: token.ILLEGAL, Literal: str, Line: tokLine, Col: tokCol}
+		} else {
+			tok = token.Token{Type: token.STRING, Literal: str, Line: tokLine, Col: tokCol}
+		}
 	default:
 		if isLetter(l.ch) {
-			ident := l.readIdentifier()
-			tokType := lookupIdent(ident)
-			return Token{Type: tokType, Literal: ident, Line: tokLine, Col: tokCol}
-		} else if isDigit(l.ch) {
-			num, isFloat := l.readNumber()
-			tokType := TOKEN_INT
-			if isFloat {
-				tokType = TOKEN_FLOAT
+			lit := l.readIdentifier()
+			tokType := token.LookupIdent(lit)
+			return token.Token{Type: tokType, Literal: lit, Line: tokLine, Col: tokCol}
+		} else if isDigit(l.ch) || (l.ch == '-' && isDigit(l.peekChar())) {
+			lit, isFloat, ok := l.readNumber()
+			if !ok {
+				tok = token.Token{Type: token.ILLEGAL, Literal: lit, Line: tokLine, Col: tokCol}
+			} else if isFloat {
+				tok = token.Token{Type: token.FLOAT, Literal: lit, Line: tokLine, Col: tokCol}
+			} else {
+				tok = token.Token{Type: token.INT, Literal: lit, Line: tokLine, Col: tokCol}
 			}
-			return Token{Type: tokType, Literal: num, Line: tokLine, Col: tokCol}
 		} else {
-			tok = Token{Type: TOKEN_ILLEGAL, Literal: string(l.ch), Line: tokLine, Col: tokCol}
+			tok = token.Token{Type: token.ILLEGAL, Literal: string(l.ch), Line: tokLine, Col: tokCol}
+			l.addError(fmt.Sprintf("Caractere inválido '%c' em %d:%d", l.ch, tokLine, tokCol))
+			l.readChar()
 		}
 	}
 
-	l.readChar()
 	return tok
 }
 
-func (l *Lexer) skipWhitespaceAndComments() {
-	for {
-		for l.ch == ' ' || l.ch == '\t' || l.ch == '\r' || l.ch == '\n' {
-			if l.ch == '\n' {
-				l.line++
-				l.col = 0
-			}
+func (l *Lexer) readIdentifier() string {
+	startPos := l.position
+	for isLetter(l.ch) || isDigit(l.ch) || l.ch == '-' || l.ch == '_' {
+		l.readChar()
+	}
+	return l.input[startPos:l.position]
+}
+
+func (l *Lexer) readNumber() (string, bool, bool) {
+	startPos := l.position
+	isFloat := false
+
+	if l.ch == '-' {
+		l.readChar()
+	}
+
+	for isDigit(l.ch) {
+		l.readChar()
+	}
+
+	if l.ch == '.' {
+		if !isDigit(l.peekChar()) {
+			l.addError(fmt.Sprintf("Número float malformado terminado em ponto em %d:%d", l.line, l.col))
+			return l.input[startPos:l.position], false, false
+		}
+		isFloat = true
+		l.readChar()
+		for isDigit(l.ch) {
 			l.readChar()
 		}
-		// Comment starting with '#' or ';'
-		if l.ch == '#' || l.ch == ';' {
-			for l.ch != '\n' && l.ch != 0 {
-				l.readChar()
-			}
-			continue
+	}
+
+	if isLetter(l.ch) {
+		l.addError(fmt.Sprintf("Identificador ou número malformado em %d:%d", l.line, l.col))
+		for isLetter(l.ch) || isDigit(l.ch) {
+			l.readChar()
 		}
-		break
+		return l.input[startPos:l.position], false, false
 	}
+
+	return l.input[startPos:l.position], isFloat, true
 }
 
-func (l *Lexer) readIdentifier() string {
-	start := l.position
-	for isLetter(l.ch) || isDigit(l.ch) || l.ch == '_' {
-		l.readChar()
-	}
-	return l.input[start:l.position]
-}
+func (l *Lexer) readString() (string, bool) {
+	tokLine := l.line
+	tokCol := l.col
+	l.readChar()
 
-func (l *Lexer) readNumber() (string, bool) {
-	start := l.position
-	isFloat := false
-	for isDigit(l.ch) || l.ch == '.' {
-		if l.ch == '.' {
-			isFloat = true
-		}
-		l.readChar()
-	}
-	return l.input[start:l.position], isFloat
-}
-
-func (l *Lexer) readString() string {
-	l.readChar() // skip initial '"'
 	var sb strings.Builder
-	for l.ch != '"' && l.ch != 0 {
+
+	for {
+		if l.ch == 0 || l.ch == '\n' {
+			l.addError(fmt.Sprintf("String não terminada iniciada em %d:%d", tokLine, tokCol))
+			return sb.String(), false
+		}
+
+		if l.ch == '"' {
+			l.readChar()
+			break
+		}
+
 		if l.ch == '\\' {
 			l.readChar()
 			switch l.ch {
-			case 'n':
-				sb.WriteByte('\n')
-			case 't':
-				sb.WriteByte('\t')
 			case '"':
 				sb.WriteByte('"')
 			case '\\':
 				sb.WriteByte('\\')
+			case 'n':
+				sb.WriteByte('\n')
+			case 'r':
+				sb.WriteByte('\r')
+			case 't':
+				sb.WriteByte('\t')
+			case 'u':
+				var hexStr strings.Builder
+				for i := 0; i < 4; i++ {
+					l.readChar()
+					if !isHex(l.ch) {
+						l.addError(fmt.Sprintf("Escape unicode inválido \\u em %d:%d", l.line, l.col))
+						return sb.String(), false
+					}
+					hexStr.WriteRune(l.ch)
+				}
+				val, err := strconv.ParseInt(hexStr.String(), 16, 32)
+				if err != nil {
+					l.addError(fmt.Sprintf("Erro ao decodificar \\u%s em %d:%d", hexStr.String(), l.line, l.col))
+					return sb.String(), false
+				}
+				sb.WriteRune(rune(val))
 			default:
-				sb.WriteByte(l.ch)
+				l.addError(fmt.Sprintf("Escape inválido '\\%c' em %d:%d", l.ch, l.line, l.col))
+				return sb.String(), false
 			}
+			l.readChar()
 		} else {
-			sb.WriteByte(l.ch)
+			sb.WriteRune(l.ch)
+			l.readChar()
 		}
-		l.readChar()
 	}
-	l.readChar() // skip closing '"'
-	return sb.String()
+
+	return sb.String(), true
 }
 
-func lookupIdent(ident string) TokenType {
-	switch ident {
-	case "fn":
-		return TOKEN_FN
-	case "struct":
-		return TOKEN_STRUCT
-	case "let":
-		return TOKEN_LET
-	case "return":
-		return TOKEN_RETURN
-	case "spawn":
-		return TOKEN_SPAWN
-	case "send":
-		return TOKEN_SEND
-	case "recv":
-		return TOKEN_RECV
-	case "if":
-		return TOKEN_IF
-	case "else":
-		return TOKEN_ELSE
-	case "true", "false":
-		return TOKEN_BOOL
-	default:
-		return TOKEN_IDENT
-	}
+func (l *Lexer) addError(msg string) {
+	l.Errors = append(l.Errors, msg)
 }
 
-func isLetter(ch byte) bool {
-	return unicode.IsLetter(rune(ch)) || ch == '_'
+func isLetter(ch rune) bool {
+	return ('a' <= ch && ch <= 'z') || ('A' <= ch && ch <= 'Z')
 }
 
-func isDigit(ch byte) bool {
-	return unicode.IsDigit(rune(ch))
+func isDigit(ch rune) bool {
+	return '0' <= ch && ch <= '9'
+}
+
+func isHex(ch rune) bool {
+	return ('0' <= ch && ch <= '9') || ('a' <= ch && ch <= 'f') || ('A' <= ch && ch <= 'F')
 }

@@ -1,11 +1,11 @@
 # LIAF v0.2 — Especificação proposta para agentes de IA
 
-**Status:** proposta de design, ainda não implementada  
+**Status:** especificação de design parcialmente implementada; consulte [IMPLEMENTATION.md](IMPLEMENTATION.md) para o contrato executável atual
 **Compatibilidade:** incompatível com a sintaxe LIAF v0.1  
 **Público-alvo:** modelos de linguagem e agentes autônomos  
 **Objetivo:** permitir que modelos menores e de menor custo produzam software correto, minimizando o esforço de inferência e o custo total até uma solução validada
 
-> Este documento especifica somente a segunda versão da linguagem. O compilador atual implementa a v0.1 e não deve ser usado para validar os exemplos desta especificação até que tenha suporte explícito à v0.2.
+> O compilador atual aceita a sintaxe v0.2. Recursos propostos neste documento, como protocolo completo de patches estruturais, não devem ser considerados implementados sem confirmação em IMPLEMENTATION.md e testes. A sintaxe v0.1 é histórica.
 
 ---
 

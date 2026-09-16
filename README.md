@@ -1,61 +1,31 @@
 # LIAF — Language for AI First
 
-> Uma linguagem de programação estruturada, estática e de alta concorrência desenhada desde o primeiro byte para a mecânica de Transformers, Tokenizadores e Auto-Cura de IAs.
+Linguagem experimental com AST textual em S-expressions, tipos e efeitos explícitos, diagnósticos JSON e compilação via Go. A hipótese de reduzir o custo de programação por modelos menores deve ser medida com benchmarks.
 
----
-
-## 🚀 Destaques
-
-- **Otimizada para Transformers**:
-  - Tags de fechamento nomeadas (`[fn nome ... /fn nome]`) eliminam o problema de contagem de parênteses/chaves (`}}}` ou `)))`).
-  - Precedência prefixada explícita (`(add a b)`).
-  - Diagnósticos estruturados em **JSON** prontos para auto-cura por LLM (`liafc check --json`).
-- **Concorrência de Alta Performance (CSP/Atores)**:
-  - Green threads nativas (`spawn`) e canais fortemente tipados (`chan[T]`, `send`, `recv`).
-- **Web Engine Autônomo Embutido**:
-  - Auto-minificação de HTML, CSS e JS em memória (zero disk I/O).
-  - Compressão Gzip automática e validação de cache HTTP (`ETag`, `304 Not Modified`).
-  - Auto-TLS / ACME (Let's Encrypt estilo Caddy) de fábrica.
-  - Testado em produção com footprint de apenas **3.4 MB de RAM**.
-- **Binário Único Estático**:
-  - Compila para executáveis nativos e independentes (Windows, Linux, macOS).
-
----
-
-## 🛠️ Como Usar
-
-### 1. Compilar o compilador LIAF (`liafc`)
-```bash
-go build -o liafc.exe ./cmd/liafc
-```
-
-### 2. Verificar Sintaxe e Auto-Cura de IA (JSON)
-```bash
-./liafc check ./examples/broken.liaf --json
-```
-
-### 3. Subir um Site com 1 Linha de Código
 ```liaf
-# examples/web_engine.liaf
-[fn main () -> (void)
-  (serve_site "./public" "" "8080" false)
-/fn main]
+(module hello
+  (fn main (params) (returns void) (effects io)
+    (body (do (call println "Hello, LIAF")))))
 ```
 
-Compilar e gerar binário estático:
-```bash
-./liafc build ./examples/web_engine.liaf -o meu_site.exe
-./meu_site.exe
+```powershell
+go build -o liafc.exe ./cmd/liafc
+./liafc.exe check examples/loops.liaf --json
+./liafc.exe run examples/collections.liaf
+./liafc.exe build examples/web_engine.liaf -o site.exe --embed=public
+go test ./...
 ```
 
----
+Recursos: loops, listas e mapas tipados, `Result`/`match`, arquivos e JSON, concorrência por canais, rotas HTTP, SSG Markdown, layouts, includes, gzip, ETags, streaming de mídias e publicação autenticada. A compilação pelo backend Go requer Go e este repositório; o executável gerado funciona sem Go instalado.
 
-## 📚 Documentação
+- [Contrato implementado](.docs/conceitos/IMPLEMENTATION.md)
+- [Status das issues](.docs/STATUS.md)
+- [Próximos passos e checklist](.docs/PROXIMOS_PASSOS.md)
+- [Registro para retomar o trabalho](.docs/RETOMADA.md)
+- [Especificação v0.2](.docs/conceitos/SPEC_V2.md)
+- [Guia de agentes](.docs/regras/AI_AGENT_GUIDE.md)
+- [Arquitetura](.docs/conceitos/ARCHITECTURE.md)
+- [Roadmap](.docs/conceitos/ROADMAP.md)
+- [Logs históricos](.docs/logs/LOG_2026-09-16_PIPELINE_JORNALISMO_IA.md)
 
-- [`.docs/SPEC.md`](.docs/SPEC.md) — Especificação formal da gramática e tipos.
-- [`.docs/ARCHITECTURE.md`](.docs/ARCHITECTURE.md) — Pipeline do compilador e componentes modulares.
-- [`.docs/AI_AGENT_GUIDE.md`](.docs/AI_AGENT_GUIDE.md) — Guia prático de auto-cura e regras para agentes de IA.
-- [`.docs/ROADMAP.md`](.docs/ROADMAP.md) — Fases de maturidade da linguagem.
-- [`.docs/LEARNINGS.md`](.docs/LEARNINGS.md) — Relatório e métricas do teste em produção.
-- [`.docs/LOG_2026-09-15.md`](.docs/LOG_2026-09-15.md) — Registro completo de evolução e deploy (15/09/2026).
-- [`.agents/skills/liaf/SKILL.md`](.agents/skills/liaf/SKILL.md) — Skill pronta para agentes Antigravity.
+Publish/reload são desabilitados sem token configurado. Defina `LIAF_DEPLOY_TOKEN` e use POST com `Authorization: Bearer ...`. Assets embutidos são imutáveis; publicação dinâmica requer diretório em disco.

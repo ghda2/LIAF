@@ -2,10 +2,13 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"liaf/pkg/checker"
 	"liaf/pkg/codegen"
@@ -32,6 +35,12 @@ func main() {
 		runRun(args)
 	case "emit":
 		runEmit(args)
+	case "service":
+		installService(args)
+	case "deploy":
+		runDeploy(args)
+	case "publish":
+		runPublish(args)
 	default:
 		fmt.Fprintf(os.Stderr, "Comando desconhecido: %s\n", cmd)
 		printUsage()
@@ -40,15 +49,17 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Println("LIAF Compiler (liafc)")
+	fmt.Println("LIAF Compiler & Toolchain (liafc)")
 	fmt.Println("Uso:")
 	fmt.Println("  liafc check <arquivo.liaf> [--json]")
-	fmt.Println("  liafc build <arquivo.liaf> [-o saida]")
+	fmt.Println("  liafc build <arquivo.liaf> [-o saida] [--embed]")
 	fmt.Println("  liafc run <arquivo.liaf>")
 	fmt.Println("  liafc emit <arquivo.liaf>")
+	fmt.Println("  liafc publish <arquivo_local> --url <endpoint_url> [--path <rota>] [--token <token>]")
+	fmt.Println("  liafc service install --name <nome> --bin <executavel> [--workdir <dir>]")
 }
 
-func parseAndCheck(filePath string) (*parser.Parser, *checker.Checker, []diagnostic.Diagnostic, string) {
+func parseAndCheck(filePath string) (*parser.Parser, []diagnostic.Diagnostic, string) {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Erro ao ler arquivo %s: %v\n", filePath, err)
@@ -57,18 +68,32 @@ func parseAndCheck(filePath string) (*parser.Parser, *checker.Checker, []diagnos
 
 	l := lexer.New(string(content))
 	p := parser.New(l, filePath)
-	prog := p.ParseProgram()
+	mod := p.ParseModule()
 
-	allErrors := p.Errors()
+	var allErrors []diagnostic.Diagnostic
+	for _, diag := range p.Diagnostics {
+		allErrors = append(allErrors, diagnostic.Diagnostic{
+			Code:    diag.Code,
+			File:    diag.File,
+			Line:    diag.Line,
+			Col:     diag.Col,
+			Message: diag.Message,
+		})
+	}
 
-	c := checker.New(filePath)
-	checkErrors := c.Check(prog)
-	allErrors = append(allErrors, checkErrors...)
+	if mod == nil || len(allErrors) > 0 {
+		return p, allErrors, ""
+	}
+	_, semanticErrors := checker.Check(mod, filePath)
+	allErrors = append(allErrors, semanticErrors...)
+	if len(allErrors) > 0 {
+		return p, allErrors, ""
+	}
 
-	gen := codegen.New(prog)
+	gen := codegen.New(mod)
 	generatedCode := gen.Generate()
 
-	return p, c, allErrors, generatedCode
+	return p, allErrors, generatedCode
 }
 
 func runCheck(args []string) {
@@ -88,7 +113,7 @@ func runCheck(args []string) {
 		os.Exit(1)
 	}
 
-	_, _, allErrors, _ := parseAndCheck(filePath)
+	_, allErrors, _ := parseAndCheck(filePath)
 
 	report := diagnostic.NewReport(allErrors)
 
@@ -118,7 +143,7 @@ func runEmit(args []string) {
 	}
 
 	filePath := args[0]
-	_, _, allErrors, generatedCode := parseAndCheck(filePath)
+	_, allErrors, generatedCode := parseAndCheck(filePath)
 
 	if len(allErrors) > 0 {
 		for _, err := range allErrors {
@@ -157,7 +182,7 @@ func runBuild(args []string) {
 		os.Exit(1)
 	}
 
-	_, _, allErrors, generatedCode := parseAndCheck(filePath)
+	_, allErrors, generatedCode := parseAndCheck(filePath)
 
 	if len(allErrors) > 0 {
 		for _, err := range allErrors {
@@ -195,7 +220,7 @@ func runBuild(args []string) {
 
 		destPublic := filepath.Join(tmpDir, "public")
 		if err := copyDirectory(targetDir, destPublic); err != nil {
-			fmt.Fprintf(os.Stderr, "Aviso: não foi possível embutir pasta '%s': %v\n", targetDir, err)
+			fatal(fmt.Errorf("could not embed %s: %w", targetDir, err))
 		} else {
 			embedImports := "\t\"embed\"\n\t\"io/fs\"\n"
 			generatedCode = strings.Replace(generatedCode, "import (\n", "import (\n"+embedImports, 1)
@@ -262,7 +287,7 @@ func runRun(args []string) {
 	}
 
 	filePath := args[0]
-	_, _, allErrors, generatedCode := parseAndCheck(filePath)
+	_, allErrors, generatedCode := parseAndCheck(filePath)
 
 	if len(allErrors) > 0 {
 		for _, err := range allErrors {
@@ -316,4 +341,69 @@ func findGoMod(startDir string) string {
 		curr = parent
 	}
 	return ""
+}
+
+func runPublish(args []string) {
+	var localFile, endpointURL, targetPath, token string
+
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--url" && i+1 < len(args) {
+			endpointURL = args[i+1]
+			i++
+		} else if a == "--path" && i+1 < len(args) {
+			targetPath = args[i+1]
+			i++
+		} else if a == "--token" && i+1 < len(args) {
+			token = args[i+1]
+			i++
+		} else if !strings.HasPrefix(a, "-") && localFile == "" {
+			localFile = a
+		}
+	}
+
+	if localFile == "" || endpointURL == "" {
+		fmt.Fprintln(os.Stderr, "Uso: liafc publish <arquivo_local> --url <endpoint_url> [--path <rota>] [--token <token>]")
+		os.Exit(1)
+	}
+
+	data, err := os.ReadFile(localFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Erro lendo arquivo local: %v\n", err)
+		os.Exit(1)
+	}
+
+	if targetPath == "" {
+		targetPath = filepath.Base(localFile)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, endpointURL, strings.NewReader(string(data)))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Erro criando requisicao: %v\n", err)
+		os.Exit(1)
+	}
+
+	if token == "" {
+		token = os.Getenv("LIAF_DEPLOY_TOKEN")
+	}
+	req.Header.Set("X-LIAF-Path", targetPath)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Erro enviando publicacao: %v\n", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		fmt.Fprintf(os.Stderr, "Falha na publicacao (%d): %s\n", resp.StatusCode, string(body))
+		os.Exit(1)
+	}
+
+	fmt.Printf("✓ Publicado com sucesso! Resposta: %s\n", string(body))
 }

@@ -1,24 +1,28 @@
-# Exemplo de Concorrência Massiva (Atores & Canais) em LIAF
-
-[fn worker (ch: chan[str] id: int) -> (void)
-  (sleep_ms 50)
-  [send ch (concat "Resultado processado com sucesso pelo Worker #" (str id))]
-/fn worker]
-
-[fn main () -> (void)
-  (println "Iniciando workers concorrentes...")
-  [let ch: chan[str] (make_chan str)]
-
-  [spawn (worker ch 1)]
-  [spawn (worker ch 2)]
-  [spawn (worker ch 3)]
-
-  [let r1: str [recv ch]]
-  [let r2: str [recv ch]]
-  [let r3: str [recv ch]]
-
-  (println r1)
-  (println r2)
-  (println r3)
-  (println "Todos os processos foram concluidos!")
-/fn main]
+; Exemplo de Concorrência Massiva (Atores & Canais) em LIAF v0.2
+(module concurrency
+  (fn worker
+    (params
+      (ch (chan str))
+      (id int))
+    (returns void)
+    (effects clock)
+    (body
+      (do (call sleep-ms 50))
+      (send ch (call concat "Resultado processado com sucesso pelo Worker #" (call str-from-int id)))))
+  (fn main
+    (params)
+    (returns void)
+    (effects clock io spawn)
+    (body
+      (do (call println "Iniciando workers concorrentes..."))
+      (let ch (chan str) (call make-chan str))
+      (spawn (call worker ch 1))
+      (spawn (call worker ch 2))
+      (spawn (call worker ch 3))
+      (let r1 str (recv ch))
+      (let r2 str (recv ch))
+      (let r3 str (recv ch))
+      (do (call println r1))
+      (do (call println r2))
+      (do (call println r3))
+      (do (call println "Todos os processos foram concluidos!")))))

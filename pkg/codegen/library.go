@@ -47,6 +47,10 @@ func (g *Generator) libraryCall(c *ast.CallExpr) (string, bool) {
 		return call("rt.ReadFile")
 	case "fs-write-file":
 		return call("rt.WriteFile")
+	case "fs-rename":
+		return call("rt.Rename")
+	case "fs-write-atomic":
+		return call("rt.WriteAtomic")
 	case "fs-remove":
 		return call("rt.Remove")
 	case "fs-exists":

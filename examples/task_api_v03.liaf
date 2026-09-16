@@ -1,0 +1,164 @@
+;; API de tarefas de referencia - Sintaxe LIAF v0.3 (Ergonomica para IA)
+;; Demonstra as tres reducoes de carga cognitiva da v0.3:
+;;   1. Chamadas diretas: (json-encode x) em vez de (call json-encode x)
+;;   2. try/on-err planos: sem piramide de match aninhado
+;;   3. Rotas declarativas: (route METHOD PATH ...) com parametros ja tipados
+
+(module task-api
+  (struct Task (fields (id int) (title str) (done bool)))
+  (struct State (fields (next-id int) (tasks (list Task))))
+  (struct CreateInput (fields (title str)))
+  (struct UpdateInput (fields (title str) (done bool)))
+  (struct ApiError (fields (error str)))
+
+  (fn error-response (params (status int) (message str)) (returns Response) (effects io)
+    (on-err fail (return (json-response 500 "{\"error\":\"Serialization failure\"}")))
+    (body
+      (let payload str (try (json-encode (new ApiError message))))
+      (return (json-response status payload))))
+
+  (fn load-state (params) (returns (result State str)) (effects fs io)
+    (body
+      (if (not (fs-exists "task-api-data.json"))
+        (then (return (ok (new State 1 (make-list Task))))))
+      (let text str (try (fs-read-file "task-api-data.json")))
+      (let state State (try (json-decode text State)))
+      (return (ok state))))
+
+  ;; I/O atomico da v0.3: fs-write-atomic grava em .tmp e faz rename,
+  ;; entao o arquivo de estado nunca fica pela metade se o processo morrer.
+  (fn save-state (params (state State)) (returns (result bool str)) (effects fs io)
+    (body
+      (let text str (try (json-encode state)))
+      (try (fs-write-atomic "task-api-data.json" text))
+      (return (ok true))))
+
+  ;; Listas sao serializadas como arrays JSON nativos [...] na v0.3
+  (fn tasks-response (params (state State)) (returns Response) (effects io)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (let payload str (try (json-encode (field state tasks))))
+      (return (json-response 200 payload))))
+
+  (fn task-response (params (task Task) (status int)) (returns Response) (effects io)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (let payload str (try (json-encode task)))
+      (return (json-response status payload))))
+
+  (fn find-task (params (state State) (id int)) (returns Response) (effects io)
+    (body
+      (for-each task (field state tasks)
+        (if (eq (field task id) id)
+          (then (return (task-response task 200)))))
+      (return (error-response 404 "Task not found"))))
+
+  (fn create-task (params (state State) (input CreateInput)) (returns Response) (effects fs io)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (let id int (field state next-id))
+      (if (lte id 0)
+        (then (return (error-response 500 "ID counter invalid"))))
+      (let task Task (new Task id (field input title) false))
+      (let tasks (list Task) (field state tasks))
+      (do (list-push tasks task))
+      (try (save-state (new State (add id 1) tasks)))
+      (return (task-response task 201))))
+
+  (fn update-task (params (state State) (id int) (input UpdateInput)) (returns Response) (effects fs io)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (let tasks (list Task) (make-list Task))
+      (let replacement Task (new Task id (field input title) (field input done)))
+      (let found bool false)
+      (for-each task (field state tasks)
+        (if (eq (field task id) id)
+          (then
+            (do (list-push tasks replacement))
+            (set found true))
+          (else (do (list-push tasks task)))))
+      (if (not found)
+        (then (return (error-response 404 "Task not found"))))
+      (try (save-state (new State (field state next-id) tasks)))
+      (return (task-response replacement 200))))
+
+  (fn delete-task (params (state State) (id int)) (returns Response) (effects fs io)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (let tasks (list Task) (make-list Task))
+      (let found bool false)
+      (for-each task (field state tasks)
+        (if (eq (field task id) id)
+          (then (set found true))
+          (else (do (list-push tasks task)))))
+      (if (not found)
+        (then (return (error-response 404 "Task not found"))))
+      (try (save-state (new State (field state next-id) tasks)))
+      (return (json-response 200 "{\"deleted\":true}"))))
+
+  ;; --- Rotas declarativas -----------------------------------------------
+  ;; O parametro {id} chega ja convertido para int e o corpo JSON ja chega
+  ;; desserializado no struct. Sem parse manual de path, sem json-decode.
+
+  (route GET "/health" (params) (returns Response) (effects)
+    (body (return (json-response 200 "{\"status\":\"ok\"}"))))
+
+  (route GET "/tasks" (params) (returns Response) (effects fs io)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (let state State (try (load-state)))
+      (return (tasks-response state))))
+
+  (route POST "/tasks" (params (input CreateInput)) (returns Response) (effects fs io)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (if (str-eq (field input title) "")
+        (then (return (error-response 400 "A nonempty title is required"))))
+      (let state State (try (load-state)))
+      (return (create-task state input))))
+
+  (route GET "/tasks/{id}" (params (id int)) (returns Response) (effects fs io)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (if (lte id 0)
+        (then (return (error-response 400 "ID must be positive"))))
+      (let state State (try (load-state)))
+      (return (find-task state id))))
+
+  (route PUT "/tasks/{id}" (params (id int) (input UpdateInput)) (returns Response) (effects fs io)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (if (lte id 0)
+        (then (return (error-response 400 "ID must be positive"))))
+      (if (str-eq (field input title) "")
+        (then (return (error-response 400 "A nonempty title is required"))))
+      (let state State (try (load-state)))
+      (return (update-task state id input))))
+
+  (route DELETE "/tasks/{id}" (params (id int)) (returns Response) (effects fs io)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (if (lte id 0)
+        (then (return (error-response 400 "ID must be positive"))))
+      (let state State (try (load-state)))
+      (return (delete-task state id))))
+
+  (fn main (params) (returns void) (effects fs io net)
+    (body
+      (match (list-get (args) 0)
+        (ok port-str
+          (match (int-from-str port-str)
+            (ok port-num
+              (if (or (lt port-num 1) (gt port-num 65535))
+                (then
+                  (do (println "Port must be between 1 and 65535"))
+                  (return))))
+            (err message
+              (do (println "Port must be an integer"))
+              (return)))
+          (do (println (concat "Task API: http://localhost:" port-str)))
+          (match (serve-hybrid "./public" port-str)
+            (ok stopped (do (println "Server stopped")))
+            (err message (do (println message)))))
+        (err message (do (println "Usage: task_api PORT (requires ./public directory)"))))))
+)

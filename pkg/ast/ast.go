@@ -94,12 +94,14 @@ type Field struct {
 
 func (f *Field) Pos() (int, int) { return f.Line, f.Col }
 
-// FuncDecl representa (fn nome (params ...) (returns T) (effects ...) (body ...))
+// FuncDecl representa (fn nome (params ...) (returns T) (effects ...) [(on-err var ...)] (body ...))
 type FuncDecl struct {
 	Name       string
 	Params     []Param
 	ReturnType Type
 	Effects    []string
+	OnErrVar   string
+	OnErrBody  []Stmt
 	Body       []Stmt
 	Line       int
 	Col        int
@@ -107,6 +109,23 @@ type FuncDecl struct {
 
 func (f *FuncDecl) Pos() (int, int) { return f.Line, f.Col }
 func (f *FuncDecl) topLevelNode()   {}
+
+// RouteDecl representa (route METHOD PATH (params ...) (returns T) (effects ...) [(on-err var ...)] (body ...))
+type RouteDecl struct {
+	Method     string
+	Path       string
+	Params     []Param
+	ReturnType Type
+	Effects    []string
+	OnErrVar   string
+	OnErrBody  []Stmt
+	Body       []Stmt
+	Line       int
+	Col        int
+}
+
+func (r *RouteDecl) Pos() (int, int) { return r.Line, r.Col }
+func (r *RouteDecl) topLevelNode()   {}
 
 type Param struct {
 	Name string
@@ -242,16 +261,27 @@ type IdentExpr struct {
 func (e *IdentExpr) Pos() (int, int) { return e.Line, e.Col }
 func (e *IdentExpr) exprNode()       {}
 
-// CallExpr representa (call func args...)
+// CallExpr representa chamada de função: (call func args...) ou diretamente (func args...)
 type CallExpr struct {
-	Func string
-	Args []Expr
-	Line int
-	Col  int
+	Func    string
+	Args    []Expr
+	HasCall bool
+	Line    int
+	Col     int
 }
 
 func (e *CallExpr) Pos() (int, int) { return e.Line, e.Col }
 func (e *CallExpr) exprNode()       {}
+
+// TryExpr representa (try expr)
+type TryExpr struct {
+	Expr Expr
+	Line int
+	Col  int
+}
+
+func (e *TryExpr) Pos() (int, int) { return e.Line, e.Col }
+func (e *TryExpr) exprNode()       {}
 
 // BinaryOpExpr representa (op expr1 expr2)
 type BinaryOpExpr struct {

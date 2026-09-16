@@ -44,9 +44,12 @@ const (
 	BREAK     TokenType = "break"
 	CONTINUE  TokenType = "continue"
 	MATCH     TokenType = "match"
+	ON_ERR    TokenType = "on-err"
+	ROUTE     TokenType = "route"
 
 	// Expressions
 	CALL TokenType = "call"
+	TRY  TokenType = "try"
 	RECV TokenType = "recv"
 
 	// Operators
@@ -67,6 +70,7 @@ const (
 var keywords = map[string]TokenType{
 	"while": WHILE, "for-range": FOR_RANGE, "for-each": FOR_EACH,
 	"break": BREAK, "continue": CONTINUE, "match": MATCH,
+	"on-err": ON_ERR, "route": ROUTE, "try": TRY,
 	"module":  MODULE,
 	"import":  IMPORT,
 	"struct":  STRUCT,

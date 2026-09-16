@@ -299,6 +299,8 @@ func (g *generator) call(c *ast.CallExpr) string {
 		return g.value("vi(" + args[0] + ".len)")
 	case "str-eq":
 		return g.value("vb(eq(" + join + "))")
+	case "not":
+		return g.value("vb(!" + args[0] + ".b)")
 	case "str-slice":
 		return call("vslice")
 	case "args":

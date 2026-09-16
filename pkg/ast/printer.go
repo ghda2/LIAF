@@ -55,6 +55,8 @@ func (p *printer) printTopLevel(decl TopLevel, isLastDecl bool) {
 		p.printStruct(d, suffix)
 	case *FuncDecl:
 		p.printFunc(d, suffix)
+	case *RouteDecl:
+		p.printRoute(d, suffix)
 	}
 }
 
@@ -118,6 +120,13 @@ func (p *printer) printFunc(f *FuncDecl, suffix string) {
 	}
 	p.sb.WriteString(")\n")
 
+	// On-Err (opcional)
+	if f.OnErrVar != "" {
+		p.writeIndent()
+		p.sb.WriteString("(on-err " + f.OnErrVar)
+		p.printBlock(f.OnErrBody, "\n")
+	}
+
 	// Body
 	p.writeIndent()
 	if len(f.Body) == 0 {
@@ -128,6 +137,73 @@ func (p *printer) printFunc(f *FuncDecl, suffix string) {
 		for i, stmt := range f.Body {
 			p.writeIndent()
 			if i == len(f.Body)-1 {
+				p.printStmt(stmt, "))"+suffix)
+			} else {
+				p.printStmt(stmt, "")
+				p.sb.WriteString("\n")
+			}
+		}
+		p.indent--
+	}
+
+	p.indent--
+}
+
+func (p *printer) printRoute(r *RouteDecl, suffix string) {
+	p.sb.WriteString(fmt.Sprintf("(route %s %q\n", r.Method, r.Path))
+	p.indent++
+
+	// Params
+	p.writeIndent()
+	if len(r.Params) == 0 {
+		p.sb.WriteString("(params)\n")
+	} else {
+		p.sb.WriteString("(params\n")
+		p.indent++
+		for i, param := range r.Params {
+			p.writeIndent()
+			if i == len(r.Params)-1 {
+				p.sb.WriteString(fmt.Sprintf("(%s %s))\n", param.Name, param.Type.String()))
+			} else {
+				p.sb.WriteString(fmt.Sprintf("(%s %s)\n", param.Name, param.Type.String()))
+			}
+		}
+		p.indent--
+	}
+
+	// Returns
+	p.writeIndent()
+	p.sb.WriteString(fmt.Sprintf("(returns %s)\n", r.ReturnType.String()))
+
+	// Effects
+	p.writeIndent()
+	p.sb.WriteString("(effects")
+	if len(r.Effects) > 0 {
+		effects := append([]string(nil), r.Effects...)
+		sort.Strings(effects)
+		for _, eff := range effects {
+			p.sb.WriteString(" " + eff)
+		}
+	}
+	p.sb.WriteString(")\n")
+
+	// On-Err (opcional)
+	if r.OnErrVar != "" {
+		p.writeIndent()
+		p.sb.WriteString("(on-err " + r.OnErrVar)
+		p.printBlock(r.OnErrBody, "\n")
+	}
+
+	// Body
+	p.writeIndent()
+	if len(r.Body) == 0 {
+		p.sb.WriteString("(body))" + suffix)
+	} else {
+		p.sb.WriteString("(body\n")
+		p.indent++
+		for i, stmt := range r.Body {
+			p.writeIndent()
+			if i == len(r.Body)-1 {
 				p.printStmt(stmt, "))"+suffix)
 			} else {
 				p.printStmt(stmt, "")
@@ -183,7 +259,13 @@ func (p *printer) printStmt(stmt Stmt, suffix string) {
 	case *SendStmt:
 		p.sb.WriteString(fmt.Sprintf("(send %s %s)%s", formatExpr(s.Channel), formatExpr(s.Value), suffix))
 	case *ExprStmt:
-		p.sb.WriteString(fmt.Sprintf("(do %s)%s", formatExpr(s.Expr), suffix))
+		if call, ok := s.Expr.(*CallExpr); ok && !call.HasCall {
+			p.sb.WriteString(formatExpr(s.Expr) + suffix)
+		} else if _, ok := s.Expr.(*TryExpr); ok {
+			p.sb.WriteString(formatExpr(s.Expr) + suffix)
+		} else {
+			p.sb.WriteString(fmt.Sprintf("(do %s)%s", formatExpr(s.Expr), suffix))
+		}
 	}
 }
 
@@ -285,12 +367,19 @@ func formatExpr(expr Expr) string {
 	case *IdentExpr:
 		return e.Name
 	case *CallExpr:
-		res := "(call " + e.Func
+		var res string
+		if e.HasCall {
+			res = "(call " + e.Func
+		} else {
+			res = "(" + e.Func
+		}
 		for _, arg := range e.Args {
 			res += " " + formatExpr(arg)
 		}
 		res += ")"
 		return res
+	case *TryExpr:
+		return fmt.Sprintf("(try %s)", formatExpr(e.Expr))
 	case *BinaryOpExpr:
 		return fmt.Sprintf("(%s %s %s)", e.Op, formatExpr(e.Left), formatExpr(e.Right))
 	case *RecvExpr:

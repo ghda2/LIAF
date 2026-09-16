@@ -26,6 +26,17 @@ func fromError[T any](v T, e error) Result[T, string] {
 // Lists have reference semantics; passing a list to a function preserves appends.
 type List[T any] struct{ Items []T }
 
+func (l List[T]) MarshalJSON() ([]byte, error) {
+	if l.Items == nil {
+		return []byte("[]"), nil
+	}
+	return json.Marshal(l.Items)
+}
+
+func (l *List[T]) UnmarshalJSON(b []byte) error {
+	return json.Unmarshal(b, &l.Items)
+}
+
 func MakeList[T any]() *List[T]       { return &List[T]{Items: []T{}} }
 func ListPush[T any](l *List[T], v T) { l.Items = append(l.Items, v) }
 func ListGet[T any](l *List[T], i int64) Result[T, string] {
@@ -57,6 +68,21 @@ func ReadFile(p string) Result[string, string] {
 }
 func WriteFile(p, s string) Result[bool, string] {
 	e := os.WriteFile(p, []byte(s), 0644)
+	return fromError(e == nil, e)
+}
+func Rename(oldPath, newPath string) Result[bool, string] {
+	e := os.Rename(oldPath, newPath)
+	return fromError(e == nil, e)
+}
+func WriteAtomic(p, s string) Result[bool, string] {
+	tmp := fmt.Sprintf("%s.tmp.%d", p, os.Getpid())
+	if e := os.WriteFile(tmp, []byte(s), 0644); e != nil {
+		return fromError(false, e)
+	}
+	e := os.Rename(tmp, p)
+	if e != nil {
+		_ = os.Remove(tmp)
+	}
 	return fromError(e == nil, e)
 }
 func Remove(p string) Result[bool, string] { e := os.Remove(p); return fromError(e == nil, e) }

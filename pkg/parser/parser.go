@@ -140,8 +140,10 @@ func (p *Parser) parseTopLevel() ast.TopLevel {
 		return p.parseStruct()
 	case token.FN:
 		return p.parseFunc()
+	case token.ROUTE:
+		return p.parseRoute()
 	default:
-		p.addError(fmt.Sprintf("Declaração inválida: esperado 'import', 'struct' ou 'fn', mas obteve %q", p.curToken.Literal), "E_INVALID_TOPLEVEL")
+		p.addError(fmt.Sprintf("Declaração inválida: esperado 'import', 'struct', 'fn' ou 'route', mas obteve %q", p.curToken.Literal), "E_INVALID_TOPLEVEL")
 		return nil
 	}
 }
@@ -235,6 +237,31 @@ func (p *Parser) parseFunc() *ast.FuncDecl {
 	params := p.parseParams()
 	retType := p.parseReturns()
 	effects := p.parseEffects()
+
+	var onErrVar string
+	var onErrBody []ast.Stmt
+	if p.curTokenIs(token.LPAREN) && p.peekTokenIs(token.ON_ERR) {
+		p.nextToken() // consome '('
+		p.nextToken() // consome 'on-err'
+		if !p.curTokenIs(token.IDENT) {
+			p.addError("Esperado identificador para a variável de erro em 'on-err'", "E_EXPECTED_ON_ERR_VAR")
+			return nil
+		}
+		onErrVar = p.curToken.Literal
+		p.nextToken()
+		for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+			stmt := p.parseStatement()
+			if stmt != nil {
+				onErrBody = append(onErrBody, stmt)
+			} else {
+				p.nextToken()
+			}
+		}
+		if !p.expectCur(token.RPAREN) {
+			return nil
+		}
+	}
+
 	body := p.parseBody()
 
 	if !p.expectCur(token.RPAREN) {
@@ -246,6 +273,74 @@ func (p *Parser) parseFunc() *ast.FuncDecl {
 		Params:     params,
 		ReturnType: retType,
 		Effects:    effects,
+		OnErrVar:   onErrVar,
+		OnErrBody:  onErrBody,
+		Body:       body,
+		Line:       line,
+		Col:        col,
+	}
+}
+
+func (p *Parser) parseRoute() *ast.RouteDecl {
+	line, col := p.curToken.Line, p.curToken.Col
+	p.nextToken() // consome 'route'
+
+	if !p.curTokenIs(token.IDENT) {
+		p.addError("Esperado método HTTP (GET, POST, etc.) em 'route'", "E_EXPECTED_ROUTE_METHOD")
+		return nil
+	}
+	method := p.curToken.Literal
+	p.nextToken()
+
+	if !p.curTokenIs(token.STRING) {
+		p.addError("Esperado path em string para 'route'", "E_EXPECTED_ROUTE_PATH")
+		return nil
+	}
+	path := p.curToken.Literal
+	p.nextToken()
+
+	params := p.parseParams()
+	retType := p.parseReturns()
+	effects := p.parseEffects()
+
+	var onErrVar string
+	var onErrBody []ast.Stmt
+	if p.curTokenIs(token.LPAREN) && p.peekTokenIs(token.ON_ERR) {
+		p.nextToken() // consome '('
+		p.nextToken() // consome 'on-err'
+		if !p.curTokenIs(token.IDENT) {
+			p.addError("Esperado identificador para a variável de erro em 'on-err'", "E_EXPECTED_ON_ERR_VAR")
+			return nil
+		}
+		onErrVar = p.curToken.Literal
+		p.nextToken()
+		for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+			stmt := p.parseStatement()
+			if stmt != nil {
+				onErrBody = append(onErrBody, stmt)
+			} else {
+				p.nextToken()
+			}
+		}
+		if !p.expectCur(token.RPAREN) {
+			return nil
+		}
+	}
+
+	body := p.parseBody()
+
+	if !p.expectCur(token.RPAREN) {
+		return nil
+	}
+
+	return &ast.RouteDecl{
+		Method:     method,
+		Path:       path,
+		Params:     params,
+		ReturnType: retType,
+		Effects:    effects,
+		OnErrVar:   onErrVar,
+		OnErrBody:  onErrBody,
 		Body:       body,
 		Line:       line,
 		Col:        col,
@@ -370,6 +465,46 @@ func (p *Parser) parseStatement() ast.Stmt {
 		return p.parseSendStmt(line, col)
 	case token.DO:
 		return p.parseExprStmt(line, col)
+	case token.TRY:
+		p.nextToken()
+		sub := p.parseExpression()
+		if !p.expectCur(token.RPAREN) {
+			return nil
+		}
+		return &ast.ExprStmt{Expr: &ast.TryExpr{Expr: sub, Line: line, Col: col}, Line: line, Col: col}
+	case token.CALL:
+		p.nextToken()
+		if !p.curTokenIs(token.IDENT) {
+			p.addError("Esperado identificador de função em call", "E_EXPECTED_CALL_IDENT")
+			return nil
+		}
+		fnName := p.curToken.Literal
+		p.nextToken()
+		var args []ast.Expr
+		for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+			arg := p.parseExpression()
+			if arg != nil {
+				args = append(args, arg)
+			}
+		}
+		if !p.expectCur(token.RPAREN) {
+			return nil
+		}
+		return &ast.ExprStmt{Expr: &ast.CallExpr{Func: fnName, Args: args, HasCall: true, Line: line, Col: col}, Line: line, Col: col}
+	case token.IDENT:
+		fnName := p.curToken.Literal
+		p.nextToken()
+		var args []ast.Expr
+		for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+			arg := p.parseExpression()
+			if arg != nil {
+				args = append(args, arg)
+			}
+		}
+		if !p.expectCur(token.RPAREN) {
+			return nil
+		}
+		return &ast.ExprStmt{Expr: &ast.CallExpr{Func: fnName, Args: args, HasCall: false, Line: line, Col: col}, Line: line, Col: col}
 	default:
 		p.addError(fmt.Sprintf("Comando desconhecido: %q", p.curToken.Literal), "E_UNKNOWN_STATEMENT")
 		return nil
@@ -600,7 +735,16 @@ func (p *Parser) parseExpression() ast.Expr {
 			if !p.expectCur(token.RPAREN) {
 				return nil
 			}
-			return &ast.CallExpr{Func: fnName, Args: args, Line: innerLine, Col: innerCol}
+			return &ast.CallExpr{Func: fnName, Args: args, HasCall: true, Line: innerLine, Col: innerCol}
+		}
+
+		if p.curTokenIs(token.TRY) {
+			p.nextToken()
+			subExpr := p.parseExpression()
+			if !p.expectCur(token.RPAREN) {
+				return nil
+			}
+			return &ast.TryExpr{Expr: subExpr, Line: innerLine, Col: innerCol}
 		}
 
 		if token.IsOperator(p.curToken.Type) {
@@ -623,6 +767,24 @@ func (p *Parser) parseExpression() ast.Expr {
 				return nil
 			}
 			return &ast.RecvExpr{Channel: ch, Line: innerLine, Col: innerCol}
+		}
+
+		// Chamada direta de função: (fn-name arg1 arg2 ...)
+		if p.curTokenIs(token.IDENT) {
+			fnName := p.curToken.Literal
+			p.nextToken()
+
+			var args []ast.Expr
+			for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+				arg := p.parseExpression()
+				if arg != nil {
+					args = append(args, arg)
+				}
+			}
+			if !p.expectCur(token.RPAREN) {
+				return nil
+			}
+			return &ast.CallExpr{Func: fnName, Args: args, HasCall: false, Line: innerLine, Col: innerCol}
 		}
 
 		p.addError(fmt.Sprintf("Expressão composta inválida iniciada por %q", p.curToken.Literal), "E_INVALID_EXPR")

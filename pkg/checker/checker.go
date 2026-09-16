@@ -13,6 +13,7 @@ type Info struct {
 	Types     map[ast.Expr]ast.Type
 	Functions map[string]*ast.FuncDecl
 	Structs   map[string]*ast.StructDecl
+	Routes    []*ast.RouteDecl
 }
 type binding struct {
 	typ     ast.Type
@@ -26,6 +27,7 @@ type Checker struct {
 	scopes []map[string]*binding
 	fn     *ast.FuncDecl
 	loops  int
+	used   map[string]bool
 }
 
 func primitive(s string) ast.Type { return &ast.PrimitiveType{Name: s} }
@@ -58,6 +60,8 @@ func Check(mod *ast.Module, file string) (*Info, []diagnostic.Diagnostic) {
 		case *ast.StructDecl:
 			id = v.Name
 			c.Info.Structs[id] = v
+		case *ast.RouteDecl:
+			c.Info.Routes = append(c.Info.Routes, v)
 		case *ast.ImportDecl:
 			c.error(v, "E_UNRESOLVED_IMPORT", "Imports must be resolved before checking")
 		}
@@ -109,10 +113,81 @@ func Check(mod *ast.Module, file string) (*Info, []diagnostic.Diagnostic) {
 		if f.Name == "main" && (len(f.Params) != 0 || name(f.ReturnType) != "void") {
 			c.error(f, "E_MAIN_SIGNATURE", "main requires no parameters and returns void")
 		}
+		c.used = map[string]bool{}
+		if f.OnErrVar != "" {
+			c.push()
+			c.define(f.OnErrVar, primitive("str"), f, false)
+			c.statements(f.OnErrBody)
+			c.pop()
+		}
 		c.statements(f.Body)
 		if name(f.ReturnType) != "void" && !returns(f.Body) {
 			c.error(f, "E_MISSING_RETURN", f.Name)
 		}
+		c.unusedEffects(f, f.Effects, "function "+f.Name)
+		c.pop()
+	}
+	for _, d := range mod.Decls {
+		r, ok := d.(*ast.RouteDecl)
+		if !ok {
+			continue
+		}
+		c.fn = &ast.FuncDecl{
+			Name:       fmt.Sprintf("route_%s_%s", r.Method, r.Path),
+			Params:     r.Params,
+			ReturnType: r.ReturnType,
+			Effects:    r.Effects,
+			OnErrVar:   r.OnErrVar,
+			OnErrBody:  r.OnErrBody,
+			Body:       r.Body,
+			Line:       r.Line,
+			Col:        r.Col,
+		}
+		c.scopes = nil
+		c.push()
+		c.loops = 0
+		c.validType(r.ReturnType, true)
+		for _, p := range r.Params {
+			c.validType(p.Type, false)
+			c.define(p.Name, p.Type, r, false)
+		}
+		for _, e := range r.Effects {
+			if !strings.Contains("|io|net|fs|clock|spawn|", "|"+e+"|") {
+				c.error(r, "E_UNKNOWN_EFFECT", e)
+			}
+		}
+		// Cada {nome} no path precisa de uma entrada correspondente em (params ...).
+		// Sem isso o codegen geraria um parametro lido do corpo JSON em vez do path.
+		declared := map[string]ast.Type{}
+		for _, prm := range r.Params {
+			declared[prm.Name] = prm.Type
+		}
+		for _, seg := range strings.Split(strings.Trim(r.Path, "/"), "/") {
+			if len(seg) <= 2 || !strings.HasPrefix(seg, "{") || !strings.HasSuffix(seg, "}") {
+				continue
+			}
+			pname := seg[1 : len(seg)-1]
+			t, ok := declared[pname]
+			if !ok {
+				c.error(r, "E_ROUTE_PARAM", fmt.Sprintf("path parameter {%s} has no matching entry in (params ...)", pname))
+				continue
+			}
+			if n := name(t); n != "int" && n != "str" {
+				c.error(r, "E_ROUTE_PARAM", fmt.Sprintf("path parameter {%s} must be int or str, received %s", pname, n))
+			}
+		}
+		c.used = map[string]bool{}
+		if r.OnErrVar != "" {
+			c.push()
+			c.define(r.OnErrVar, primitive("str"), r, false)
+			c.statements(r.OnErrBody)
+			c.pop()
+		}
+		c.statements(r.Body)
+		if name(r.ReturnType) != "void" && !returns(r.Body) {
+			c.error(r, "E_MISSING_RETURN", fmt.Sprintf("route %s %s", r.Method, r.Path))
+		}
+		c.unusedEffects(r, r.Effects, fmt.Sprintf("route %s %s", r.Method, r.Path))
 		c.pop()
 	}
 	if c.Info.Functions["main"] == nil {
@@ -166,10 +241,24 @@ func (c *Checker) require(n ast.Node, actual, want ast.Type) {
 func (c *Checker) effect(n ast.Node, e string) {
 	for _, v := range c.fn.Effects {
 		if e == v {
+			if c.used != nil {
+				c.used[e] = true
+			}
 			return
 		}
 	}
 	c.error(n, "E_UNDECLARED_EFFECT", e)
+}
+
+// unusedEffects acusa efeitos declarados que nenhuma chamada do corpo consome.
+// Um (effects fs) que nao toca o disco engana quem le a assinatura - inclusive
+// um modelo gerando codigo a partir dela.
+func (c *Checker) unusedEffects(n ast.Node, declared []string, where string) {
+	for _, e := range declared {
+		if !c.used[e] {
+			c.error(n, "E_UNUSED_EFFECT", fmt.Sprintf("%s declares effect %s but never uses it", where, e))
+		}
+	}
 }
 func (c *Checker) push() { c.scopes = append(c.scopes, map[string]*binding{}) }
 func (c *Checker) pop() {
@@ -407,6 +496,19 @@ func (c *Checker) expr(e ast.Expr, want ast.Type) (t ast.Type) {
 		return l
 	case *ast.CallExpr:
 		return c.call(v, want)
+	case *ast.TryExpr:
+		subType := c.expr(v.Expr, nil)
+		a := parts(subType, "result", 2)
+		if a == nil {
+			c.error(e, "E_TYPE_MISMATCH", "try requires result operand")
+			return primitive("void")
+		}
+		if c.fn != nil {
+			if c.fn.OnErrVar == "" && !IsResult(c.fn.ReturnType) {
+				c.error(e, "E_UNHANDLED_RESULT", "try requires either an (on-err ...) block or a function returning (result ...)")
+			}
+		}
+		return a[0]
 	}
 	return nil
 }
@@ -561,6 +663,9 @@ func (c *Checker) call(v *ast.CallExpr, want ast.Type) ast.Type {
 			return primitive("str")
 		}
 		return primitive("void")
+	case "not":
+		check("bool")
+		return primitive("bool")
 	case "str-from-int":
 		check("int")
 		return primitive("str")
@@ -597,7 +702,15 @@ func (c *Checker) call(v *ast.CallExpr, want ast.Type) ast.Type {
 	case "fs-write-file":
 		c.effect(v, "fs")
 		check("str", "str")
-		return result("bool")
+		return result("void")
+	case "fs-rename":
+		c.effect(v, "fs")
+		check("str", "str")
+		return result("void")
+	case "fs-write-atomic":
+		c.effect(v, "fs")
+		check("str", "str")
+		return result("void")
 	case "fs-remove":
 		c.effect(v, "fs")
 		check("str")

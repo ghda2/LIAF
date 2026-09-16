@@ -5,7 +5,7 @@ Linguagem experimental com AST textual em S-expressions, tipos e efeitos explíc
 ```liaf
 (module hello
   (fn main (params) (returns void) (effects io)
-    (body (do (call println "Hello, LIAF")))))
+    (body (do (println "Hello, LIAF")))))
 ```
 
 ```powershell
@@ -16,16 +16,19 @@ go build -o liafc.exe ./cmd/liafc
 go test ./...
 ```
 
-Recursos: loops, listas e mapas tipados, `Result`/`match`, arquivos e JSON, concorrência por canais, rotas HTTP, SSG Markdown, layouts, includes, gzip, ETags, streaming de mídias e publicação autenticada. A compilação pelo backend Go requer Go e este repositório; o executável gerado funciona sem Go instalado.
+Recursos: loops, listas e mapas tipados, `Result` com `match` e `try`/`on-err`, rotas HTTP declarativas, arquivos com escrita atômica e JSON, concorrência por canais, SSG Markdown, layouts, includes, gzip, ETags, streaming de mídias e publicação autenticada. A compilação pelo backend Go requer Go e este repositório; o executável gerado funciona sem Go instalado.
 
-- [Contrato implementado](.docs/conceitos/IMPLEMENTATION.md)
-- [Status das issues](.docs/STATUS.md)
-- [Próximos passos e checklist](.docs/PROXIMOS_PASSOS.md)
-- [Registro para retomar o trabalho](.docs/RETOMADA.md)
-- [Especificação v0.2](.docs/conceitos/SPEC_V2.md)
-- [Guia de agentes](.docs/regras/AI_AGENT_GUIDE.md)
-- [Arquitetura](.docs/conceitos/ARCHITECTURE.md)
-- [Roadmap](.docs/conceitos/ROADMAP.md)
-- [Logs históricos](.docs/logs/LOG_2026-09-16_PIPELINE_JORNALISMO_IA.md)
+## Documentação
+
+- [Primeiros passos](docs/GETTING_STARTED.md) — compilar, rodar, formatar
+- [Guia de agentes](docs/AI_GUIDE.md) — o que um modelo precisa saber para escrever LIAF correta
+- [Especificação da linguagem](docs/SPEC.md) — núcleo v0.2; a seção 18 cobre as adições da v0.3
+- [Arquitetura](docs/ARCHITECTURE.md) — pipeline do compilador e pacotes
+
+Exemplo completo em v0.3: [`examples/task_api_v03.liaf`](examples/task_api_v03.liaf) — API REST com
+rotas declarativas, `try`/`on-err` e escrita atômica de estado.
+
+O diretório `.docs/` contém o acompanhamento interno do projeto (issues, status, logs) e não é
+publicado neste repositório.
 
 Publish/reload são desabilitados sem token configurado. Defina `LIAF_DEPLOY_TOKEN` e use POST com `Authorization: Bearer ...`. Assets embutidos são imutáveis; publicação dinâmica requer diretório em disco.

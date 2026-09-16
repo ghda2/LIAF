@@ -1,19 +1,62 @@
-# Guia para agentes — LIAF v0.2
+# Guia para agentes — LIAF v0.3
 
-Use S-expressions. As tags `[fn ... /fn ...]` pertencem à v0.1 e não são aceitas pelo compilador atual. Exemplos antigos na skill local são históricos; consulte este guia e [IMPLEMENTATION.md](../conceitos/IMPLEMENTATION.md).
+Use S-expressions. As tags `[fn ... /fn ...]` pertencem à v0.1 e não são aceitas pelo compilador atual.
 
 ```liaf
 (module exemplo
   (fn main (params) (returns void) (effects io)
-    (body (do (call println "Olá")))))
+    (body (do (println "Olá")))))
 ```
 
-1. Execute `liafc check arquivo.liaf --json` após cada alteração.
-2. Leia `status` e `errors`. Corrija a causa e revalide. O protocolo atual fornece código, arquivo, linha, coluna e mensagem; não oferece ainda todos os patches/intervalos propostos na SPEC_V2.
-3. Execute testes de comportamento; passar no checker não prova que o algoritmo está correto.
-4. Compile com `liafc build arquivo.liaf -o programa`. Use `--embed=public` para assets imutáveis no executável.
+## O que muda na v0.3
 
-Declare efeitos transitivos (`io`, `fs`, `net`, `clock`, `spawn`). Trate operações falíveis com `match` ou retorne `Result`. Exemplos executáveis: `examples/loops.liaf`, `collections.liaf`, `fs_json.liaf`, `result.liaf` e `api_server.liaf`.
+A v0.3 existe para reduzir a carga cognitiva de escrever LIAF corretamente na primeira tentativa. São três mudanças, e todas as formas da v0.2 continuam aceitas.
+
+**1. Chamadas diretas.** Escreva `(json-encode x)` em vez de `(call json-encode x)`. `call` continua válido, mas não é a forma canônica.
+
+**2. `try` e `on-err` no lugar da pirâmide de `match`.** `(try expr)` desempacota um `(result T E)`: devolve `T` no sucesso e, no erro, sai da função na hora. O destino desse desvio é o bloco `(on-err var ...)`, que vem antes de `(body ...)`:
+
+```liaf
+(fn salvar (params (estado Estado)) (returns Response) (effects fs io)
+  (on-err message (return (json-response 500 message)))
+  (body
+    (let texto str (try (json-encode estado)))
+    (try (fs-write-atomic "estado.json" texto))
+    (return (json-response 200 "{\"ok\":true}"))))
+```
+
+`try` só é permitido onde o erro tem para onde ir: uma função com `(on-err ...)` ou que retorne `(result ...)`. Sem isso o checker emite `E_UNHANDLED_RESULT`. Quando você precisa tratar os dois lados de forma diferente, `match` continua sendo a ferramenta certa.
+
+**3. Rotas declarativas.** `(route MÉTODO "/caminho" ...)` é uma declaração de topo, irmã de `fn`:
+
+```liaf
+(route PUT "/tasks/{id}" (params (id int) (input UpdateInput)) (returns Response) (effects fs io)
+  (on-err message (return (json-response 500 message)))
+  (body
+    (let estado Estado (try (carregar-estado)))
+    (return (atualizar estado id input))))
+```
+
+Cada `{nome}` no caminho precisa de um parâmetro de mesmo nome, do tipo `int` ou `str` — caso contrário o checker emite `E_ROUTE_PARAM`. Esse parâmetro chega convertido, extraído da posição correta do caminho. Um parâmetro de struct recebe o corpo JSON já desserializado, e corpo malformado vira `400` sem nenhuma linha sua. Rotas se registram sozinhas: não chame `http-get` para elas.
+
+## Regras que o checker impõe
+
+- **Declare exatamente os efeitos que usa.** `io`, `fs`, `net`, `clock`, `spawn`, incluindo os efeitos transitivos das funções que você chama. Faltando, é `E_UNDECLARED_EFFECT`; sobrando, é `E_UNUSED_EFFECT`. Uma assinatura que promete `fs` sem tocar o disco engana quem a lê.
+- **Resultado não pode ser ignorado.** Toda operação falível devolve `(result T E)` e precisa de `try`, `match` ou propagação.
+- **`fs-write-file`, `fs-rename` e `fs-write-atomic` retornam `(result void str)`.** O sucesso não carrega valor: `ok` já significa que gravou. Não teste o conteúdo.
+- **`(list T)` serializa como array JSON nativo** `[...]`. Devolva a lista direto; não monte colchetes com `concat`.
+
+## Ciclo de trabalho
+
+1. `liafc check arquivo.liaf --json` após cada alteração.
+2. Leia `status` e `errors`. Corrija a causa e revalide. O diagnóstico traz código, arquivo, linha, coluna e mensagem.
+3. `liafc fmt arquivo.liaf` mostra a forma canônica. `-w` grava, `-l` lista o que está fora do formato. O formatador ainda não preserva comentários, então `-w` se recusa a gravar em arquivo comentado a menos que você passe `--drop-comments`.
+4. Rode testes de comportamento. Passar no checker não prova que o algoritmo está correto.
+5. `liafc build arquivo.liaf -o programa`. Use `--embed` para assets imutáveis dentro do executável.
+
+Exemplos executáveis: `examples/task_api_v03.liaf` (API completa em v0.3), `loops.liaf`, `collections.liaf`, `fs_json.liaf`, `result.liaf` e `api_server.liaf`.
+
+## Web e deploy
 
 Para sites, `serve-site` recebe pasta, domínio, porta e auto-TLS. `serve-hybrid` oferece rotas dinâmicas junto aos arquivos estáticos e retorna um resultado tratável.
 

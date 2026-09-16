@@ -1,11 +1,18 @@
-# LIAF v0.2 — Especificação proposta para agentes de IA
+# LIAF — Especificação para agentes de IA (núcleo v0.2, sintaxe corrente v0.3)
 
-**Status:** especificação de design parcialmente implementada; consulte [IMPLEMENTATION.md](IMPLEMENTATION.md) para o contrato executável atual
+**Status:** especificação de design parcialmente implementada; consulte o [guia de agentes](AI_GUIDE.md) para o contrato executável atual
 **Compatibilidade:** incompatível com a sintaxe LIAF v0.1  
 **Público-alvo:** modelos de linguagem e agentes autônomos  
 **Objetivo:** permitir que modelos menores e de menor custo produzam software correto, minimizando o esforço de inferência e o custo total até uma solução validada
 
-> O compilador atual aceita a sintaxe v0.2. Recursos propostos neste documento, como protocolo completo de patches estruturais, não devem ser considerados implementados sem confirmação em IMPLEMENTATION.md e testes. A sintaxe v0.1 é histórica.
+> O compilador atual aceita a sintaxe v0.3, que é a v0.2 mais três adições retrocompatíveis
+> descritas na [seção 18](#18-adições-da-v03): chamadas diretas sem `call`, `try`/`on-err` e rotas
+> declarativas. Todo programa v0.2 continua válido. As seções 1 a 17 descrevem o núcleo v0.2 e
+> permanecem corretas; onde a seção 18 diverge, ela é a autoridade.
+>
+> Recursos propostos neste documento, como o protocolo completo de patches estruturais, não devem
+> ser considerados implementados sem confirmação no guia de agentes e em testes. A sintaxe v0.1 é
+> histórica.
 
 ---
 
@@ -737,7 +744,7 @@ module web-example
 
 - A fonte é uma AST textual baseada exclusivamente em S-expressions.
 - Tags de fechamento nomeadas da v0.1 são removidas.
-- Chamadas genéricas usam obrigatoriamente `call`.
+- Chamadas genéricas usam `call` na v0.2. A v0.3 torna `call` opcional e mantém a forma antiga válida (seção 18.1).
 - Operadores do núcleo permanecem prefixados.
 - Tipos compostos são nós, não fragmentos com sintaxe especial.
 - Assinaturas sempre incluem `params`, `returns` e `effects`.
@@ -751,3 +758,86 @@ module web-example
 - O Core deve permanecer pequeno, combinável e capaz de sustentar propósito geral.
 - Bibliotecas de alto nível reduzem esforço sem substituir as primitivas fundamentais.
 - O custo monetário total por tarefa correta é uma métrica primária.
+
+---
+
+## 18. Adições da v0.3
+
+A v0.3 não muda o núcleo semântico da v0.2. Ela reduz o número de decisões que um modelo precisa acertar para produzir um programa válido na primeira tentativa. Todo programa v0.2 continua compilando sem alteração.
+
+### 18.1 Chamadas diretas
+
+`(nome arg1 arg2 ...)` é uma chamada. A forma `(call nome arg1 arg2 ...)` continua aceita e produz a mesma AST.
+
+```liaf
+(json-encode tarefa)          ;; canônico na v0.3
+(call json-encode tarefa)     ;; v0.2, ainda aceito
+```
+
+O parser resolve a ambiguidade pela posição: dentro de `(...)`, um identificador em posição de cabeça é o alvo de uma chamada. Operadores do núcleo permanecem prefixados e não mudam.
+
+### 18.2 `try` e `on-err`
+
+`(try expr)` exige que `expr` tenha tipo `(result T E)`. O valor da expressão `try` é `T`. Se o resultado for `err`, a função retorna imediatamente, e o destino desse retorno é:
+
+- o bloco `(on-err var (instruções...))` da função ou rota, se existir; `var` recebe a mensagem de erro;
+- caso contrário, o próprio `err`, se a função retorna `(result ...)`.
+
+Sem nenhum dos dois, o checker emite `E_UNHANDLED_RESULT`. `try` sobre um valor que não é `result` emite `E_TYPE_MISMATCH`.
+
+O bloco `(on-err ...)` é opcional, aparece no máximo uma vez e vem imediatamente antes de `(body ...)`.
+
+```liaf
+(fn salvar (params (estado Estado)) (returns Response) (effects fs io)
+  (on-err message (return (json-response 500 message)))
+  (body
+    (let texto str (try (json-encode estado)))
+    (try (fs-write-atomic "estado.json" texto))
+    (return (json-response 200 "{\"ok\":true}"))))
+```
+
+`match` continua sendo a forma de tratar sucesso e erro de maneiras diferentes. `try` cobre o caso em que o erro só precisa ser propagado — que é a maioria, e era onde a v0.2 produzia pirâmides de `match` aninhado.
+
+### 18.3 Rotas declarativas
+
+`route` é uma declaração de topo, irmã de `fn`:
+
+```
+(route MÉTODO "/caminho" (params ...) (returns T) (effects ...) [(on-err var ...)] (body ...))
+```
+
+`MÉTODO` é `GET`, `POST`, `PUT` ou `DELETE`. Rotas se registram sozinhas na inicialização do binário; não é preciso chamar `http-get` e afins.
+
+Regras de parâmetro:
+
+- Cada `{nome}` no caminho precisa de uma entrada de mesmo nome em `(params ...)`, do tipo `int` ou `str`. Violações emitem `E_ROUTE_PARAM`.
+- Um parâmetro de path chega já convertido, extraído da posição que ocupa no padrão — `/users/{id}/tasks` lê o segundo segmento, não o último.
+- Um parâmetro de tipo struct recebe o corpo da requisição já desserializado. Corpo JSON inválido produz `400` antes de o corpo da rota executar.
+- Um parâmetro de tipo `Request` recebe a requisição bruta, como na v0.2.
+
+Se `(returns Response)`, a resposta da rota é usada como está. Se `(returns void)`, a resposta é `200`. Para qualquer outro tipo, o valor é serializado em JSON com status `201` em `POST` e `200` nos demais métodos.
+
+### 18.4 I/O atômico e JSON
+
+- `fs-write-atomic caminho texto` grava num arquivo temporário e renomeia sobre o destino. Serve para estado que não pode ficar pela metade se o processo morrer durante a escrita.
+- `fs-rename origem destino` expõe o rename diretamente.
+- `fs-write-file`, `fs-rename` e `fs-write-atomic` retornam `(result void str)`. O sucesso não carrega valor: `ok` já significa que a operação terminou. Vincular e inspecionar esse valor é erro de tipo.
+- `json-encode` de `(list T)` produz um array JSON nativo `[...]`. A v0.2 produzia `{"Items":[...]}`, o que obrigava a compor arrays manualmente para respostas HTTP.
+
+### 18.5 Efeitos declarados e não usados
+
+Um efeito listado em `(effects ...)` que nenhuma operação do corpo consome — diretamente ou através de uma função chamada — emite `E_UNUSED_EFFECT`. Uma assinatura que promete `fs` sem tocar o disco descreve mal o que a função faz, para um leitor humano e para um modelo que gera código a partir dela.
+
+### 18.6 Forma canônica e `liafc fmt`
+
+A forma canônica da v0.3 usa chamadas diretas, `try`/`on-err` onde o erro só é propagado, e `route` para endpoints HTTP. `liafc fmt` imprime essa forma; `-w` grava no arquivo e `-l` lista o que está fora do formato.
+
+**Limitação conhecida:** o formatador reimprime a AST, e a AST não guarda comentários. Formatar um arquivo comentado apagaria todos eles, então `-w` se recusa a gravar nesse caso a menos que `--drop-comments` seja passado explicitamente. Preservar comentários exige anexá-los aos nós no parser, o que não está implementado.
+
+### 18.7 Códigos de diagnóstico introduzidos
+
+| Código | Significado |
+|---|---|
+| `E_UNHANDLED_RESULT` | `try` sem `(on-err ...)` e sem retorno `(result ...)` |
+| `E_ROUTE_PARAM` | `{nome}` no caminho sem parâmetro correspondente, ou com tipo que não é `int` nem `str` |
+| `E_UNUSED_EFFECT` | efeito declarado que o corpo nunca consome |

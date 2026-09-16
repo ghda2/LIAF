@@ -9,29 +9,72 @@ Este guia capacita agentes de IA a interagir, gerar código, auto-curar erros e 
 
 ---
 
-## 1. Princípios Sintáticos Inegociáveis
+## 1. Sintaxe — LIAF v0.3
 
-Ao gerar código `.liaf`, obedeça estritamente:
+A fonte é uma AST textual em S-expressions. **A sintaxe de tags `[fn nome ...] /fn nome]` é da v0.1
+e o compilador a rejeita.** Não a use.
 
-1. **Tags de Fechamento Nomeadas Obrigatórias:**
-   Toda função ou struct aberta com `[fn nome ...]` ou `[struct nome ...]` DEVE ser fechada com a mesma tag e o mesmo identificador:
-   ```liaf
-   [fn soma (a: int b: int) -> (int)
-     [return (add a b)]
-   /fn soma]
-   ```
-2. **Notação Prefixada para Operações:**
-   Operadores binários usam notação de prefixo:
-   - Adição: `(add a b)`
-   - Subtração: `(sub a b)`
-   - Multiplicação: `(mul a b)`
-   - Divisão: `(div a b)`
-   - Comparação: `(eq a b)`, `(neq a b)`, `(gt a b)`, `(lt a b)`
-3. **Declarações em Colchetes:**
-   - Variáveis: `[let nome: tipo valor]`
-   - Retorno: `[return valor]` ou `[return]`
-   - Concorrência: `[spawn (funcao args)]`, `[send canal valor]`, `[recv canal]`
-   - Condicionais: `[if condicao ... [else ... /else] /if]`
+```liaf
+(module exemplo
+  (struct Task (fields (id int) (title str) (done bool)))
+
+  (fn soma (params (a int) (b int)) (returns int) (effects)
+    (body (return (add a b)))))
+```
+
+Regras:
+
+1. **Chamada direta:** `(println "oi")`, `(json-encode task)`, `(add a b)`. A forma `(call ...)` da
+   v0.2 ainda é aceita, mas não é a canônica.
+2. **Toda função declara `params`, `returns` e `effects`.** Efeitos são `io`, `fs`, `net`, `clock`,
+   `spawn`, e são transitivos: se você chama uma função com `fs`, você declara `fs`. Declarar um
+   efeito que o corpo não usa é erro (`E_UNUSED_EFFECT`). Função pura é `(effects)`, nunca
+   `(effects none)`.
+3. **Operações falíveis devolvem `(result T E)` e não podem ser ignoradas.**
+
+### Tratamento de erro: `try` e `on-err`
+
+`(try expr)` desempacota um `(result T E)` e, no erro, sai da função na hora. O destino é o bloco
+`(on-err var ...)`, que vem **antes** de `(body ...)`:
+
+```liaf
+(fn salvar (params (estado Estado)) (returns Response) (effects fs io)
+  (on-err message (return (json-response 500 message)))
+  (body
+    (let texto str (try (json-encode estado)))
+    (try (fs-write-atomic "estado.json" texto))
+    (return (json-response 200 "{\"ok\":true}"))))
+```
+
+Use `try` quando o erro só precisa ser propagado — é a maioria dos casos, e evita a pirâmide de
+`match` aninhado. Use `(match expr (ok v ...) (err m ...))` quando os dois lados fazem coisas
+diferentes.
+
+### Rotas HTTP declarativas
+
+`route` é declaração de topo, irmã de `fn`, e se registra sozinha:
+
+```liaf
+(route PUT "/tasks/{id}" (params (id int) (input UpdateInput)) (returns Response) (effects fs io)
+  (on-err message (return (json-response 500 message)))
+  (body
+    (let estado Estado (try (carregar-estado)))
+    (return (atualizar estado id input))))
+```
+
+- Cada `{nome}` no caminho precisa de um parâmetro homônimo, `int` ou `str`. Ele chega convertido.
+- Parâmetro de struct recebe o corpo JSON já desserializado; corpo inválido vira `400` sozinho.
+- Não chame `http-get` para uma rota declarativa.
+
+### Armadilhas comuns
+
+- `fs-write-file`, `fs-rename` e `fs-write-atomic` retornam `(result void str)`. `ok` já significa
+  que gravou; não existe `ok false` para testar.
+- `json-encode` de `(list T)` produz array JSON nativo `[...]`. Não monte colchetes com `concat`.
+- Structs são imutáveis: não há `set-field`, construa uma nova com `(new Tipo ...)`.
+- Leitura de campo é `(field objeto campo)`.
+
+Exemplo completo e executável: `examples/task_api_v03.liaf`.
 
 ---
 
@@ -62,11 +105,13 @@ Para criar um servidor web estático de alta performance (RAM < 4 MB):
 
 ### Código LIAF (`web_engine.liaf`)
 ```liaf
-[fn main () -> (void)
-  (serve_site "./public" "" "7070" false)
-/fn main]
+(module web-engine
+  (fn main (params) (returns void) (effects fs io net)
+    (body
+      (do (println "Iniciando LIAF Web Engine na porta 7070..."))
+      (do (serve-site "./public" "" "7070" false)))))
 ```
-- Argumentos de `serve_site`:
+- Argumentos de `serve-site`:
   1. Diretório público (ex: `"./public"` com index.html, style.css, js).
   2. Domínio para Auto-TLS (ou `""` para desativar).
   3. Porta (ex: `"7070"`).
@@ -84,6 +129,14 @@ O LIAF Web Engine suporta montagem de templates diretamente na inicialização e
 ---
 
 ## 4. Pipeline de Compilação e Deploy
+
+### Formatar na forma canônica
+```bash
+liafc fmt arquivo.liaf        # imprime
+liafc fmt -l examples/*.liaf  # lista o que está fora do formato
+```
+O formatador ainda não preserva comentários, então `-w` recusa gravar em arquivo comentado sem
+`--drop-comments`.
 
 ### Compilar localmente (Windows)
 ```bash

@@ -521,14 +521,10 @@ func (c *Checker) arity(v *ast.CallExpr, n int) bool {
 	return true
 }
 func (c *Checker) typeArg(e ast.Expr) ast.Type {
-	id, ok := e.(*ast.IdentExpr)
+	t, ok := ast.TypeFromExpr(e)
 	if !ok {
 		c.error(e, "E_INVALID_TYPE", "Expected type name")
 		return primitive("int")
-	}
-	var t ast.Type = &ast.NamedType{Name: id.Name}
-	if scalar(primitive(id.Name)) {
-		t = primitive(id.Name)
 	}
 	c.validType(t, false)
 	return t
@@ -569,7 +565,6 @@ func (c *Checker) call(v *ast.CallExpr, want ast.Type) ast.Type {
 		return want
 	}
 	if n == "json-decode" {
-		c.effect(v, "io")
 		if !c.arity(v, 2) {
 			return nil
 		}
@@ -714,13 +709,12 @@ func (c *Checker) call(v *ast.CallExpr, want ast.Type) ast.Type {
 	case "fs-remove":
 		c.effect(v, "fs")
 		check("str")
-		return result("bool")
+		return result("void")
 	case "fs-exists":
 		c.effect(v, "fs")
 		check("str")
 		return primitive("bool")
 	case "json-encode":
-		c.effect(v, "io")
 		c.arity(v, 1)
 		return result("str")
 	case "str-len":

@@ -11,13 +11,13 @@
   (struct UpdateInput (fields (title str) (done bool)))
   (struct ApiError (fields (error str)))
 
-  (fn error-response (params (status int) (message str)) (returns Response) (effects io)
+  (fn error-response (params (status int) (message str)) (returns Response) (effects)
     (on-err fail (return (json-response 500 "{\"error\":\"Serialization failure\"}")))
     (body
       (let payload str (try (json-encode (new ApiError message))))
       (return (json-response status payload))))
 
-  (fn load-state (params) (returns (result State str)) (effects fs io)
+  (fn load-state (params) (returns (result State str)) (effects fs)
     (body
       (if (not (fs-exists "task-api-data.json"))
         (then (return (ok (new State 1 (make-list Task))))))
@@ -27,33 +27,33 @@
 
   ;; I/O atomico da v0.3: fs-write-atomic grava em .tmp e faz rename,
   ;; entao o arquivo de estado nunca fica pela metade se o processo morrer.
-  (fn save-state (params (state State)) (returns (result bool str)) (effects fs io)
+  (fn save-state (params (state State)) (returns (result bool str)) (effects fs)
     (body
       (let text str (try (json-encode state)))
       (try (fs-write-atomic "task-api-data.json" text))
       (return (ok true))))
 
   ;; Listas sao serializadas como arrays JSON nativos [...] na v0.3
-  (fn tasks-response (params (state State)) (returns Response) (effects io)
+  (fn tasks-response (params (state State)) (returns Response) (effects)
     (on-err message (return (error-response 500 message)))
     (body
       (let payload str (try (json-encode (field state tasks))))
       (return (json-response 200 payload))))
 
-  (fn task-response (params (task Task) (status int)) (returns Response) (effects io)
+  (fn task-response (params (task Task) (status int)) (returns Response) (effects)
     (on-err message (return (error-response 500 message)))
     (body
       (let payload str (try (json-encode task)))
       (return (json-response status payload))))
 
-  (fn find-task (params (state State) (id int)) (returns Response) (effects io)
+  (fn find-task (params (state State) (id int)) (returns Response) (effects)
     (body
       (for-each task (field state tasks)
         (if (eq (field task id) id)
           (then (return (task-response task 200)))))
       (return (error-response 404 "Task not found"))))
 
-  (fn create-task (params (state State) (input CreateInput)) (returns Response) (effects fs io)
+  (fn create-task (params (state State) (input CreateInput)) (returns Response) (effects fs)
     (on-err message (return (error-response 500 message)))
     (body
       (let id int (field state next-id))
@@ -65,7 +65,7 @@
       (try (save-state (new State (add id 1) tasks)))
       (return (task-response task 201))))
 
-  (fn update-task (params (state State) (id int) (input UpdateInput)) (returns Response) (effects fs io)
+  (fn update-task (params (state State) (id int) (input UpdateInput)) (returns Response) (effects fs)
     (on-err message (return (error-response 500 message)))
     (body
       (let tasks (list Task) (make-list Task))
@@ -82,7 +82,7 @@
       (try (save-state (new State (field state next-id) tasks)))
       (return (task-response replacement 200))))
 
-  (fn delete-task (params (state State) (id int)) (returns Response) (effects fs io)
+  (fn delete-task (params (state State) (id int)) (returns Response) (effects fs)
     (on-err message (return (error-response 500 message)))
     (body
       (let tasks (list Task) (make-list Task))
@@ -103,13 +103,13 @@
   (route GET "/health" (params) (returns Response) (effects)
     (body (return (json-response 200 "{\"status\":\"ok\"}"))))
 
-  (route GET "/tasks" (params) (returns Response) (effects fs io)
+  (route GET "/tasks" (params) (returns Response) (effects fs)
     (on-err message (return (error-response 500 message)))
     (body
       (let state State (try (load-state)))
       (return (tasks-response state))))
 
-  (route POST "/tasks" (params (input CreateInput)) (returns Response) (effects fs io)
+  (route POST "/tasks" (params (input CreateInput)) (returns Response) (effects fs)
     (on-err message (return (error-response 500 message)))
     (body
       (if (str-eq (field input title) "")
@@ -117,7 +117,7 @@
       (let state State (try (load-state)))
       (return (create-task state input))))
 
-  (route GET "/tasks/{id}" (params (id int)) (returns Response) (effects fs io)
+  (route GET "/tasks/{id}" (params (id int)) (returns Response) (effects fs)
     (on-err message (return (error-response 500 message)))
     (body
       (if (lte id 0)
@@ -125,7 +125,7 @@
       (let state State (try (load-state)))
       (return (find-task state id))))
 
-  (route PUT "/tasks/{id}" (params (id int) (input UpdateInput)) (returns Response) (effects fs io)
+  (route PUT "/tasks/{id}" (params (id int) (input UpdateInput)) (returns Response) (effects fs)
     (on-err message (return (error-response 500 message)))
     (body
       (if (lte id 0)
@@ -135,7 +135,7 @@
       (let state State (try (load-state)))
       (return (update-task state id input))))
 
-  (route DELETE "/tasks/{id}" (params (id int)) (returns Response) (effects fs io)
+  (route DELETE "/tasks/{id}" (params (id int)) (returns Response) (effects fs)
     (on-err message (return (error-response 500 message)))
     (body
       (if (lte id 0)

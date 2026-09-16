@@ -157,3 +157,56 @@ func TestCheckV03UnusedEffects(t *testing.T) {
 		}
 	})
 }
+
+// TestCheckV03JSONIsPure cobre o RFC secao 3.3: json-encode e json-decode nao
+// fazem I/O, operam sobre strings em memoria. Exigir `io` delas fazia toda
+// funcao que so serializa parecer efetuosa.
+func TestCheckV03JSONIsPure(t *testing.T) {
+	codes := diagCodes(t, `(module puro
+(struct Task (fields (id int) (title str)))
+(fn serializa (params (t Task)) (returns (result str str)) (effects)
+  (body (return (json-encode t))))
+(fn desserializa (params (texto str)) (returns (result Task str)) (effects)
+  (body (return (json-decode texto Task))))
+(fn main (params) (returns void) (effects) (body)))`)
+	if len(codes) > 0 {
+		t.Fatalf("json-encode/json-decode devem ser puros: %v", codes)
+	}
+}
+
+// TestCheckV03JSONDecodeList cobre o RFC secao 3.2: json-decode aceita tipos
+// compostos, nao so nomes de tipo.
+func TestCheckV03JSONDecodeList(t *testing.T) {
+	codes := diagCodes(t, `(module lista
+(struct Task (fields (id int)))
+(fn ler (params (texto str)) (returns (result (list Task) str)) (effects)
+  (body (return (json-decode texto (list Task)))))
+(fn main (params) (returns void) (effects) (body)))`)
+	if len(codes) > 0 {
+		t.Fatalf("json-decode deve aceitar (list T): %v", codes)
+	}
+}
+
+// TestCheckV03WriteOpsReturnVoid cobre o RFC secao 3.1: as escritas nao
+// carregam valor no sucesso, entao nao existe o caminho `ok false`.
+func TestCheckV03WriteOpsReturnVoid(t *testing.T) {
+	for _, op := range []string{
+		`(fs-write-file "a.txt" "x")`,
+		`(fs-rename "a.txt" "b.txt")`,
+		`(fs-write-atomic "a.txt" "x")`,
+		`(fs-remove "a.txt")`,
+	} {
+		t.Run(op, func(t *testing.T) {
+			codes := diagCodes(t, `(module escrita
+(fn usa (params) (returns void) (effects fs io)
+  (body
+    (match `+op+`
+      (ok feito (do (println feito)))
+      (err m (do (println m))))))
+(fn main (params) (returns void) (effects) (body)))`)
+			if !hasCode(codes, "E_TYPE_MISMATCH") {
+				t.Fatalf("usar o valor de ok deve falhar para (result void str): %v", codes)
+			}
+		})
+	}
+}

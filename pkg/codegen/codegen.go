@@ -279,6 +279,16 @@ func (g *Generator) genRoute(r *ast.RouteDecl) {
 	g.sb.WriteString("}\n\n")
 }
 
+// onErrReturn emite o desvio de um try que falhou para o bloco (on-err ...).
+// Numa funcao void o handler nao devolve valor, entao `return f()` seria
+// invalido em Go: a chamada e o return precisam ficar separados.
+func (g *Generator) onErrReturn(resID string) string {
+	if mapType(g.curRetType) == "" {
+		return fmt.Sprintf("_liaf_on_err(%s.Error)\n%sreturn\n", resID, strings.Repeat("\t", g.indent))
+	}
+	return fmt.Sprintf("return _liaf_on_err(%s.Error)\n", resID)
+}
+
 func (g *Generator) writeIndent() {
 	for i := 0; i < g.indent; i++ {
 		g.sb.WriteString("\t")
@@ -345,7 +355,7 @@ func (g *Generator) genStmt(stmt ast.Stmt) {
 			g.indent++
 			g.writeIndent()
 			if g.curOnErrVar != "" {
-				g.sb.WriteString(fmt.Sprintf("return _liaf_on_err(%s.Error)\n", resID))
+				g.sb.WriteString(g.onErrReturn(resID))
 			} else {
 				retTypeStr := mapType(g.curRetType)
 				g.sb.WriteString(fmt.Sprintf("var _zero %s; _zero.OK = false; _zero.Error = %s.Error; return _zero\n", retTypeStr, resID))
@@ -375,7 +385,7 @@ func (g *Generator) genStmt(stmt ast.Stmt) {
 			g.indent++
 			g.writeIndent()
 			if g.curOnErrVar != "" {
-				g.sb.WriteString(fmt.Sprintf("return _liaf_on_err(%s.Error)\n", resID))
+				g.sb.WriteString(g.onErrReturn(resID))
 			} else {
 				retTypeStr := mapType(g.curRetType)
 				g.sb.WriteString(fmt.Sprintf("var _zero %s; _zero.OK = false; _zero.Error = %s.Error; return _zero\n", retTypeStr, resID))
@@ -437,7 +447,7 @@ func (g *Generator) genStmt(stmt ast.Stmt) {
 			g.indent++
 			g.writeIndent()
 			if g.curOnErrVar != "" {
-				g.sb.WriteString(fmt.Sprintf("return _liaf_on_err(%s.Error)\n", resID))
+				g.sb.WriteString(g.onErrReturn(resID))
 			} else {
 				retTypeStr := mapType(g.curRetType)
 				g.sb.WriteString(fmt.Sprintf("var _zero %s; _zero.OK = false; _zero.Error = %s.Error; return _zero\n", retTypeStr, resID))

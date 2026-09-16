@@ -246,3 +246,92 @@ func TestExecuteV03TaskAPI(t *testing.T) {
 		}
 	})
 }
+
+// compilaEExecuta gera, compila e roda um modulo, devolvendo o stdout.
+func compilaEExecuta(t *testing.T, fonte string) string {
+	t.Helper()
+	root, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := parser.New(lexer.New(fonte), "inline")
+	mod := p.ParseModule()
+	if len(p.Diagnostics) > 0 {
+		t.Fatalf("parse: %+v", p.Diagnostics)
+	}
+	if _, diags := checker.Check(mod, "inline"); len(diags) > 0 {
+		t.Fatalf("check: %+v", diags)
+	}
+
+	dir := t.TempDir()
+	src := filepath.Join(dir, "main.go")
+	if err := os.WriteFile(src, []byte(New(mod).Generate()), 0600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	bin := filepath.Join(dir, "prog.exe")
+	build := exec.CommandContext(ctx, "go", "build", "-o", bin, src)
+	build.Dir = root
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build: %v\n%s", err, out)
+	}
+	run := exec.CommandContext(ctx, bin)
+	run.Dir = dir
+	out, err := run.CombinedOutput()
+	if err != nil {
+		t.Fatalf("run: %v\n%s", err, out)
+	}
+	return strings.ReplaceAll(string(out), "\r\n", "\n")
+}
+
+// TestExecuteV03ListJSONRoundtrip cobre o RFC 3.2 de ponta a ponta: uma (list T)
+// sai como array JSON nativo e volta pelo json-decode com o mesmo conteudo.
+func TestExecuteV03ListJSONRoundtrip(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compila um binario; pulado em -short")
+	}
+	saida := compilaEExecuta(t, `(module list-json
+  (struct Task (fields (id int) (title str)))
+  (fn main (params) (returns void) (effects io)
+    (on-err message (do (println (concat "ERRO: " message))))
+    (body
+      (let tasks (list Task) (make-list Task))
+      (do (list-push tasks (new Task 1 "alfa")))
+      (do (list-push tasks (new Task 2 "beta")))
+      (let texto str (try (json-encode tasks)))
+      (do (println texto))
+      (let volta (list Task) (try (json-decode texto (list Task))))
+      (do (println (list-len volta)))
+      (match (list-get volta 1)
+        (ok t (do (println (field t title))))
+        (err m (do (println m)))))))`)
+
+	quer := "[{\"id\":1,\"title\":\"alfa\"},{\"id\":2,\"title\":\"beta\"}]\n2\nbeta\n"
+	if saida != quer {
+		t.Fatalf("saida %q, esperada %q", saida, quer)
+	}
+}
+
+// TestExecuteV03OnErrInVoidFunction e regressao: numa funcao void o handler de
+// on-err nao devolve valor, entao emitir `return _liaf_on_err(...)` produzia Go
+// invalido ("used as value"). A chamada e o return precisam ficar separados.
+func TestExecuteV03OnErrInVoidFunction(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compila um binario; pulado em -short")
+	}
+	saida := compilaEExecuta(t, `(module void-onerr
+  (fn main (params) (returns void) (effects fs io)
+    (on-err message (do (println (concat "tratado: " message))))
+    (body
+      (let texto str (try (fs-read-file "nao-existe-mesmo.json")))
+      (do (println texto)))))`)
+
+	if !strings.HasPrefix(saida, "tratado: ") {
+		t.Fatalf("on-err em funcao void nao tratou o erro; saida: %q", saida)
+	}
+	if strings.Contains(saida, "nao-existe-mesmo.json\n\n") {
+		t.Fatal("execucao continuou apos o erro")
+	}
+}

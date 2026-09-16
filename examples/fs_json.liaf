@@ -16,5 +16,5 @@
             (err message (do (call println message)))))
         (err message (do (call println message))))
       (match (call fs-remove "liaf-example.json")
-        (ok removed (do (call println removed)))
+        (ok removed (do (call println "removido")))
         (err message (do (call println message)))))))

@@ -14,7 +14,14 @@ func (g *Generator) libraryCall(c *ast.CallExpr) (string, bool) {
 	}
 	join := strings.Join(args, ", ")
 	call := func(fn string) (string, bool) { return fn + "(" + join + ")", true }
-	typeName := func(i int) string { id := c.Args[i].(*ast.IdentExpr); return mapTypeName(id.Name) }
+	// Aceita tanto `Task` quanto construtores como `(list Task)`; ast.TypeFromExpr
+	// e a mesma traducao que o checker usa, entao os dois nao divergem.
+	typeName := func(i int) string {
+		if t, ok := ast.TypeFromExpr(c.Args[i]); ok {
+			return mapType(t)
+		}
+		return "interface{}"
+	}
 	switch n {
 	case "make-list":
 		return "rt.MakeList[" + typeName(0) + "]()", true

@@ -21,7 +21,7 @@ func TestExecutableExamples(t *testing.T) {
 	}
 	for _, tc := range []struct{ file, output string }{
 		{"loops", "20\n"}, {"collections", "42\n100\nlist index out of bounds\n"},
-		{"fs_json", "alice\ntrue\n"}, {"result", "Expected positive number\n"}, {"math", ""},
+		{"fs_json", "alice\nremovido\n"}, {"result", "Expected positive number\n"}, {"math", ""},
 	} {
 		t.Run(tc.file, func(t *testing.T) {
 			data, err := os.ReadFile(filepath.Join(root, "examples", tc.file+".liaf"))

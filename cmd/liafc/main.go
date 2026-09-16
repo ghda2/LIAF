@@ -35,6 +35,8 @@ func main() {
 		runRun(args)
 	case "emit":
 		runEmit(args)
+	case "fmt":
+		runFmt(args)
 	case "service":
 		installService(args)
 	case "deploy":
@@ -55,6 +57,7 @@ func printUsage() {
 	fmt.Println("  liafc build <arquivo.liaf> [-o saida] [--embed]")
 	fmt.Println("  liafc run <arquivo.liaf>")
 	fmt.Println("  liafc emit <arquivo.liaf>")
+	fmt.Println("  liafc fmt <arquivo.liaf> [-w grava no arquivo] [-l lista fora de formato]")
 	fmt.Println("  liafc publish <arquivo_local> --url <endpoint_url> [--path <rota>] [--token <token>]")
 	fmt.Println("  liafc service install --name <nome> --bin <executavel> [--workdir <dir>]")
 }

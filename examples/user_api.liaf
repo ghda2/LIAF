@@ -1,0 +1,93 @@
+(module user-api
+  (struct User (fields (id int) (name str) (email str)))
+  (struct State (fields (next-id int) (users (list User))))
+  (struct CreateUserInput (fields (name str) (email str)))
+  (struct ApiError (fields (error str)))
+
+  (fn error-response (params (status int) (message str)) (returns Response) (effects)
+    (on-err fail (return (json-response 500 "{\"error\":\"Serialization failure\"}")))
+    (body
+      (let payload str (try (json-encode (new ApiError message))))
+      (return (json-response status payload))))
+
+  (fn load-state (params) (returns (result State str)) (effects fs)
+    (body
+      (if (not (fs-exists "users-data.json"))
+        (then (return (ok (new State 1 (make-list User))))))
+      (let text str (try (fs-read-file "users-data.json")))
+      (let state State (try (json-decode text State)))
+      (return (ok state))))
+
+  (fn save-state (params (state State)) (returns (result bool str)) (effects fs)
+    (body
+      (let text str (try (json-encode state)))
+      (try (fs-write-atomic "users-data.json" text))
+      (return (ok true))))
+
+  (fn users-response (params (state State)) (returns Response) (effects)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (let payload str (try (json-encode (field state users))))
+      (return (json-response 200 payload))))
+
+  (fn user-response (params (user User) (status int)) (returns Response) (effects)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (let payload str (try (json-encode user)))
+      (return (json-response status payload))))
+
+  (fn create-user (params (state State) (input CreateUserInput)) (returns Response) (effects fs)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (let id int (field state next-id))
+      (if (lte id 0)
+        (then (return (error-response 500 "Contador de estado corrompido"))))
+      (let user User (new User id (field input name) (field input email)))
+      (let users (list User) (make-list User))
+      (for-each existing (field state users)
+        (do (list-push users existing)))
+      (do (list-push users user))
+      (let updated State (new State (add id 1) users))
+      (try (save-state updated))
+      (return (user-response user 201))))
+
+  (fn find-user (params (state State) (id int)) (returns Response) (effects)
+    (body
+      (for-each user (field state users)
+        (if (eq (field user id) id)
+          (then (return (user-response user 200)))))
+      (return (error-response 404 "Usuario nao encontrado"))))
+
+  ;; --- Rotas Declarativas (FastAPI Style) ---
+
+  (route GET "/users" (params) (returns Response) (effects fs)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (let state State (try (load-state)))
+      (return (users-response state))))
+
+  (route POST "/users" (params (input CreateUserInput)) (returns Response) (effects fs)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (if (str-eq (field input name) "")
+        (then (return (error-response 400 "Nome eh obrigatorio"))))
+      (if (str-eq (field input email) "")
+        (then (return (error-response 400 "Email eh obrigatorio"))))
+      (let state State (try (load-state)))
+      (return (create-user state input))))
+
+  (route GET "/users/{id}" (params (id int)) (returns Response) (effects fs)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (if (lte id 0)
+        (then (return (error-response 400 "ID deve ser positivo"))))
+      (let state State (try (load-state)))
+      (return (find-user state id))))
+
+  (fn main (params) (returns void) (effects fs io net)
+    (body
+      (println "API LIAF v0.3 rodando em http://localhost:8080")
+      (match (serve-hybrid "./public" "8080")
+        (ok stopped (do (println "Servidor parado")))
+        (err message (do (println message))))))
+)

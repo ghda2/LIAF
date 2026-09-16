@@ -821,8 +821,10 @@ Se `(returns Response)`, a resposta da rota é usada como está. Se `(returns vo
 
 - `fs-write-atomic caminho texto` grava num arquivo temporário e renomeia sobre o destino. Serve para estado que não pode ficar pela metade se o processo morrer durante a escrita.
 - `fs-rename origem destino` expõe o rename diretamente.
-- `fs-write-file`, `fs-rename` e `fs-write-atomic` retornam `(result void str)`. O sucesso não carrega valor: `ok` já significa que a operação terminou. Vincular e inspecionar esse valor é erro de tipo.
+- `fs-write-file`, `fs-rename`, `fs-write-atomic` e `fs-remove` retornam `(result void str)`. O sucesso não carrega valor: `ok` já significa que a operação terminou. Vincular e inspecionar esse valor é erro de tipo. Isso elimina o caminho `ok false`, que duplicava o tratamento de erro e era esquecido com frequência.
 - `json-encode` de `(list T)` produz um array JSON nativo `[...]`. A v0.2 produzia `{"Items":[...]}`, o que obrigava a compor arrays manualmente para respostas HTTP.
+- `json-encode` e `json-decode` **não têm efeito**. Operam sobre strings em memória; exigir `io` delas fazia qualquer função que apenas serializa parecer efetuosa, e era um erro comum de declaração.
+- `json-decode` aceita tipos compostos além de nomes de struct: `(json-decode texto (list Task))`. Construtores de tipo em posição de argumento — `list`, `map`, `chan`, `result` — são traduzidos pela mesma rotina que o checker usa para `make-list` e afins.
 
 ### 18.5 Efeitos declarados e não usados
 

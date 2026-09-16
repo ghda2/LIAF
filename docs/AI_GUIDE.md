@@ -43,7 +43,8 @@ Cada `{nome}` no caminho precisa de um parâmetro de mesmo nome, do tipo `int` o
 
 - **Declare exatamente os efeitos que usa.** `io`, `fs`, `net`, `clock`, `spawn`, incluindo os efeitos transitivos das funções que você chama. Faltando, é `E_UNDECLARED_EFFECT`; sobrando, é `E_UNUSED_EFFECT`. Uma assinatura que promete `fs` sem tocar o disco engana quem a lê.
 - **Resultado não pode ser ignorado.** Toda operação falível devolve `(result T E)` e precisa de `try`, `match` ou propagação.
-- **`fs-write-file`, `fs-rename` e `fs-write-atomic` retornam `(result void str)`.** O sucesso não carrega valor: `ok` já significa que gravou. Não teste o conteúdo.
+- **`fs-write-file`, `fs-rename`, `fs-write-atomic` e `fs-remove` retornam `(result void str)`.** O sucesso não carrega valor: `ok` já significa que a operação terminou. Não teste o conteúdo.
+- **`json-encode` e `json-decode` são puras.** Não declare `io` por causa delas — serializam em memória. `json-decode` aceita tipos compostos: `(json-decode texto (list Task))`.
 - **`(list T)` serializa como array JSON nativo** `[...]`. Devolva a lista direto; não monte colchetes com `concat`.
 
 ## Ciclo de trabalho

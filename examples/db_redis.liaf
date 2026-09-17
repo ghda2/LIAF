@@ -1,0 +1,54 @@
+;; Cache chave-valor externo - LIAF v0.4 (issue #015)
+;;
+;; Uso: db_redis "redis://localhost:6379/0"
+;;
+;; O mesmo (db-connect ...) abre Redis; o que muda e o conjunto de operacoes.
+;; redis-get e redis-set nao existem num banco relacional, e db-query nao
+;; existe aqui - o driver recusa a chamada errada com uma mensagem explicita
+;; em vez de devolver vazio.
+
+(module db-redis
+  (struct Session (fields (user str) (role str)))
+
+  (fn save-session (params (cache DBConnection) (key str) (session Session))
+      (returns (result bool str)) (effects db)
+    (body
+      (let payload str (try (json-encode session)))
+      ;; O ultimo argumento e o TTL em segundos; 0 grava sem expiracao.
+      (try (redis-set cache key payload 60))
+      (return (ok true))))
+
+  (fn load-session (params (cache DBConnection) (key str))
+      (returns (result Session str)) (effects db)
+    (body
+      (let payload str (try (redis-get cache key)))
+      (let session Session (try (json-decode payload Session)))
+      (return (ok session))))
+
+  (fn run (params (cache DBConnection)) (returns (result bool str)) (effects db io)
+    (body
+      (try (save-session cache "session:42" (new Session "alice" "admin")))
+      (let restored Session (try (load-session cache "session:42")))
+      (println (concat (field restored user) " / " (field restored role)))
+      ;; Chave ausente e erro, nao string vazia: (result str str) nao tem um
+      ;; terceiro caso para representar a ausencia.
+      (match (redis-get cache "session:inexistente")
+        (ok value (println value))
+        (err message (println (concat "esperado: " message))))
+      (return (ok true))))
+
+  (fn main (params) (returns void) (effects io db)
+    (body
+      (match (list-get (args) 0)
+        (ok dsn
+          (match (db-connect "redis" dsn)
+            (ok cache
+              (match (run cache)
+                (ok done (println "pronto"))
+                (err message (println message)))
+              (match (db-close cache)
+                (ok closed (println "conexao encerrada"))
+                (err message (println message))))
+            (err message (println (concat "conexao falhou: " message)))))
+        (err message (println "Uso: db_redis redis://localhost:6379/0")))))
+)

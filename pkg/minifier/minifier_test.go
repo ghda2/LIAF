@@ -27,6 +27,19 @@ func TestMinifyHTML(t *testing.T) {
 	}
 }
 
+func TestMinifyHTMLWithScript(t *testing.T) {
+	input := `<!DOCTYPE html><html><head></head><body><script>
+		// comentario
+		function openModal() {
+			return 42;
+		}
+	</script></body></html>`
+	output := MinifyHTML(input)
+	if !strings.Contains(output, "function openModal()") {
+		t.Errorf("Esperava preservar declaracao de funcao no script, recebido: %s", output)
+	}
+}
+
 func TestMinifyCSS(t *testing.T) {
 	input := `
 		/* Comentario CSS */

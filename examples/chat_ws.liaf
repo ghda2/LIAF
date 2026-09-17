@@ -1,0 +1,53 @@
+;; Chat em tempo real - LIAF v0.4 (issue #016)
+;;
+;; Uso: chat_ws 8080   (exige a pasta ./public, que traz public/chat.html)
+;; Abra http://localhost:8080/chat em duas abas e escolha a mesma sala.
+;;
+;; A rota (ws-route ...) declara os tres momentos da conexao. O parametro
+;; {room} chega ja extraido do caminho e o parametro WSConn e a conexao
+;; aberta. Nao ha (returns ...): uma conexao bidirecional nao termina numa
+;; resposta.
+
+(module chat-ws
+  (struct ChatEvent (fields (kind str) (room str) (text str)))
+
+  (fn event-json (params (kind str) (room str) (text str)) (returns str) (effects)
+    (on-err message (return "{\"kind\":\"error\",\"text\":\"serialization failure\"}"))
+    (body
+      (let payload str (try (json-encode (new ChatEvent kind room text))))
+      (return payload)))
+
+  (ws-route "/ws/chat/{room}" (params (room str) (conn WSConn)) (effects io net)
+    (on-err message (println (concat "chat: " message)))
+    (on-open
+      ;; Sem o join a conexao nao recebe broadcast: a inscricao e explicita
+      ;; para que uma sala nunca seja inferida do caminho por engano.
+      (ws-join conn room)
+      (println (concat "entrou em " room))
+      (try (ws-broadcast room (event-json "join" room "alguem entrou"))))
+    (on-message text
+      (try (ws-broadcast room (event-json "message" room text))))
+    (on-close
+      ;; Roda tanto no fechamento limpo quanto na queda da conexao. O
+      ;; ws-leave e implicito no fechamento; o broadcast e que precisa vir
+      ;; antes de a sala esquecer quem saiu.
+      (println (concat "saiu de " room))
+      (try (ws-broadcast room (event-json "leave" room "alguem saiu")))))
+
+  ;; Rota HTTP comum, na mesma porta do socket.
+  (route GET "/rooms/{room}/size" (params (room str)) (returns Response) (effects net)
+    (body
+      (return (json-response 200
+        (concat "{\"room\":\"" room "\",\"clients\":" (str-from-int (ws-topic-size room)) "}")))))
+
+  (fn main (params) (returns void) (effects fs io net)
+    (body
+      (let port str "7070")
+      (match (list-get (args) 0)
+        (ok p (set port p))
+        (err ignored (set port "7070")))
+      (println (concat "Chat WS: http://localhost:" port))
+      (match (serve-hybrid "./public" port)
+        (ok stopped (println "Servidor encerrado"))
+        (err message (println message)))))
+)

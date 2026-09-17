@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LIAF Real-Time Kanban • tw.webdrop.bio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #090d13;
+      --card-bg: #131822;
+      --card-hover: #19202d;
+      --panel-bg: rgba(19, 24, 34, 0.7);
+      --border: rgba(255, 255, 255, 0.08);
+      --border-light: rgba(255, 255, 255, 0.16);
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #388bfd;
+      --accent-glow: rgba(56, 139, 253, 0.25);
+      --success: #3fb950;
+      --warning: #d29922;
+      --danger: #f85149;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(56, 139, 253, 0.07) 0%, transparent 40%),
+        radial-gradient(circle at 85% 85%, rgba(63, 185, 80, 0.05) 0%, transparent 40%);
+    }
+
+    /* Header */
+    header {
+      padding: 1.25rem 2rem;
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+      background: rgba(9, 13, 19, 0.85);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #1f6feb, #388bfd);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 1rem;
+      color: #fff;
+      box-shadow: 0 0 16px var(--accent-glow);
+    }
+
+    .brand-text h1 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #fff;
+    }
+
+    .brand-text p {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      transition: all 0.2s ease;
+    }
+
+    .status-badge.connected {
+      background: rgba(63, 185, 80, 0.12);
+      border-color: rgba(63, 185, 80, 0.3);
+      color: var(--success);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .status-badge.connected .status-dot {
+      box-shadow: 0 0 8px var(--success);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .btn-primary {
+      background: linear-gradient(180deg, #2b7fff, #1f6feb);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 7px 15px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      transition: all 0.15s ease;
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(180deg, #388bfd, #2b7fff);
+      transform: translateY(-1px);
+    }
+
+    /* Main Board Layout */
+    main {
+      flex: 1;
+      padding: 1.75rem 2rem;
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .stats-bar {
+      display: flex;
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      background: var(--panel-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 1.25rem;
+      backdrop-filter: blur(8px);
+    }
+
+    .stats-item strong {
+      color: #fff;
+    }
+
+    .kanban-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+      align-items: start;
+    }
+
+    @media (max-width: 900px) {
+      .kanban-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .kanban-col {
+      background: var(--panel-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+      min-height: 600px;
+      display: flex;
+      flex-direction: column;
+      backdrop-filter: blur(8px);
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .kanban-col.drag-over {
+      border-color: var(--accent);
+      background: rgba(56, 139, 253, 0.08);
+    }
+
+    .col-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .col-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+
+    .col-count {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-muted);
+    }
+
+    .cards-container {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      flex: 1;
+    }
+
+    /* Card */
+    .kanban-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      cursor: grab;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+    }
+
+    .kanban-card:hover {
+      background: var(--card-hover);
+      border-color: var(--border-light);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    }
+
+    .kanban-card.dragging {
+      opacity: 0.4;
+      cursor: grabbing;
+    }
+
+    .card-title {
+      font-size: 0.92rem;
+      font-weight: 500;
+      color: #fff;
+      line-height: 1.4;
+      margin-bottom: 0.75rem;
+      word-break: break-word;
+    }
+
+    .card-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      border-top: 1px solid rgba(255, 255, 255, 0.04);
+      padding-top: 0.6rem;
+      margin-top: 0.5rem;
+    }
+
+    .author-badge {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .author-avatar {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #238636;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.65rem;
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .card-actions {
+      display: flex;
+      gap: 4px;
+    }
+
+    .btn-icon {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      border-radius: 4px;
+      width: 24px;
+      height: 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 0.75rem;
+      transition: all 0.15s;
+    }
+
+    .btn-icon:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+      border-color: var(--border-light);
+    }
+
+    .btn-delete:hover {
+      background: rgba(248, 81, 73, 0.15);
+      color: var(--danger);
+      border-color: rgba(248, 81, 73, 0.3);
+    }
+
+    /* Modal Form */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .modal {
+      background: var(--card-bg);
+      border: 1px solid var(--border-light);
+      border-radius: 12px;
+      padding: 1.5rem;
+      width: 100%;
+      max-width: 440px;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5);
+      transform: scale(0.95);
+      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .modal-overlay.active .modal {
+      transform: scale(1);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.25rem;
+    }
+
+    .modal-header h2 {
+      font-size: 1.1rem;
+      color: #fff;
+    }
+
+    .form-group {
+      margin-bottom: 1rem;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 9px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: #fff;
+      font-size: 0.9rem;
+      outline: none;
+    }
+
+    .form-group input:focus, .form-group select:focus {
+      border-color: var(--accent);
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.75rem;
+      margin-top: 1.5rem;
+    }
+
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 7px 14px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+    }
+
+    /* Toast Notification */
+    #toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 2000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .toast {
+      background: #1c2230;
+      border: 1px solid var(--border-light);
+      border-left: 3px solid var(--accent);
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      color: #fff;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      animation: slideIn 0.25s ease;
+    }
+
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="brand-icon">L</div>
+      <div class="brand-text">
+        <h1>LIAF Multiplayer Kanban</h1>
+        <p>tw.webdrop.bio • WebSocket & Persistência Nativa</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <div class="status-badge" id="status-badge">
+        <div class="status-dot"></div>
+        <span id="status-text">Conectando ao WebSocket...</span>
+      </div>
+      <button class="btn-primary" onclick="openNewCardModal()">+ Novo Card</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="stats-bar">
+      <div class="stats-item">Colaboradores ativos: <strong id="collaborators-count">1</strong></div>
+      <div class="stats-item">Total de Cards: <strong id="total-cards">0</strong></div>
+      <div class="stats-item">Sincronização: <strong>Broadcast Sub-ms em RAM</strong></div>
+      <div class="stats-item">Armazenamento: <strong>SQLite Nativo (kanban.db)</strong></div>
+    </div>
+
+    <div class="kanban-grid">
+      <!-- Coluna: A Fazer -->
+      <div class="kanban-col" id="col-todo" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event, 'todo')">
+        <div class="col-header">
+          <div class="col-title">
+            <span style="color: var(--accent);">●</span> A Fazer
+          </div>
+          <span class="col-count" id="count-todo">0</span>
+        </div>
+        <div class="cards-container" id="container-todo"></div>
+      </div>
+
+      <!-- Coluna: Em Andamento -->
+      <div class="kanban-col" id="col-in_progress" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event, 'in_progress')">
+        <div class="col-header">
+          <div class="col-title">
+            <span style="color: var(--warning);">●</span> Em Andamento
+          </div>
+          <span class="col-count" id="count-in_progress">0</span>
+        </div>
+        <div class="cards-container" id="container-in_progress"></div>
+      </div>
+
+      <!-- Coluna: Concluído -->
+      <div class="kanban-col" id="col-done" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event, 'done')">
+        <div class="col-header">
+          <div class="col-title">
+            <span style="color: var(--success);">●</span> Concluído
+          </div>
+          <span class="col-count" id="count-done">0</span>
+        </div>
+        <div class="cards-container" id="container-done"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Modal Novo Card -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Criar Novo Card</h2>
+        <button class="btn-icon" onclick="closeNewCardModal()">✕</button>
+      </div>
+      <form id="new-card-form" onsubmit="submitNewCard(event)">
+        <div class="form-group">
+          <label for="card-title">Título da Tarefa</label>
+          <input type="text" id="card-title" required placeholder="Ex: Adicionar métricas de WebSocket..." autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label for="card-author">Responsável</label>
+          <input type="text" id="card-author" placeholder="Ex: Gabriel" value="Gabriel" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label for="card-column">Coluna Inicial</label>
+          <select id="card-column">
+            <option value="todo">A Fazer</option>
+            <option value="in_progress">Em Andamento</option>
+            <option value="done">Concluído</option>
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" onclick="closeNewCardModal()">Cancelar</button>
+          <button type="submit" class="btn-primary">Criar Card</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script>
+    let ws = null;
+    let boardCards = [];
+    let draggedCardId = null;
+
+    function showToast(msg) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      toast.innerHTML = `<span>⚡</span><span>${msg}</span>`;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.transition = 'opacity 0.3s, transform 0.3s';
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(10px)';
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    async function loadBoard(silent = false) {
+      try {
+        const res = await fetch('/api/board');
+        if (!res.ok) return;
+        const data = await res.json();
+        boardCards = data.cards || [];
+        renderCards();
+      } catch (err) {
+        console.error('Erro ao carregar board:', err);
+      }
+    }
+
+    async function updateCollaborators() {
+      try {
+        const res = await fetch('/api/collaborators');
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById('collaborators-count').textContent = data.online || 1;
+        }
+      } catch (e) {}
+    }
+
+    function renderCards() {
+      const containers = {
+        todo: document.getElementById('container-todo'),
+        in_progress: document.getElementById('container-in_progress'),
+        done: document.getElementById('container-done')
+      };
+
+      const counts = { todo: 0, in_progress: 0, done: 0 };
+
+      /* Limpa containers */
+      Object.values(containers).forEach(c => c.innerHTML = '');
+
+      boardCards.forEach(card => {
+        const col = containers[card.column] ? card.column : 'todo';
+        counts[col]++;
+
+        const cardEl = document.createElement('div');
+        cardEl.className = 'kanban-card';
+        cardEl.draggable = true;
+        cardEl.id = `card-${card.id}`;
+        cardEl.ondragstart = (e) => onDragStart(e, card.id);
+        cardEl.ondragend = (e) => onDragEnd(e);
+
+        const initial = (card.author || 'A').charAt(0).toUpperCase();
+
+        const moveLeftBtn = col !== 'todo' 
+          ? `<button class="btn-icon" title="Mover para trás" onclick="moveCard(${card.id}, '${col === 'done' ? 'in_progress' : 'todo'}')">←</button>` 
+          : '';
+        const moveRightBtn = col !== 'done' 
+          ? `<button class="btn-icon" title="Avançar" onclick="moveCard(${card.id}, '${col === 'todo' ? 'in_progress' : 'done'}')">→</button>` 
+          : '';
+
+        cardEl.innerHTML = `
+          <div class="card-title">${escapeHtml(card.title)}</div>
+          <div class="card-footer">
+            <div class="author-badge">
+              <span class="author-avatar">${initial}</span>
+              <span>${escapeHtml(card.author || 'Anônimo')}</span>
+            </div>
+            <div class="card-actions">
+              ${moveLeftBtn}
+              ${moveRightBtn}
+              <button class="btn-icon btn-delete" title="Excluir" onclick="deleteCard(${card.id})">✕</button>
+            </div>
+          </div>
+        `;
+        containers[col].appendChild(cardEl);
+      });
+
+      document.getElementById('count-todo').textContent = counts.todo;
+      document.getElementById('count-in_progress').textContent = counts.in_progress;
+      document.getElementById('count-done').textContent = counts.done;
+      document.getElementById('total-cards').textContent = boardCards.length;
+    }
+
+    function escapeHtml(str) {
+      return (str || '').replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+      }[m]));
+    }
+
+    /* Drag & Drop */
+    function onDragStart(e, cardId) {
+      draggedCardId = cardId;
+      e.dataTransfer.setData('text/plain', cardId);
+      e.currentTarget.classList.add('dragging');
+    }
+
+    function onDragEnd(e) {
+      e.currentTarget.classList.remove('dragging');
+      document.querySelectorAll('.kanban-col').forEach(c => c.classList.remove('drag-over'));
+    }
+
+    function onDragOver(e) {
+      e.preventDefault();
+      e.currentTarget.classList.add('drag-over');
+    }
+
+    function onDragLeave(e) {
+      e.currentTarget.classList.remove('drag-over');
+    }
+
+    async function onDrop(e, targetColumn) {
+      e.preventDefault();
+      e.currentTarget.classList.remove('drag-over');
+      if (draggedCardId) {
+        await moveCard(draggedCardId, targetColumn);
+        draggedCardId = null;
+      }
+    }
+
+    async function moveCard(id, column) {
+      try {
+        const res = await fetch(`/api/cards/${id}/move`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ column })
+        });
+        if (res.ok) {
+          loadBoard();
+        }
+      } catch (err) {
+        console.error('Falha ao mover card:', err);
+      }
+    }
+
+    async function deleteCard(id) {
+      if (!confirm('Deseja excluir este card?')) return;
+      try {
+        const res = await fetch(`/api/cards/${id}`, { method: 'DELETE' });
+        if (res.ok) loadBoard();
+      } catch (err) {
+        console.error('Falha ao excluir card:', err);
+      }
+    }
+
+    function openNewCardModal() {
+      document.getElementById('modal-overlay').classList.add('active');
+      document.getElementById('card-title').focus();
+    }
+
+    function closeNewCardModal() {
+      document.getElementById('modal-overlay').classList.remove('active');
+      document.getElementById('new-card-form').reset();
+    }
+
+    async function submitNewCard(e) {
+      e.preventDefault();
+      const title = document.getElementById('card-title').value.trim();
+      const author = document.getElementById('card-author').value.trim();
+      const column = document.getElementById('card-column').value;
+
+      if (!title) return;
+
+      try {
+        const res = await fetch('/api/cards', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, author, column })
+        });
+        if (res.ok) {
+          closeNewCardModal();
+          loadBoard();
+        }
+      } catch (err) {
+        console.error('Falha ao criar card:', err);
+      }
+    }
+
+    /* WebSocket Conexão em Tempo Real */
+    function connectWebSocket() {
+      const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+      const wsUrl = `${scheme}://${location.host}/ws/board`;
+      const badge = document.getElementById('status-badge');
+      const text = document.getElementById('status-text');
+
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        badge.classList.add('connected');
+        text.textContent = 'Tempo Real Ativo (WS)';
+        updateCollaborators();
+      };
+
+      ws.onclose = () => {
+        badge.classList.remove('connected');
+        text.textContent = 'Desconectado (Reconectando...)';
+        setTimeout(connectWebSocket, 2000);
+      };
+
+      ws.onerror = () => {
+        badge.classList.remove('connected');
+        text.textContent = 'Erro de Conexão WS';
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.kind === 'sync') {
+            loadBoard(true);
+            showToast(data.message || 'Quadro atualizado em tempo real');
+          } else if (data.kind === 'presence') {
+            updateCollaborators();
+            showToast(data.message);
+          }
+        } catch (e) {
+          loadBoard(true);
+        }
+      };
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      loadBoard();
+      connectWebSocket();
+      setInterval(updateCollaborators, 8000);
+    });
+  </script>
+</body>
+</html>

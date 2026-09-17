@@ -1,0 +1,47 @@
+;; SQLite Nativo em Go Puro - LIAF v0.4
+(module db-sqlite
+  (struct User (fields (id int) (name str) (email str)))
+  (struct UserCount (fields (total int)))
+
+  (fn create-schema (params (db DBConnection)) (returns (result bool str)) (effects db)
+    (body
+      (try (db-exec db "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL)"))
+      (try (db-exec db "DELETE FROM users"))
+      (return (ok true))))
+
+  (fn seed (params (db DBConnection)) (returns (result bool str)) (effects db)
+    (body
+      (db-transaction db
+        (try (db-exec db "INSERT INTO users (id, name, email) VALUES (?, ?, ?)" 1 "Gabriel" "gabriel@webdrop.bio"))
+        (try (db-exec db "INSERT INTO users (id, name, email) VALUES (?, ?, ?)" 2 "LIAF Agent" "agent@liaf.ai")))
+      (return (ok true))))
+
+  (fn show-users (params (db DBConnection)) (returns (result bool str)) (effects db io)
+    (body
+      (let users (list User)
+        (try (db-query db "SELECT id, name, email FROM users ORDER BY id" User)))
+      (for-each u users
+        (println (concat (str-from-int (field u id)) " | " (field u name) " | " (field u email))))
+      (let totals (list UserCount)
+        (try (db-query db "SELECT COUNT(*) AS total FROM users" UserCount)))
+      (match (list-get totals 0)
+        (ok row (println (concat "Total de usuarios no SQLite: " (str-from-int (field row total)))))
+        (err message (println message)))
+      (return (ok true))))
+
+  (fn main (params) (returns void) (effects io db)
+    (body
+      (let db-path str "test_sqlite.db")
+      (match (db-connect "sqlite" db-path)
+        (ok db
+          (match (create-schema db)
+            (ok created
+              (match (seed db)
+                (ok seeded
+                  (match (show-users db)
+                    (ok shown (println "SQLite testado com sucesso!"))
+                    (err msg (println msg))))
+                (err msg (println msg))))
+            (err msg (println msg))))
+        (err msg (println (concat "Falha ao conectar no SQLite: " msg))))))
+)

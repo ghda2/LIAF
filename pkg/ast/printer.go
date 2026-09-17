@@ -57,7 +57,73 @@ func (p *printer) printTopLevel(decl TopLevel, isLastDecl bool) {
 		p.printFunc(d, suffix)
 	case *RouteDecl:
 		p.printRoute(d, suffix)
+	case *WSRouteDecl:
+		p.printWSRoute(d, suffix)
 	}
+}
+
+// printWSRoute imprime a forma canonica de (ws-route ...). Blocos opcionais
+// vazios sao omitidos: um (on-close) sem instrucao nenhuma seria ruido, e a
+// forma canonica precisa ser unica para o fmt ser idempotente.
+func (p *printer) printWSRoute(w *WSRouteDecl, suffix string) {
+	p.sb.WriteString(fmt.Sprintf("(ws-route %q\n", w.Path))
+	p.indent++
+
+	p.writeIndent()
+	if len(w.Params) == 0 {
+		p.sb.WriteString("(params)\n")
+	} else {
+		p.sb.WriteString("(params\n")
+		p.indent++
+		for i, param := range w.Params {
+			p.writeIndent()
+			if i == len(w.Params)-1 {
+				p.sb.WriteString(fmt.Sprintf("(%s %s))\n", param.Name, param.Type.String()))
+			} else {
+				p.sb.WriteString(fmt.Sprintf("(%s %s)\n", param.Name, param.Type.String()))
+			}
+		}
+		p.indent--
+	}
+
+	p.writeIndent()
+	p.sb.WriteString("(effects")
+	effects := append([]string(nil), w.Effects...)
+	sort.Strings(effects)
+	for _, eff := range effects {
+		p.sb.WriteString(" " + eff)
+	}
+	p.sb.WriteString(")\n")
+
+	// O ultimo bloco impresso carrega o fechamento da propria ws-route.
+	last := "on-message"
+	if len(w.OnClose) > 0 {
+		last = "on-close"
+	}
+
+	if w.OnErrVar != "" {
+		p.writeIndent()
+		p.sb.WriteString("(on-err " + w.OnErrVar)
+		p.printBlock(w.OnErrBody, "\n")
+	}
+	if len(w.OnOpen) > 0 {
+		p.writeIndent()
+		p.sb.WriteString("(on-open")
+		p.printBlock(w.OnOpen, "\n")
+	}
+
+	p.writeIndent()
+	p.sb.WriteString("(on-message " + w.MsgVar)
+	if last == "on-message" {
+		p.printBlock(w.OnMessage, ")"+suffix)
+	} else {
+		p.printBlock(w.OnMessage, "\n")
+		p.writeIndent()
+		p.sb.WriteString("(on-close")
+		p.printBlock(w.OnClose, ")"+suffix)
+	}
+
+	p.indent--
 }
 
 func (p *printer) printStruct(s *StructDecl, suffix string) {
@@ -230,6 +296,9 @@ func (p *printer) printStmt(stmt Stmt, suffix string) {
 		case "for-each":
 			p.sb.WriteString(" " + s.Name + " " + formatExpr(s.Collection))
 		}
+		p.printBlock(s.Body, suffix)
+	case *DBTransactionStmt:
+		p.sb.WriteString("(db-transaction " + s.Conn)
 		p.printBlock(s.Body, suffix)
 	case *MatchStmt:
 		p.sb.WriteString("(match " + formatExpr(s.Value) + "\n")

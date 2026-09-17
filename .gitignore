@@ -19,6 +19,8 @@
 /liaf_server_linux
 /server
 /server.exe
+/server_*
+*.db
 
 # Pipelines internos e automações locais
 /pipeline

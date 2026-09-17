@@ -1,0 +1,69 @@
+;; Banco relacional externo - LIAF v0.4 (issue #015)
+;;
+;; Uso: db_postgres "postgres://usuario:senha@localhost:5432/banco?sslmode=disable"
+;;
+;; Tres pontos que a v0.4 garante em tempo de compilacao:
+;;   1. O SQL e sempre um literal. Montar a consulta com (concat ...) nao
+;;      compila - e o unico jeito de fechar a porta da injecao de SQL.
+;;   2. Cada valor vai como parametro ($1, $2 ...). O checker confere a
+;;      contagem de marcadores contra a de argumentos.
+;;   3. (db-transaction ...) confirma no fim do bloco e desfaz sozinha em
+;;      qualquer saida antecipada, inclusive num (try ...) que falhou.
+
+(module db-postgres
+  (struct User (fields (id int) (name str) (email str)))
+  (struct UserCount (fields (total int)))
+
+  (fn create-schema (params (db DBConnection)) (returns (result bool str)) (effects db)
+    (body
+      (try (db-exec db "CREATE TABLE IF NOT EXISTS users (id int PRIMARY KEY, name text NOT NULL, email text NOT NULL)"))
+      (try (db-exec db "DELETE FROM users"))
+      (return (ok true))))
+
+  ;; As duas insercoes entram juntas ou nenhuma entra. Se a segunda falhar,
+  ;; o (try ...) sai da funcao e o rollback ja esta agendado.
+  (fn seed (params (db DBConnection)) (returns (result bool str)) (effects db)
+    (body
+      (db-transaction db
+        (try (db-exec db "INSERT INTO users (id, name, email) VALUES ($1, $2, $3)" 1 "alice" "alice@example.com"))
+        (try (db-exec db "INSERT INTO users (id, name, email) VALUES ($1, $2, $3)" 2 "bruno" "bruno@example.com")))
+      (return (ok true))))
+
+  ;; O nome de cada coluna selecionada casa com o nome do campo da struct.
+  ;; Colunas em snake_case alimentam campos em kebab-case.
+  (fn show-users (params (db DBConnection) (minimum int)) (returns (result bool str)) (effects db io)
+    (body
+      (let users (list User)
+        (try (db-query db "SELECT id, name, email FROM users WHERE id >= $1 ORDER BY id" User minimum)))
+      (for-each u users
+        (println (concat (str-from-int (field u id)) " " (field u name) " " (field u email))))
+      (let totals (list UserCount)
+        (try (db-query db "SELECT count(*) AS total FROM users" UserCount)))
+      (match (list-get totals 0)
+        (ok row (println (concat "total=" (str-from-int (field row total)))))
+        (err message (println message)))
+      (return (ok true))))
+
+  (fn run (params (db DBConnection)) (returns (result bool str)) (effects db io)
+    (body
+      (try (create-schema db))
+      (try (seed db))
+      (try (show-users db 1))
+      (return (ok true))))
+
+  (fn main (params) (returns void) (effects io db)
+    (body
+      (match (list-get (args) 0)
+        (ok dsn
+          (match (db-connect "postgres" dsn)
+            (ok db
+              (match (run db)
+                (ok done (println "pronto"))
+                (err message (println message)))
+              (match (db-close db)
+                (ok closed (println "conexao encerrada"))
+                (err message (println message))))
+            (err message (println (concat "conexao falhou: " message)))))
+        (err message
+          (println "Uso: db_postgres postgres://usuario:senha@host:5432/banco")))))
+)

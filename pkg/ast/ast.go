@@ -23,6 +23,21 @@ type LoopControl struct {
 func (s *LoopControl) Pos() (int, int) { return s.Line, s.Col }
 func (s *LoopControl) stmtNode()       {}
 
+// DBTransactionStmt representa (db-transaction conn instrucoes...).
+//
+// Conn e o nome de uma variavel DBConnection. Dentro do bloco esse mesmo nome
+// passa a designar a transacao, para que as consultas do corpo nao precisem
+// ser reescritas — e para que nao exista a forma errada de usar o pool
+// original por engano no meio de uma transacao.
+type DBTransactionStmt struct {
+	Conn      string
+	Body      []Stmt
+	Line, Col int
+}
+
+func (s *DBTransactionStmt) Pos() (int, int) { return s.Line, s.Col }
+func (s *DBTransactionStmt) stmtNode()       {}
+
 type MatchStmt struct {
 	Value           Expr
 	OKName, ErrName string
@@ -126,6 +141,30 @@ type RouteDecl struct {
 
 func (r *RouteDecl) Pos() (int, int) { return r.Line, r.Col }
 func (r *RouteDecl) topLevelNode()   {}
+
+// WSRouteDecl representa
+// (ws-route PATH (params ...) (effects ...) [(on-err var ...)]
+//   [(on-open ...)] (on-message var ...) [(on-close ...)])
+//
+// Nao tem (returns ...) nem (body ...): os tres blocos sao o corpo, cada um
+// disparado por um evento da conexao. A ausencia de retorno e proposital —
+// uma conexao bidirecional nao termina numa resposta.
+type WSRouteDecl struct {
+	Path      string
+	Params    []Param
+	Effects   []string
+	OnErrVar  string
+	OnErrBody []Stmt
+	OnOpen    []Stmt
+	MsgVar    string
+	OnMessage []Stmt
+	OnClose   []Stmt
+	Line      int
+	Col       int
+}
+
+func (w *WSRouteDecl) Pos() (int, int) { return w.Line, w.Col }
+func (w *WSRouteDecl) topLevelNode()   {}
 
 type Param struct {
 	Name string

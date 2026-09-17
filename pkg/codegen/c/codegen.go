@@ -54,6 +54,14 @@ func Generate(mod *ast.Module) (string, error) {
 		return "", fmt.Errorf("semantic check: %s", diags[0].String())
 	}
 	g := &generator{info: info}
+	for _, d := range mod.Decls {
+		if _, ok := d.(*ast.WSRouteDecl); ok {
+			// Falhar aqui em vez de ignorar: um binario C sem as rotas de
+			// WebSocket compilaria e subiria calado, sem o socket que o
+			// programa declara.
+			return "", fmt.Errorf("C backend: ws-route is not implemented yet")
+		}
+	}
 	g.out.WriteString(runtimeSource)
 	for _, d := range mod.Decls {
 		if f, ok := d.(*ast.FuncDecl); ok {

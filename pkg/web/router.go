@@ -33,6 +33,13 @@ func (r *Router) Handle(method, path string, handler Handler) {
 		_, _ = io.WriteString(w, res.Body)
 	})
 }
+// HandleRaw registra um handler que recebe a requisicao crua. O WebSocket
+// precisa disso: o upgrade toma posse da conexao TCP, e Handle acima ja teria
+// lido o corpo e se comprometido a escrever uma Response.
+func (r *Router) HandleRaw(method, path string, handler http.Handler) {
+	r.mux.Handle(method+" "+path, handler)
+}
+
 func (r *Router) Handler(fallback http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, q *http.Request) {
 		h, pattern := r.mux.Handler(q)
@@ -63,6 +70,27 @@ func Register(method, path string, h Handler) {
 	routerMu.Lock()
 	defer routerMu.Unlock()
 	defaultRouter.Handle(method, path, h)
+}
+
+// WSHandler e o laco completo de uma conexao: recebe a conexao ja aberta e a
+// requisicao do handshake, e retorna quando a conexao termina.
+type WSHandler func(*WSConn, Request)
+
+// RegisterWS registra uma rota (ws-route ...). O handshake e sempre um GET,
+// entao a rota convive com as rotas HTTP no mesmo mux — o que permite servir
+// a pagina e o socket dela na mesma porta.
+func RegisterWS(path string, h WSHandler) {
+	routerMu.Lock()
+	defer routerMu.Unlock()
+	defaultRouter.HandleRaw(http.MethodGet, path, http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		conn, err := Upgrade(w, req)
+		if err != nil {
+			http.Error(w, "WebSocket upgrade failed: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		defer conn.Close()
+		h(conn, Request{Method: req.Method, Path: req.URL.Path})
+	}))
 }
 func ServeHybrid(dir, port string) error {
 	s, err := NewServer(ServerOptions{Dir: dir, Port: port})

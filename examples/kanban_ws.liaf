@@ -1,0 +1,124 @@
+;; Quadro Kanban Colaborativo em Tempo Real com SQLite - LIAF v0.4
+(module kanban-ws
+  (struct Card (fields (id int) (title str) (column str) (author str)))
+  (struct BoardResponse (fields (cards (list Card))))
+  (struct CreateCardInput (fields (title str) (column str) (author str)))
+  (struct MoveCardInput (fields (column str)))
+  (struct ApiError (fields (error str)))
+  (struct WsEvent (fields (kind str) (message str)))
+
+  (fn error-response (params (status int) (message str)) (returns Response) (effects)
+    (on-err fail (return (json-response 500 "{\"error\":\"Falha de serializacao\"}")))
+    (body
+      (let payload str (try (json-encode (new ApiError message))))
+      (return (json-response status payload))))
+
+  (fn event-json (params (kind str) (message str)) (returns str) (effects)
+    (on-err message (return "{\"kind\":\"error\",\"message\":\"serialization failure\"}"))
+    (body
+      (let payload str (try (json-encode (new WsEvent kind message))))
+      (return payload)))
+
+  (fn notify-board-changed (params (action str)) (returns void) (effects net)
+    (on-err err (return))
+    (body
+      (try (ws-broadcast "kanban" (event-json "sync" action)))
+      (return)))
+
+  (fn get-db (params) (returns (result DBConnection str)) (effects db)
+    (body
+      (let db DBConnection (try (db-connect "sqlite" "kanban.db")))
+      (return (ok db))))
+
+  (fn init-db (params) (returns (result bool str)) (effects db)
+    (body
+      (let db DBConnection (try (get-db)))
+      (try (db-exec db "CREATE TABLE IF NOT EXISTS cards (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, column TEXT NOT NULL, author TEXT NOT NULL)"))
+      (let existing (list Card) (try (db-query db "SELECT id, title, column, author FROM cards LIMIT 1" Card)))
+      (if (eq (list-len existing) 0)
+        (then
+          (try (db-exec db "INSERT INTO cards (title, column, author) VALUES (?, ?, ?)" "Implementar SQLite Nativo" "done" "Gabriel"))
+          (try (db-exec db "INSERT INTO cards (title, column, author) VALUES (?, ?, ?)" "Sincronização em Tempo Real" "in_progress" "LIAF Agent"))
+          (try (db-exec db "INSERT INTO cards (title, column, author) VALUES (?, ?, ?)" "Persistência em Banco Relacional" "todo" "Equipe"))))
+      (return (ok true))))
+
+  (fn load-cards (params) (returns (result (list Card) str)) (effects db)
+    (body
+      (let db DBConnection (try (get-db)))
+      (let cards (list Card) (try (db-query db "SELECT id, title, column, author FROM cards ORDER BY id" Card)))
+      (return (ok cards))))
+
+  ;; Rotas HTTP REST
+  (route GET "/api/board" (params) (returns Response) (effects db)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (let cards (list Card) (try (load-cards)))
+      (let payload str (try (json-encode (new BoardResponse cards))))
+      (return (json-response 200 payload))))
+
+  (route POST "/api/cards" (params (input CreateCardInput)) (returns Response) (effects db net)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (if (str-eq (field input title) "")
+        (then (return (error-response 400 "Título obrigatório"))))
+      (let col str (field input column))
+      (if (str-eq col "") (then (set col "todo")))
+      (let author str (field input author))
+      (if (str-eq author "") (then (set author "Anônimo")))
+      (let db DBConnection (try (get-db)))
+      (try (db-exec db "INSERT INTO cards (title, column, author) VALUES (?, ?, ?)" (field input title) col author))
+      (do (notify-board-changed (concat "Card criado: " (field input title))))
+      (return (json-response 201 "{\"ok\":true}"))))
+
+  (route PUT "/api/cards/{id}/move" (params (id int) (input MoveCardInput)) (returns Response) (effects db net)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (if (lte id 0)
+        (then (return (error-response 400 "ID inválido"))))
+      (let db DBConnection (try (get-db)))
+      (try (db-exec db "UPDATE cards SET column = ? WHERE id = ?" (field input column) id))
+      (do (notify-board-changed (concat "Card movido para " (field input column))))
+      (return (json-response 200 "{\"ok\":true}"))))
+
+  (route DELETE "/api/cards/{id}" (params (id int)) (returns Response) (effects db net)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (if (lte id 0)
+        (then (return (error-response 400 "ID inválido"))))
+      (let db DBConnection (try (get-db)))
+      (try (db-exec db "DELETE FROM cards WHERE id = ?" id))
+      (do (notify-board-changed "Card excluído"))
+      (return (json-response 200 "{\"ok\":true}"))))
+
+  (route GET "/api/collaborators" (params) (returns Response) (effects net)
+    (body
+      (return (json-response 200
+        (concat "{\"online\":" (str-from-int (ws-topic-size "kanban")) "}")))))
+
+  ;; Rota WebSocket em tempo real para sincronização colaborativa
+  (ws-route "/ws/board" (params (conn WSConn)) (effects io net)
+    (on-err message (println (concat "kanban ws err: " message)))
+    (on-open
+      (ws-join conn "kanban")
+      (println "Colaborador entrou no Kanban")
+      (try (ws-broadcast "kanban" (event-json "presence" "Um novo colaborador conectou-se"))))
+    (on-message text
+      (try (ws-broadcast "kanban" (event-json "sync" text))))
+    (on-close
+      (println "Colaborador saiu do Kanban")
+      (try (ws-broadcast "kanban" (event-json "presence" "Um colaborador desconectou-se")))))
+
+  (fn main (params) (returns void) (effects db fs io net)
+    (body
+      (match (init-db)
+        (ok inited (println "Banco SQLite inicializado com sucesso"))
+        (err err (println (concat "Falha ao inicializar SQLite: " err))))
+      (let port str "7070")
+      (match (list-get (args) 0)
+        (ok p (set port p))
+        (err ignored (set port "7070")))
+      (println (concat "Kanban Real-Time LIAF com SQLite iniciado: http://localhost:" port))
+      (match (serve-hybrid "./public" port)
+        (ok stopped (println "Servidor parado"))
+        (err message (println message)))))
+)

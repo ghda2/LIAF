@@ -47,6 +47,15 @@ const (
 	ON_ERR    TokenType = "on-err"
 	ROUTE     TokenType = "route"
 
+	// WebSocket (issue #016)
+	WS_ROUTE   TokenType = "ws-route"
+	ON_OPEN    TokenType = "on-open"
+	ON_MESSAGE TokenType = "on-message"
+	ON_CLOSE   TokenType = "on-close"
+
+	// Banco de dados (issue #015)
+	DB_TRANSACTION TokenType = "db-transaction"
+
 	// Expressions
 	CALL TokenType = "call"
 	TRY  TokenType = "try"
@@ -71,6 +80,8 @@ var keywords = map[string]TokenType{
 	"while": WHILE, "for-range": FOR_RANGE, "for-each": FOR_EACH,
 	"break": BREAK, "continue": CONTINUE, "match": MATCH,
 	"on-err": ON_ERR, "route": ROUTE, "try": TRY,
+	"ws-route": WS_ROUTE, "on-open": ON_OPEN, "on-message": ON_MESSAGE, "on-close": ON_CLOSE,
+	"db-transaction": DB_TRANSACTION,
 	"module":  MODULE,
 	"import":  IMPORT,
 	"struct":  STRUCT,

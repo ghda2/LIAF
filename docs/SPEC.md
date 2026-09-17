@@ -1,4 +1,4 @@
-# LIAF — Especificação para agentes de IA (núcleo v0.2, sintaxe corrente v0.3)
+# LIAF — Especificação para agentes de IA (núcleo v0.2, sintaxe corrente v0.4)
 
 **Status:** especificação de design parcialmente implementada; consulte o [guia de agentes](AI_GUIDE.md) para o contrato executável atual
 **Compatibilidade:** incompatível com a sintaxe LIAF v0.1  
@@ -843,3 +843,124 @@ A forma canônica da v0.3 usa chamadas diretas, `try`/`on-err` onde o erro só �
 | `E_UNHANDLED_RESULT` | `try` sem `(on-err ...)` e sem retorno `(result ...)` |
 | `E_ROUTE_PARAM` | `{nome}` no caminho sem parâmetro correspondente, ou com tipo que não é `int` nem `str` |
 | `E_UNUSED_EFFECT` | efeito declarado que o corpo nunca consome |
+
+## 19. Adições da v0.4
+
+A v0.4 acrescenta acesso a bancos de dados externos (issue #015) e conexões WebSocket bidirecionais (issue #016). Todas as formas da v0.3 continuam válidas.
+
+Os dois protocolos são implementados sobre TCP dentro do próprio compilador: o binário gerado não carrega driver externo nem biblioteca de WebSocket. É a mesma razão da issue #010 — um programa LIAF é um executável único.
+
+### 19.1 O efeito `db`
+
+`db` é o sexto efeito, ao lado de `io`, `net`, `fs`, `clock` e `spawn`. Toda operação de banco o exige. É distinto de `net` de propósito: uma assinatura que diz `db` promete mais do que tráfego de rede — promete estado externo compartilhado, que sobrevive ao processo e é visível a outros.
+
+### 19.2 Tipos opacos
+
+`DBConnection` e `WSConn` são tipos reconhecidos sem `(struct ...)` correspondente, como `Request` e `Response`. Não têm campos: `(field conn host)` é `E_UNKNOWN_FIELD`. O programa recebe o valor de um builtin, passa adiante e nunca o inspeciona.
+
+### 19.3 Conexão e consulta
+
+```
+(db-connect "postgres" dsn)              -> (result DBConnection str)
+(db-close conn)                          -> (result void str)
+(db-query conn "SQL" TipoLinha arg...)   -> (result (list TipoLinha) str)
+(db-exec conn "SQL" arg...)              -> (result int str)
+(redis-get conn chave)                   -> (result str str)
+(redis-set conn chave valor ttl)         -> (result void str)
+```
+
+Drivers: `"postgres"`, `"mysql"` e `"redis"`. O nome do driver é um literal, conferido em tempo de compilação — `"postgresql"` e `"pg"` são `E_UNKNOWN_DRIVER`.
+
+DSN na forma URL (`postgres://usuario:senha@host:5432/banco?sslmode=require`). O PostgreSQL também aceita a forma de palavras-chave (`host=... user=... dbname=...`). O parâmetro `pool_max=N` limita as conexões simultâneas do pool; o padrão é 16.
+
+`db-exec` devolve o número de linhas afetadas. `redis-get` trata chave ausente como erro: `(result str str)` não tem um terceiro caso para representar ausência.
+
+Os parâmetros são posicionais e seguem o tipo de linha (`db-query`) ou o SQL (`db-exec`). Cada um tem de ser `int`, `float`, `str` ou `bool`. A issue #015 propunha agrupá-los numa lista — `(db-query conn sql (list id) User)` — mas listas na LIAF são homogêneas, e uma consulta com `id` inteiro e `email` texto não caberia em `(list T)` nenhum. Argumentos variádicos preservam a intenção sem inventar um tipo de tupla.
+
+### 19.4 A regra contra injeção de SQL
+
+**O primeiro argumento de texto de `db-query` e `db-exec` tem de ser um literal de string escrito no fonte.** Qualquer outra expressão — uma variável, um `(concat ...)` — é `E_SQL_INTERPOLATION`.
+
+Consequência: nenhum valor de tempo de execução consegue virar sintaxe SQL, porque o único caminho até o banco é a lista de parâmetros. Os drivers enviam os argumentos fora do texto do comando (mensagem `Bind` no PostgreSQL, `COM_STMT_EXECUTE` no MySQL), e não por escape.
+
+A regra é deliberadamente rígida. A forma insegura é a mais curta, a mais natural de escrever e a que mais aparece em exemplos na internet; um modelo gerando código a escolhe por default. Não existe escapatória: montar SQL dinamicamente — um `ORDER BY` variável, por exemplo — não é expressável.
+
+O checker também confere a contagem de marcadores contra a de argumentos e emite `E_SQL_PARAM_COUNT` quando divergem, ou quando `$1` e `?` aparecem misturados. Marcadores dentro de literais, de identificadores entre aspas e de comentários não contam. A contagem é abandonada quando o SQL contém `?|`, `?&` ou `??`, que são operadores de JSONB do PostgreSQL e não marcadores.
+
+### 19.5 Conversão de linha em struct
+
+`db-query` exige um tipo de linha que seja struct declarada — um escalar não tem nome de campo com que casar a coluna. Cada coluna selecionada alimenta o campo de mesmo nome; uma coluna `snake_case` também alimenta o campo `kebab-case` correspondente, que é como a LIAF escreve nomes compostos. Colunas `NULL` viram o zero do campo. Uma coluna que não cabe no tipo do campo produz erro em tempo de execução, com a indicação do que não coube.
+
+### 19.6 Transações
+
+```
+(db-transaction conn
+  instrução...)
+```
+
+`conn` é o nome de uma variável `DBConnection`. **Dentro do bloco esse mesmo nome passa a designar a transação**, então as consultas do corpo não mudam de forma — e não existe a forma errada de usar o pool original por engano no meio de uma transação.
+
+O bloco confirma ao chegar ao fim e desfaz em qualquer saída antecipada, inclusive num `(try ...)` que falhou no meio. Como abrir e confirmar podem falhar, `db-transaction` exige um destino para o erro: `(on-err ...)` ou uma função que retorne `(result ...)`. Sem isso, `E_UNHANDLED_RESULT`.
+
+Um `return` dentro do bloco conta como retorno da função: ao contrário de um laço, o corpo da transação sempre executa. Transações aninhadas não são suportadas.
+
+### 19.7 Rotas WebSocket
+
+```
+(ws-route "/caminho/{param}" (params ...) (effects ...) [(on-err var ...)]
+  [(on-open instrução...)]
+  (on-message var instrução...)
+  [(on-close instrução...)])
+```
+
+`ws-route` é uma declaração de topo, irmã de `fn` e `route`. Não tem `(returns ...)` nem `(body ...)`: uma conexão bidirecional não termina numa resposta, e os três blocos são o corpo — cada um disparado por um momento diferente da vida da conexão. A ordem dos blocos é fixa; `on-open` e `on-close` são opcionais, `on-message` não é.
+
+Regras de parâmetro (`E_WS_PARAM` quando violadas):
+
+- Exatamente um parâmetro do tipo `WSConn`, que recebe a conexão aberta.
+- Todos os demais parâmetros correspondem a um `{nome}` no caminho e são `int` ou `str`. Não há corpo JSON num handshake de WebSocket, então um parâmetro que não venha do caminho não teria de onde ser preenchido.
+
+`(effects ...)` tem de incluir `net`: manter a conexão aberta já é tráfego de rede. Por isso `net` conta como usado numa `ws-route` mesmo que nenhum builtin `ws-*` seja chamado.
+
+Os três blocos devolvem `void`, então `try` dentro deles exige `(on-err ...)` — a mesma regra de uma função `void`. Cada bloco tem escopo próprio: a variável de `on-message` não existe em `on-close`.
+
+`on-close` roda tanto no fechamento limpo quanto na queda da conexão. Um handshake que não é WebSocket válido recebe `400` e a rota não executa.
+
+O handshake é sempre `GET`, então rotas WebSocket convivem com rotas HTTP no mesmo `serve-hybrid` e na mesma porta.
+
+### 19.8 Primitivas de conexão e tópicos
+
+```
+(ws-send conn mensagem)        -> (result void str)
+(ws-send-json conn valor)      -> (result void str)
+(ws-close conn código motivo)  -> (result void str)
+(ws-join conn tópico)          -> void
+(ws-leave conn tópico)         -> void
+(ws-broadcast tópico mensagem) -> (result int str)
+(ws-topic-size tópico)         -> int
+```
+
+`ws-join` e `ws-leave` não devolvem `result`: são operações locais sobre um mapa em memória e não têm caminho de falha. Envolvê-las em `result` obrigaria a um `try` que nunca desvia.
+
+A inscrição num tópico é explícita — uma sala nunca é inferida do caminho. Sem `ws-join`, a conexão não recebe broadcast. Fechar a conexão desinscreve de todos os tópicos automaticamente, então `on-close` não precisa chamar `ws-leave`.
+
+`ws-broadcast` devolve quantos clientes receberam. O pub/sub é local ao processo: atende o caso descrito na issue #016, mas não substitui um broker quando há mais de um nó, porque cada processo tem o seu mapa.
+
+Limites do transporte: mensagem de até 1 MiB (o mesmo teto do corpo HTTP), ping a cada 30 s, conexão ociosa derrubada em 90 s. O servidor exige máscara em todo frame do cliente, como manda a RFC 6455. Extensões negociadas (`permessage-deflate`) não são suportadas.
+
+### 19.9 Limitações conhecidas
+
+- O backend C não implementa nada desta seção. `ws-route` é erro explícito; os builtins de banco caem em "unsupported operation".
+- `db-query` materializa o resultado inteiro em memória. Não há cursor: expor um exigiria um tipo com ciclo de vida próprio na linguagem.
+- `permessage-deflate`, `SCRAM-SHA-256-PLUS` e o papel de cliente WebSocket não estão implementados.
+- No PostgreSQL, `sslmode=prefer` e `allow` cifram o tráfego mas não verificam o certificado do servidor, como no libpq. Use `verify-full` quando a verificação importar.
+- Um `(db-transaction ...)` dentro de um laço acumula um `defer` por iteração, liberado só no fim da função. Todos são no-op depois do commit, mas um laço muito longo segura essas entradas.
+
+### 19.10 Códigos de diagnóstico introduzidos
+
+| Código | Significado |
+|---|---|
+| `E_SQL_INTERPOLATION` | SQL montado em tempo de execução em vez de literal |
+| `E_SQL_PARAM_COUNT` | número de marcadores diferente do número de argumentos, ou `$1` e `?` misturados |
+| `E_UNKNOWN_DRIVER` | driver que não é `postgres`, `mysql` nem `redis`, ou nome não literal |
+| `E_WS_PARAM` | `ws-route` sem exatamente um `WSConn`, ou com parâmetro que não vem do caminho |

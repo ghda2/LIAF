@@ -14,6 +14,21 @@ type Info struct {
 	Functions map[string]*ast.FuncDecl
 	Structs   map[string]*ast.StructDecl
 	Routes    []*ast.RouteDecl
+	WSRoutes  []*ast.WSRouteDecl
+}
+
+// knownEffects e a lista unica de efeitos declaraveis. `db` entrou com a
+// issue #015: e distinto de `net` porque uma assinatura que diz `db` promete
+// mais do que trafego de rede — promete estado externo compartilhado.
+const knownEffects = "|io|net|fs|clock|spawn|db|"
+
+func validEffect(e string) bool { return strings.Contains(knownEffects, "|"+e+"|") }
+
+// opaqueTypes sao os nomes de tipo que a linguagem reconhece sem que exista
+// uma (struct ...) correspondente. Sao opacos de proposito: o programa recebe
+// o valor de um builtin, passa adiante e nunca le campo nenhum.
+var opaqueTypes = map[string]bool{
+	"Request": true, "Response": true, "DBConnection": true, "WSConn": true,
 }
 type binding struct {
 	typ     ast.Type
@@ -62,6 +77,8 @@ func Check(mod *ast.Module, file string) (*Info, []diagnostic.Diagnostic) {
 			c.Info.Structs[id] = v
 		case *ast.RouteDecl:
 			c.Info.Routes = append(c.Info.Routes, v)
+		case *ast.WSRouteDecl:
+			c.Info.WSRoutes = append(c.Info.WSRoutes, v)
 		case *ast.ImportDecl:
 			c.error(v, "E_UNRESOLVED_IMPORT", "Imports must be resolved before checking")
 		}
@@ -102,7 +119,7 @@ func Check(mod *ast.Module, file string) (*Info, []diagnostic.Diagnostic) {
 		}
 		effects := map[string]bool{}
 		for _, e := range f.Effects {
-			if !strings.Contains("|io|net|fs|clock|spawn|", "|"+e+"|") {
+			if !validEffect(e) {
 				c.error(f, "E_UNKNOWN_EFFECT", e)
 			}
 			if effects[e] {
@@ -152,7 +169,7 @@ func Check(mod *ast.Module, file string) (*Info, []diagnostic.Diagnostic) {
 			c.define(p.Name, p.Type, r, false)
 		}
 		for _, e := range r.Effects {
-			if !strings.Contains("|io|net|fs|clock|spawn|", "|"+e+"|") {
+			if !validEffect(e) {
 				c.error(r, "E_UNKNOWN_EFFECT", e)
 			}
 		}
@@ -190,6 +207,11 @@ func Check(mod *ast.Module, file string) (*Info, []diagnostic.Diagnostic) {
 		c.unusedEffects(r, r.Effects, fmt.Sprintf("route %s %s", r.Method, r.Path))
 		c.pop()
 	}
+	for _, d := range mod.Decls {
+		if w, ok := d.(*ast.WSRouteDecl); ok {
+			c.wsRoute(w)
+		}
+	}
 	if c.Info.Functions["main"] == nil {
 		c.error(mod, "E_MISSING_MAIN", "Module requires main")
 	}
@@ -209,7 +231,7 @@ func (c *Checker) validType(t ast.Type, allowVoid bool) {
 			c.error(t, "E_INVALID_TYPE", "void is only a return type")
 		}
 	case *ast.NamedType:
-		if c.Info.Structs[v.Name] == nil && v.Name != "Request" && v.Name != "Response" {
+		if c.Info.Structs[v.Name] == nil && !opaqueTypes[v.Name] {
 			c.error(t, "E_UNKNOWN_TYPE", v.Name)
 		}
 	case *ast.AppliedType:
@@ -417,6 +439,8 @@ func (c *Checker) statements(body []ast.Stmt) {
 			} else {
 				merge(afterOK, c.pending())
 			}
+		case *ast.DBTransactionStmt:
+			c.dbTransaction(s)
 		case *ast.SpawnStmt:
 			c.effect(s, "spawn")
 			c.require(s, c.expr(s.Call, nil), primitive("void"))
@@ -442,6 +466,12 @@ func returns(body []ast.Stmt) bool {
 			}
 		case *ast.MatchStmt:
 			if returns(s.OK) && returns(s.Err) {
+				return true
+			}
+		case *ast.DBTransactionStmt:
+			// Ao contrario de um loop, o corpo da transacao sempre executa,
+			// entao um return la dentro satisfaz o retorno da funcao.
+			if returns(s.Body) {
 				return true
 			}
 		}
@@ -629,6 +659,15 @@ func (c *Checker) call(v *ast.CallExpr, want ast.Type) ast.Type {
 			}
 		}
 		return primitive("void")
+	}
+	// Os builtins de banco e de WebSocket resolvem os proprios argumentos:
+	// db-query recebe um nome de tipo, que nao pode passar pela avaliacao de
+	// expressao abaixo sem virar E_UNDEFINED_SYMBOL.
+	if t, ok := c.dbCall(v, n); ok {
+		return t
+	}
+	if t, ok := c.wsCall(v, n); ok {
+		return t
 	}
 	args := make([]ast.Type, len(v.Args))
 	for i, a := range v.Args {

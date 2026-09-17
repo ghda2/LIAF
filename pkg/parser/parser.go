@@ -142,8 +142,10 @@ func (p *Parser) parseTopLevel() ast.TopLevel {
 		return p.parseFunc()
 	case token.ROUTE:
 		return p.parseRoute()
+	case token.WS_ROUTE:
+		return p.parseWSRoute()
 	default:
-		p.addError(fmt.Sprintf("Declaração inválida: esperado 'import', 'struct', 'fn' ou 'route', mas obteve %q", p.curToken.Literal), "E_INVALID_TOPLEVEL")
+		p.addError(fmt.Sprintf("Declaração inválida: esperado 'import', 'struct', 'fn', 'route' ou 'ws-route', mas obteve %q", p.curToken.Literal), "E_INVALID_TOPLEVEL")
 		return nil
 	}
 }
@@ -451,6 +453,8 @@ func (p *Parser) parseStatement() ast.Stmt {
 		return &ast.LoopControl{Kind: kind, Line: line, Col: col}
 	case token.MATCH:
 		return p.parseMatch(line, col)
+	case token.DB_TRANSACTION:
+		return p.parseDBTransaction(line, col)
 	case token.LET:
 		return p.parseLetStmt(line, col)
 	case token.SET:

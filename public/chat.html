@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chat LIAF</title>
+<style>
+  :root { color-scheme: light dark; --bg:#0f1115; --fg:#e8eaed; --muted:#9aa4b2; --accent:#5b9cf8; --card:#171a21; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:16px; font:15px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+         background:var(--bg); color:var(--fg); }
+  main { max-width: 680px; margin: 0 auto; }
+  h1 { font-size:1.25rem; margin:0 0 4px; }
+  p.sub { margin:0 0 16px; color:var(--muted); font-size:.9rem; }
+  .row { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+  input, button { font:inherit; padding:8px 12px; border-radius:8px; border:1px solid #2a2f3a;
+                  background:var(--card); color:var(--fg); }
+  input { flex:1 1 160px; min-width:0; }
+  button { background:var(--accent); border-color:var(--accent); color:#04101f; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  #log { background:var(--card); border:1px solid #2a2f3a; border-radius:10px; padding:12px;
+         height:52vh; overflow:auto; margin-bottom:12px; }
+  .ev { padding:3px 0; }
+  .ev.join, .ev.leave { color:var(--muted); font-style:italic; }
+  .ev.error { color:#f2777a; }
+  .status { font-size:.85rem; color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Chat LIAF</h1>
+  <p class="sub">Servido por <code>examples/chat_ws.liaf</code>. Abra esta página em duas abas com a mesma sala.</p>
+
+  <div class="row">
+    <input id="room" value="geral" aria-label="Sala">
+    <button id="connect">Conectar</button>
+    <span class="status" id="status">desconectado</span>
+  </div>
+
+  <div id="log" role="log" aria-live="polite"></div>
+
+  <div class="row">
+    <input id="text" placeholder="Escreva e pressione Enter" aria-label="Mensagem" disabled>
+    <button id="send" disabled>Enviar</button>
+  </div>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  let socket = null;
+
+  function append(kind, text) {
+    const line = document.createElement("div");
+    line.className = "ev " + kind;
+    line.textContent = text;
+    $("log").appendChild(line);
+    $("log").scrollTop = $("log").scrollHeight;
+  }
+
+  function setConnected(on) {
+    $("text").disabled = !on;
+    $("send").disabled = !on;
+    $("connect").textContent = on ? "Desconectar" : "Conectar";
+    $("status").textContent = on ? "conectado" : "desconectado";
+  }
+
+  function connect() {
+    const room = encodeURIComponent($("room").value.trim() || "geral");
+    const scheme = location.protocol === "https:" ? "wss" : "ws";
+    socket = new WebSocket(`${scheme}://${location.host}/ws/chat/${room}`);
+
+    socket.onopen = () => setConnected(true);
+    socket.onclose = () => { setConnected(false); socket = null; append("leave", "— conexão encerrada —"); };
+    socket.onerror = () => append("error", "falha de conexão");
+    socket.onmessage = (event) => {
+      // O servidor envia o struct ChatEvent serializado pelo json-encode.
+      try {
+        const data = JSON.parse(event.data);
+        append(data.kind, data.kind === "message" ? data.text : `— ${data.text} —`);
+      } catch {
+        append("error", event.data);
+      }
+    };
+  }
+
+  $("connect").onclick = () => socket ? socket.close() : connect();
+  $("send").onclick = () => {
+    const value = $("text").value.trim();
+    if (value && socket) { socket.send(value); $("text").value = ""; }
+  };
+  $("text").onkeydown = (e) => { if (e.key === "Enter") $("send").click(); };
+</script>
+</body>
+</html>

@@ -1,0 +1,169 @@
+;; API de itens/tarefas em LIAF v0.3 para tw.webdrop.bio
+(module tw-api
+  (struct Task (fields (id int) (title str) (done bool)))
+  (struct State (fields (next-id int) (tasks (list Task))))
+  (struct CreateInput (fields (title str)))
+  (struct UpdateInput (fields (title str) (done bool)))
+  (struct ApiError (fields (error str)))
+  (struct ChatEvent (fields (kind str) (room str) (text str)))
+
+  (fn event-json (params (kind str) (room str) (text str)) (returns str) (effects)
+    (on-err message (return "{\"kind\":\"error\",\"text\":\"serialization failure\"}"))
+    (body
+      (let payload str (try (json-encode (new ChatEvent kind room text))))
+      (return payload)))
+
+  (fn error-response (params (status int) (message str)) (returns Response) (effects)
+    (on-err fail (return (json-response 500 "{\"error\":\"Serialization failure\"}")))
+    (body
+      (let payload str (try (json-encode (new ApiError message))))
+      (return (json-response status payload))))
+
+  (fn load-state (params) (returns (result State str)) (effects fs)
+    (body
+      (if (not (fs-exists "task-api-data.json"))
+        (then (return (ok (new State 1 (make-list Task))))))
+      (let text str (try (fs-read-file "task-api-data.json")))
+      (let state State (try (json-decode text State)))
+      (return (ok state))))
+
+  (fn save-state (params (state State)) (returns (result bool str)) (effects fs)
+    (body
+      (let text str (try (json-encode state)))
+      (try (fs-write-atomic "task-api-data.json" text))
+      (return (ok true))))
+
+  (fn tasks-response (params (state State)) (returns Response) (effects)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (let payload str (try (json-encode (field state tasks))))
+      (return (json-response 200 payload))))
+
+  (fn task-response (params (task Task) (status int)) (returns Response) (effects)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (let payload str (try (json-encode task)))
+      (return (json-response status payload))))
+
+  (fn find-task (params (state State) (id int)) (returns Response) (effects)
+    (body
+      (for-each task (field state tasks)
+        (if (eq (field task id) id)
+          (then (return (task-response task 200)))))
+      (return (error-response 404 "Task not found"))))
+
+  (fn create-task (params (state State) (input CreateInput)) (returns Response) (effects fs)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (let id int (field state next-id))
+      (if (lte id 0)
+        (then (return (error-response 500 "ID counter invalid"))))
+      (let task Task (new Task id (field input title) false))
+      (let tasks (list Task) (field state tasks))
+      (do (list-push tasks task))
+      (try (save-state (new State (add id 1) tasks)))
+      (return (task-response task 201))))
+
+  (fn update-task (params (state State) (id int) (input UpdateInput)) (returns Response) (effects fs)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (let tasks (list Task) (make-list Task))
+      (let replacement Task (new Task id (field input title) (field input done)))
+      (let found bool false)
+      (for-each task (field state tasks)
+        (if (eq (field task id) id)
+          (then
+            (do (list-push tasks replacement))
+            (set found true))
+          (else (do (list-push tasks task)))))
+      (if (not found)
+        (then (return (error-response 404 "Task not found"))))
+      (try (save-state (new State (field state next-id) tasks)))
+      (return (task-response replacement 200))))
+
+  (fn delete-task (params (state State) (id int)) (returns Response) (effects fs)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (let tasks (list Task) (make-list Task))
+      (let found bool false)
+      (for-each task (field state tasks)
+        (if (eq (field task id) id)
+          (then (set found true))
+          (else (do (list-push tasks task)))))
+      (if (not found)
+        (then (return (error-response 404 "Task not found"))))
+      (try (save-state (new State (field state next-id) tasks)))
+      (return (json-response 200 "{\"deleted\":true}"))))
+
+  ;; Rotas declarativas HTTP LIAF v0.3
+  (route GET "/health" (params) (returns Response) (effects)
+    (body (return (json-response 200 "{\"status\":\"ok\",\"engine\":\"LIAF v0.3\"}"))))
+
+  (route GET "/tasks" (params) (returns Response) (effects fs)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (let state State (try (load-state)))
+      (return (tasks-response state))))
+
+  (route POST "/tasks" (params (input CreateInput)) (returns Response) (effects fs)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (if (str-eq (field input title) "")
+        (then (return (error-response 400 "A nonempty title is required"))))
+      (let state State (try (load-state)))
+      (return (create-task state input))))
+
+  (route GET "/tasks/{id}" (params (id int)) (returns Response) (effects fs)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (if (lte id 0)
+        (then (return (error-response 400 "ID must be positive"))))
+      (let state State (try (load-state)))
+      (return (find-task state id))))
+
+  (route PUT "/tasks/{id}" (params (id int) (input UpdateInput)) (returns Response) (effects fs)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (if (lte id 0)
+        (then (return (error-response 400 "ID must be positive"))))
+      (if (str-eq (field input title) "")
+        (then (return (error-response 400 "A nonempty title is required"))))
+      (let state State (try (load-state)))
+      (return (update-task state id input))))
+
+  (route DELETE "/tasks/{id}" (params (id int)) (returns Response) (effects fs)
+    (on-err message (return (error-response 500 message)))
+    (body
+      (if (lte id 0)
+        (then (return (error-response 400 "ID must be positive"))))
+      (let state State (try (load-state)))
+      (return (delete-task state id))))
+
+  (ws-route "/ws/chat/{room}" (params (room str) (conn WSConn)) (effects io net)
+    (on-err message (println (concat "chat: " message)))
+    (on-open
+      (ws-join conn room)
+      (println (concat "ws conectado na sala " room))
+      (try (ws-broadcast room (event-json "join" room "novo cliente conectado"))))
+    (on-message text
+      (try (ws-broadcast room (event-json "message" room text))))
+    (on-close
+      (println (concat "ws desconectado da sala " room))
+      (try (ws-broadcast room (event-json "leave" room "cliente desconectado")))))
+
+  (route GET "/rooms/{room}/size" (params (room str)) (returns Response) (effects net)
+    (body
+      (return (json-response 200
+        (concat "{\"room\":\"" room "\",\"clients\":" (str-from-int (ws-topic-size room)) "}")))))
+
+  (fn main (params) (returns void) (effects fs io net)
+    (body
+      (let port-str str "7070")
+      (match (list-get (args) 0)
+        (ok p (set port-str p))
+        (err ignored (set port-str "7070")))
+      (do (println (concat "LIAF v0.3 Server: http://localhost:" port-str)))
+      (match (serve-hybrid "./public" port-str)
+        (ok stopped (do (println "Server stopped")))
+        (err message (do (println message))))))
+)

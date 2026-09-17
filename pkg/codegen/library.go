@@ -90,6 +90,40 @@ func (g *Generator) libraryCall(c *ast.CallExpr) (string, bool) {
 		return "(" + args[0] + " == " + args[1] + ")", true
 	case "args":
 		return call("rt.Args")
+
+	// --- Banco de dados (issue #015) ---
+	// Em db-query e db-exec o SQL e os parametros seguem separados ate o
+	// driver; nada aqui costura valor dentro do texto do comando.
+	case "db-connect":
+		return call("rt.DBConnect")
+	case "db-close":
+		return call("rt.DBClose")
+	case "db-query":
+		// (db-query conn SQL Tipo p...) -> rt.DBQuery[Tipo](conn, SQL, p...)
+		params := append([]string{args[0], args[1]}, args[3:]...)
+		return "rt.DBQuery[" + typeName(2) + "](" + strings.Join(params, ", ") + ")", true
+	case "db-exec":
+		return call("rt.DBExec")
+	case "redis-get":
+		return call("rt.RedisGet")
+	case "redis-set":
+		return call("rt.RedisSet")
+
+	// --- WebSocket (issue #016) ---
+	case "ws-send":
+		return call("rt.WSSend")
+	case "ws-send-json":
+		return call("rt.WSSendJSON")
+	case "ws-close":
+		return call("rt.WSCloseConn")
+	case "ws-broadcast":
+		return call("rt.WSBroadcast")
+	case "ws-join":
+		return call("rt.WSJoin")
+	case "ws-leave":
+		return call("rt.WSLeave")
+	case "ws-topic-size":
+		return call("rt.WSTopicSize")
 	}
 	return "", false
 }

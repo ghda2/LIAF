@@ -1,0 +1,8 @@
+;; issue: #024
+;; status: pending
+;; out: 1
+;; out: vazio
+(let a (option int) (some 1))
+(let b (option int) (none int))
+(match a (some v (println v)) (none (println "vazio")))
+(match b (some v (println v)) (none (println "vazio")))

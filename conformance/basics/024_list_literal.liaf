@@ -1,0 +1,5 @@
+;; issue: #024
+;; status: pending
+;; out: 3
+(let l (list int) (list 1 2 3))
+(println (list-len l))

@@ -1,0 +1,12 @@
+;; issue: #023
+;; status: pending
+;; out: true
+;; out: true
+;; out: true
+;; out: 1
+;; out: -1
+(println (str-contains "abc" "b"))
+(println (str-starts-with "abc" "ab"))
+(println (str-ends-with "abc" "bc"))
+(println (str-index "abc" "b"))
+(println (str-index "abc" "z"))

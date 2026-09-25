@@ -1,0 +1,7 @@
+;; issue: #025
+;; status: pending
+;; out: 1
+;; out: par
+(let x int (if true (then 1) (else 2)))
+(println x)
+(println (if (eq (div 4 2) 2) (then "par") (else "impar")))

@@ -1,0 +1,8 @@
+;; issue: #020
+;; status: pending
+;; out: 1
+;; out: 2
+;; out: 1.5
+(println (min 1 2))
+(println (max 1 2))
+(println (min 1.5 2.5))

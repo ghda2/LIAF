@@ -1,0 +1,8 @@
+;; issue: #020
+;; status: pending
+;; out: 1000
+;; out: 255
+;; out: 0.001
+(println 1e3)
+(println 0xff)
+(println 1e-3)

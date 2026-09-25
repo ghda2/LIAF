@@ -1,0 +1,8 @@
+;; issue: #020
+;; status: pending
+;; out: 1024
+;; out: 1.4142135623730951
+;; out: 1.4142135623730951
+(println (pow 2 10))
+(println (sqrt 2.0))
+(println (pow 2.0 0.5))

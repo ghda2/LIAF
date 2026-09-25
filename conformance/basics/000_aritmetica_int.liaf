@@ -1,0 +1,12 @@
+;; issue: base
+;; status: done
+;; out: 5
+;; out: -1
+;; out: 6
+;; out: 3
+;; out: -3
+(println (add 2 3))
+(println (sub 2 3))
+(println (mul 2 3))
+(println (div 7 2))
+(println (div -7 2))

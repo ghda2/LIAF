@@ -1,0 +1,5 @@
+;; issue: #026
+;; status: pending
+;; effects: io clock
+;; out: true
+(println (gt (now-ms) 0))

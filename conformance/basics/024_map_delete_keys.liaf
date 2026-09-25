@@ -1,0 +1,13 @@
+;; issue: #024
+;; status: pending
+;; out: a
+;; out: c
+;; out: 2
+(let m (map str int) (make-map str int))
+(map-set m "c" 3)
+(map-set m "a" 1)
+(map-set m "b" 2)
+(map-delete m "b")
+(for-each k (map-keys m)
+  (println k))
+(println (map-len m))

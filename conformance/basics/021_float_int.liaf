@@ -1,0 +1,8 @@
+;; issue: #021
+;; status: pending
+;; out: 2
+;; out: -2
+;; out: 2.5
+(println (int-from-float 2.7))
+(println (int-from-float -2.7))
+(println (str-from-float 2.5))

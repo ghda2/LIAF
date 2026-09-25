@@ -1,0 +1,8 @@
+;; issue: #020
+;; status: pending
+;; out: -5
+;; out: 3
+;; out: 2.5
+(println (neg 5))
+(println (abs -3))
+(println (abs -2.5))

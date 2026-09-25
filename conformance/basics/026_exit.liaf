@@ -1,0 +1,6 @@
+;; issue: #026
+;; status: pending
+;; exit: 3
+;; out: antes
+(println "antes")
+(exit 3)

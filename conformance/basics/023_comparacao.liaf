@@ -1,0 +1,6 @@
+;; issue: #023
+;; status: pending
+;; out: true
+;; out: false
+(println (lt "abacate" "banana"))
+(println (gt "a" "b"))

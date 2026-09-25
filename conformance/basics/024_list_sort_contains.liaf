@@ -1,0 +1,13 @@
+;; issue: #024
+;; status: pending
+;; out: 1
+;; out: 3
+;; out: true
+(let l (list int) (make-list int))
+(list-push l 3)
+(list-push l 1)
+(list-push l 2)
+(list-sort l)
+(match (list-get l 0) (ok v (println v)) (err e (println e)))
+(match (list-get l 2) (ok v (println v)) (err e (println e)))
+(println (list-contains l 2))

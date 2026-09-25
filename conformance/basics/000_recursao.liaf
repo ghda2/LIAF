@@ -1,0 +1,11 @@
+;; issue: base
+;; status: done
+;; out: 2432902008176640000
+(module conformance
+  (fn fat (params (n int)) (returns int) (effects)
+    (body
+      (if (lte n 1)
+        (then (return 1))
+        (else (return (mul n (fat (sub n 1))))))))
+  (fn main (params) (returns void) (effects io)
+    (body (println (fat 20)))))

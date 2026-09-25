@@ -1,0 +1,5 @@
+;; issue: #026
+;; status: pending
+;; effects: io rand
+;; out: 0
+(println (rand-int 1))

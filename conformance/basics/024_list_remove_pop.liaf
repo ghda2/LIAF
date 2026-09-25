@@ -1,0 +1,12 @@
+;; issue: #024
+;; status: pending
+;; out: 2
+;; out: 30
+;; out: 1
+(let l (list int) (make-list int))
+(list-push l 10)
+(list-push l 20)
+(list-push l 30)
+(match (list-remove l 1) (ok v (println (list-len l))) (err e (println e)))
+(match (list-pop l) (ok v (println v)) (err e (println e)))
+(println (list-len l))

@@ -1,0 +1,10 @@
+;; issue: #020
+;; status: pending
+;; out: 6
+;; out: 24
+;; out: false
+;; out: true
+(println (add 1 2 3))
+(println (mul 2 3 4))
+(println (and true true false))
+(println (or false false true))

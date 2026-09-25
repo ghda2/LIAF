@@ -1,0 +1,6 @@
+;; issue: #020
+;; status: pending
+;; out: 1
+;; out: -1
+(println (mod 7 3))
+(println (mod -7 3))

@@ -1,0 +1,5 @@
+;; issue: #022
+;; status: pending
+;; out: div: divisao por zero
+(let z int 0)
+(match (div 10 z) (ok v (println v)) (err e (println e)))

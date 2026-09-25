@@ -1,0 +1,5 @@
+;; issue: #026
+;; status: pending
+;; stdin: ola
+;; out: ola
+(match (read-line) (ok v (println v)) (err e (println e)))

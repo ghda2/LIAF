@@ -1,0 +1,6 @@
+;; issue: #021
+;; status: pending
+;; out: 2.5
+;; out: erro
+(match (float-from-str "2.5") (ok v (println v)) (err e (println e)))
+(match (float-from-str "abc") (ok v (println v)) (err e (println "erro")))

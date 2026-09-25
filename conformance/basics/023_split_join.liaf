@@ -1,0 +1,7 @@
+;; issue: #023
+;; status: pending
+;; out: 3
+;; out: a-b-c
+(let partes (list str) (str-split "a,b,c" ","))
+(println (list-len partes))
+(println (str-join partes "-"))

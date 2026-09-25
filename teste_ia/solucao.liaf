@@ -1,0 +1,59 @@
+(module solucao
+  (struct Cliente
+    (fields
+      (id int)
+      (nome str)
+      (email str)
+      (ativo bool)))
+
+  (struct NovoCliente
+    (fields
+      (id int)
+      (nome str)
+      (email str)))
+
+  (fn inicializar-banco (params (db DBConnection)) (returns (result bool str)) (effects db)
+    (body
+      (try (db-exec db "CREATE TABLE IF NOT EXISTS clientes (id int PRIMARY KEY, nome text NOT NULL, email text NOT NULL, ativo bool NOT NULL)"))
+      (return (ok true))))
+
+  (fn inserir-cliente (params (db DBConnection) (cliente NovoCliente)) (returns (result bool str)) (effects db)
+    (body
+      (let id (field cliente id))
+      (let nome (field cliente nome))
+      (let email (field cliente email))
+      (try (db-exec db "INSERT INTO clientes (id, nome, email, ativo) VALUES ($1, $2, $3, $4)" id nome email true))
+      (return (ok true))))
+
+  (fn listar-clientes (params (db DBConnection)) (returns (result (list Cliente) str)) (effects db)
+    (body
+      (let lista (list Cliente) (try (db-query db "SELECT id, nome, email, ativo FROM clientes ORDER BY id" Cliente)))
+      (return (ok lista))))
+
+  (fn desativar-cliente (params (db DBConnection) (id int)) (returns (result bool str)) (effects db)
+    (body
+      (try (db-exec db "UPDATE clientes SET ativo = $1 WHERE id = $2" false id))
+      (return (ok true))))
+
+  (fn main (params) (returns void) (effects io db)
+    (body
+      (match (db-connect "postgres" "postgres://user:pass@localhost:5432/db")
+        (ok db
+          (println "Conectado ao banco")
+          (match (inicializar-banco db)
+            (ok r (println "Banco inicializado"))
+            (err msg (println msg))))
+          (match (inserir-cliente db (new NovoCliente 1 "João" "joao@example.com"))
+            (ok r (println "Cliente inserido"))
+            (err msg (println msg))))
+          (match (listar-clientes db)
+            (ok clientes
+              (for-each cliente clientes
+                (println (concat "ID: " (str-from-int (field cliente id)) " Nome: " (field cliente nome)))))
+            (err msg (println msg))))
+          (match (desativar-cliente db 1)
+            (ok r (println "Cliente desativado"))
+            (err msg (println msg))))
+        (err msg
+          (println (concat "Erro de conexão: " msg))))))
+)

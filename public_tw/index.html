@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LIAF Real-Time Kanban • tw.webdrop.bio</title>
+  <title>LIAF Live Collab Hub • tw.webdrop.bio</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #090d13;
@@ -22,6 +22,7 @@
       --success: #3fb950;
       --warning: #d29922;
       --danger: #f85149;
+      --code-bg: #0d1117;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -35,16 +36,16 @@
       flex-direction: column;
       overflow-x: hidden;
       background-image: 
-        radial-gradient(circle at 15% 15%, rgba(56, 139, 253, 0.07) 0%, transparent 40%),
-        radial-gradient(circle at 85% 85%, rgba(63, 185, 80, 0.05) 0%, transparent 40%);
+        radial-gradient(circle at 15% 15%, rgba(56, 139, 253, 0.08) 0%, transparent 45%),
+        radial-gradient(circle at 85% 85%, rgba(63, 185, 80, 0.06) 0%, transparent 45%);
     }
 
     /* Header */
     header {
-      padding: 1.25rem 2rem;
+      padding: 1rem 2rem;
       border-bottom: 1px solid var(--border);
-      backdrop-filter: blur(12px);
-      background: rgba(9, 13, 19, 0.85);
+      backdrop-filter: blur(14px);
+      background: rgba(9, 13, 19, 0.88);
       position: sticky;
       top: 0;
       z-index: 100;
@@ -58,33 +59,83 @@
     .brand {
       display: flex;
       align-items: center;
-      gap: 0.75rem;
+      gap: 0.85rem;
     }
 
     .brand-icon {
-      width: 36px;
-      height: 36px;
-      border-radius: 8px;
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
       background: linear-gradient(135deg, #1f6feb, #388bfd);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-weight: 700;
-      font-size: 1rem;
+      font-weight: 800;
+      font-size: 1.1rem;
       color: #fff;
-      box-shadow: 0 0 16px var(--accent-glow);
+      box-shadow: 0 0 20px var(--accent-glow);
     }
 
     .brand-text h1 {
-      font-size: 1.15rem;
+      font-size: 1.2rem;
       font-weight: 700;
       letter-spacing: -0.02em;
       color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .version-tag {
+      font-size: 0.68rem;
+      padding: 2px 7px;
+      background: rgba(56, 139, 253, 0.2);
+      border: 1px solid rgba(56, 139, 253, 0.35);
+      border-radius: 999px;
+      color: #79c0ff;
+      font-family: 'JetBrains Mono', monospace;
     }
 
     .brand-text p {
       font-size: 0.78rem;
       color: var(--text-muted);
+    }
+
+    /* Navigation Tabs */
+    .nav-tabs {
+      display: flex;
+      background: rgba(255, 255, 255, 0.04);
+      padding: 4px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      gap: 4px;
+    }
+
+    .nav-tab {
+      padding: 6px 14px;
+      border-radius: 7px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .nav-tab:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .nav-tab.active {
+      background: var(--card-bg);
+      color: #fff;
+      border: 1px solid var(--border-light);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
 
     .header-actions {
@@ -96,66 +147,54 @@
     .status-badge {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 7px;
       font-size: 0.8rem;
-      font-weight: 500;
-      padding: 6px 12px;
+      padding: 5px 12px;
       border-radius: 999px;
-      background: rgba(255, 255, 255, 0.05);
+      background: rgba(255, 255, 255, 0.04);
       border: 1px solid var(--border);
-      color: var(--text-muted);
-      transition: all 0.2s ease;
-    }
-
-    .status-badge.connected {
-      background: rgba(63, 185, 80, 0.12);
-      border-color: rgba(63, 185, 80, 0.3);
-      color: var(--success);
     }
 
     .status-dot {
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: currentColor;
+      background: var(--warning);
+      box-shadow: 0 0 8px var(--warning);
+      transition: all 0.3s ease;
     }
 
     .status-badge.connected .status-dot {
+      background: var(--success);
       box-shadow: 0 0 8px var(--success);
-      animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
     }
 
     .btn-primary {
-      background: linear-gradient(180deg, #2b7fff, #1f6feb);
+      background: linear-gradient(135deg, #1f6feb, #388bfd);
       color: #fff;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      padding: 7px 15px;
-      border-radius: 6px;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
       font-size: 0.85rem;
       font-weight: 600;
       cursor: pointer;
-      display: inline-flex;
+      display: flex;
       align-items: center;
       gap: 6px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-      transition: all 0.15s ease;
+      box-shadow: 0 4px 14px var(--accent-glow);
+      transition: all 0.2s ease;
     }
 
     .btn-primary:hover {
-      background: linear-gradient(180deg, #388bfd, #2b7fff);
+      filter: brightness(1.12);
       transform: translateY(-1px);
     }
 
-    /* Main Board Layout */
+    /* Main Container */
     main {
       flex: 1;
-      padding: 1.75rem 2rem;
-      max-width: 1400px;
+      padding: 1.5rem 2rem;
+      max-width: 1440px;
       margin: 0 auto;
       width: 100%;
     }
@@ -163,73 +202,81 @@
     .stats-bar {
       display: flex;
       gap: 1.5rem;
+      flex-wrap: wrap;
       margin-bottom: 1.5rem;
-      font-size: 0.85rem;
-      color: var(--text-muted);
+      padding: 0.85rem 1.25rem;
       background: var(--panel-bg);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 0.75rem 1.25rem;
-      backdrop-filter: blur(8px);
+      border-radius: 10px;
+      font-size: 0.82rem;
+      color: var(--text-muted);
     }
 
     .stats-item strong {
-      color: #fff;
+      color: var(--text);
     }
 
+    /* Tab Content Views */
+    .view-panel {
+      display: none;
+    }
+
+    .view-panel.active {
+      display: block;
+      animation: fadeIn 0.25s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* --- KANBAN VIEW --- */
     .kanban-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
       gap: 1.5rem;
       align-items: start;
-    }
-
-    @media (max-width: 900px) {
-      .kanban-grid {
-        grid-template-columns: 1fr;
-      }
     }
 
     .kanban-col {
       background: var(--panel-bg);
       border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: 12px;
       padding: 1rem;
-      min-height: 600px;
+      min-height: 480px;
       display: flex;
       flex-direction: column;
-      backdrop-filter: blur(8px);
-      transition: border-color 0.2s, background 0.2s;
+      gap: 0.75rem;
+      transition: background 0.2s ease;
     }
 
-    .kanban-col.drag-over {
-      border-color: var(--accent);
+    .kanban-col.dragover {
       background: rgba(56, 139, 253, 0.08);
+      border-color: var(--accent);
     }
 
     .col-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 1rem;
       padding-bottom: 0.75rem;
       border-bottom: 1px solid var(--border);
     }
 
     .col-title {
+      font-size: 0.9rem;
+      font-weight: 600;
       display: flex;
       align-items: center;
       gap: 8px;
-      font-size: 0.95rem;
-      font-weight: 600;
     }
 
     .col-count {
       font-size: 0.75rem;
-      font-weight: 600;
+      background: rgba(255, 255, 255, 0.08);
       padding: 2px 8px;
       border-radius: 999px;
-      background: rgba(255, 255, 255, 0.08);
       color: var(--text-muted);
     }
 
@@ -240,36 +287,34 @@
       flex: 1;
     }
 
-    /* Card */
-    .kanban-card {
+    .card {
       background: var(--card-bg);
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 1rem;
+      padding: 0.9rem;
       cursor: grab;
-      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
       position: relative;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
     }
 
-    .kanban-card:hover {
+    .card:hover {
       background: var(--card-hover);
       border-color: var(--border-light);
       transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
     }
 
-    .kanban-card.dragging {
+    .card.dragging {
       opacity: 0.4;
-      cursor: grabbing;
     }
 
     .card-title {
-      font-size: 0.92rem;
+      font-size: 0.9rem;
       font-weight: 500;
-      color: #fff;
+      margin-bottom: 0.6rem;
       line-height: 1.4;
-      margin-bottom: 0.75rem;
-      word-break: break-word;
+      color: #fff;
     }
 
     .card-footer {
@@ -278,68 +323,226 @@
       align-items: center;
       font-size: 0.75rem;
       color: var(--text-muted);
-      border-top: 1px solid rgba(255, 255, 255, 0.04);
-      padding-top: 0.6rem;
-      margin-top: 0.5rem;
     }
 
-    .author-badge {
+    .card-author {
       display: flex;
       align-items: center;
       gap: 5px;
     }
 
-    .author-avatar {
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: #238636;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 0.65rem;
-      color: #fff;
-      font-weight: 700;
-    }
-
     .card-actions {
       display: flex;
-      gap: 4px;
+      gap: 6px;
     }
 
     .btn-icon {
       background: transparent;
-      border: 1px solid var(--border);
+      border: none;
       color: var(--text-muted);
-      border-radius: 4px;
-      width: 24px;
-      height: 24px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
       cursor: pointer;
+      padding: 3px 6px;
+      border-radius: 4px;
       font-size: 0.75rem;
-      transition: all 0.15s;
     }
 
     .btn-icon:hover {
-      background: rgba(255, 255, 255, 0.08);
-      color: #fff;
-      border-color: var(--border-light);
-    }
-
-    .btn-delete:hover {
-      background: rgba(248, 81, 73, 0.15);
+      background: rgba(255, 255, 255, 0.1);
       color: var(--danger);
-      border-color: rgba(248, 81, 73, 0.3);
     }
 
-    /* Modal Form */
+    /* --- DOCS MARKDOWN VIEW --- */
+    .docs-layout {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 1.5rem;
+      min-height: 600px;
+    }
+
+    .docs-sidebar {
+      background: var(--panel-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .docs-sidebar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .docs-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .doc-item-btn {
+      padding: 8px 12px;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      color: var(--text-muted);
+      text-align: left;
+      font-size: 0.85rem;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      transition: all 0.15s ease;
+    }
+
+    .doc-item-btn:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+    }
+
+    .doc-item-btn.active {
+      background: var(--card-bg);
+      border-color: var(--border-light);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .doc-item-meta {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+
+    .docs-editor-pane {
+      background: var(--panel-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .docs-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+      padding-bottom: 0.85rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .doc-meta-inputs {
+      display: flex;
+      gap: 0.75rem;
+      flex: 1;
+      flex-wrap: wrap;
+    }
+
+    .doc-input-title {
+      flex: 2;
+      min-width: 200px;
+      padding: 7px 12px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: #fff;
+      font-size: 0.95rem;
+      font-weight: 600;
+      outline: none;
+    }
+
+    .doc-input-author {
+      flex: 1;
+      min-width: 140px;
+      padding: 7px 12px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: #fff;
+      font-size: 0.85rem;
+      outline: none;
+    }
+
+    .docs-split-view {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      flex: 1;
+      min-height: 480px;
+    }
+
+    .editor-box {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .editor-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+
+    .markdown-textarea {
+      flex: 1;
+      width: 100%;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      line-height: 1.6;
+      resize: none;
+      outline: none;
+    }
+
+    .markdown-textarea:focus {
+      border-color: var(--accent);
+    }
+
+    .preview-box {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .rendered-markdown {
+      flex: 1;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      overflow-y: auto;
+      line-height: 1.65;
+      font-size: 0.9rem;
+    }
+
+    .rendered-markdown h1 { font-size: 1.4rem; margin-bottom: 0.75rem; color: #fff; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+    .rendered-markdown h2 { font-size: 1.2rem; margin-top: 1rem; margin-bottom: 0.5rem; color: #fff; }
+    .rendered-markdown h3 { font-size: 1.05rem; margin-top: 0.8rem; margin-bottom: 0.4rem; color: #fff; }
+    .rendered-markdown p { margin-bottom: 0.8rem; color: var(--text); }
+    .rendered-markdown ul { margin-left: 1.4rem; margin-bottom: 0.8rem; }
+    .rendered-markdown code { font-family: 'JetBrains Mono', monospace; background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px; font-size: 0.82rem; color: #79c0ff; }
+    .rendered-markdown pre { background: var(--code-bg); padding: 0.85rem; border-radius: 6px; overflow-x: auto; margin-bottom: 0.8rem; border: 1px solid var(--border); }
+    .rendered-markdown pre code { background: transparent; padding: 0; }
+    .rendered-markdown blockquote { border-left: 3px solid var(--accent); padding-left: 0.85rem; margin-bottom: 0.8rem; color: var(--text-muted); }
+
+    /* Modal */
     .modal-overlay {
       position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.7);
-      backdrop-filter: blur(4px);
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -362,24 +565,6 @@
       width: 100%;
       max-width: 440px;
       box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5);
-      transform: scale(0.95);
-      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-
-    .modal-overlay.active .modal {
-      transform: scale(1);
-    }
-
-    .modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1.25rem;
-    }
-
-    .modal-header h2 {
-      font-size: 1.1rem;
-      color: #fff;
     }
 
     .form-group {
@@ -405,10 +590,6 @@
       outline: none;
     }
 
-    .form-group input:focus, .form-group select:focus {
-      border-color: var(--accent);
-    }
-
     .modal-actions {
       display: flex;
       justify-content: flex-end;
@@ -424,11 +605,6 @@
       border-radius: 6px;
       font-size: 0.85rem;
       cursor: pointer;
-    }
-
-    .btn-secondary:hover {
-      background: rgba(255, 255, 255, 0.05);
-      color: #fff;
     }
 
     /* Toast Notification */
@@ -469,59 +645,103 @@
     <div class="brand">
       <div class="brand-icon">L</div>
       <div class="brand-text">
-        <h1>LIAF Multiplayer Kanban</h1>
-        <p>tw.webdrop.bio • WebSocket & Persistência Nativa</p>
+        <h1>LIAF Live Collab Hub <span class="version-tag">v0.4 Native</span></h1>
+        <p>tw.webdrop.bio • SQLite Nativo & WebSockets em Tempo Real</p>
       </div>
     </div>
+
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs">
+      <button class="nav-tab active" onclick="switchTab('kanban')">📋 Quadro Kanban</button>
+      <button class="nav-tab" onclick="switchTab('docs')">📝 Docs & Markdown</button>
+    </div>
+
     <div class="header-actions">
       <div class="status-badge" id="status-badge">
         <div class="status-dot"></div>
         <span id="status-text">Conectando ao WebSocket...</span>
       </div>
-      <button class="btn-primary" onclick="openNewCardModal()">+ Novo Card</button>
+      <button class="btn-primary" id="btn-header-action" onclick="openNewCardModal()">+ Novo Card</button>
     </div>
   </header>
 
   <main>
     <div class="stats-bar">
       <div class="stats-item">Colaboradores ativos: <strong id="collaborators-count">1</strong></div>
-      <div class="stats-item">Total de Cards: <strong id="total-cards">0</strong></div>
-      <div class="stats-item">Sincronização: <strong>Broadcast Sub-ms em RAM</strong></div>
-      <div class="stats-item">Armazenamento: <strong>SQLite Nativo (kanban.db)</strong></div>
+      <div class="stats-item">Cards no SQLite: <strong id="total-cards">0</strong></div>
+      <div class="stats-item">Documentos: <strong id="total-docs">0</strong></div>
+      <div class="stats-item">Banco: <strong>SQLite Nativo (kanban.db)</strong></div>
+      <div class="stats-item">Transporte: <strong>WebSocket Bidirecional (/ws/board)</strong></div>
     </div>
 
-    <div class="kanban-grid">
-      <!-- Coluna: A Fazer -->
-      <div class="kanban-col" id="col-todo" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event, 'todo')">
-        <div class="col-header">
-          <div class="col-title">
-            <span style="color: var(--accent);">●</span> A Fazer
+    <!-- TAB 1: KANBAN -->
+    <div class="view-panel active" id="view-kanban">
+      <div class="kanban-grid">
+        <!-- Coluna: A Fazer -->
+        <div class="kanban-col" id="col-todo" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event, 'todo')">
+          <div class="col-header">
+            <div class="col-title"><span style="color: var(--accent);">●</span> A Fazer</div>
+            <span class="col-count" id="count-todo">0</span>
           </div>
-          <span class="col-count" id="count-todo">0</span>
+          <div class="cards-container" id="cards-todo"></div>
         </div>
-        <div class="cards-container" id="container-todo"></div>
-      </div>
 
-      <!-- Coluna: Em Andamento -->
-      <div class="kanban-col" id="col-in_progress" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event, 'in_progress')">
-        <div class="col-header">
-          <div class="col-title">
-            <span style="color: var(--warning);">●</span> Em Andamento
+        <!-- Coluna: Em Progresso -->
+        <div class="kanban-col" id="col-in_progress" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event, 'in_progress')">
+          <div class="col-header">
+            <div class="col-title"><span style="color: var(--warning);">●</span> Em Progresso</div>
+            <span class="col-count" id="count-in_progress">0</span>
           </div>
-          <span class="col-count" id="count-in_progress">0</span>
+          <div class="cards-container" id="cards-in_progress"></div>
         </div>
-        <div class="cards-container" id="container-in_progress"></div>
-      </div>
 
-      <!-- Coluna: Concluído -->
-      <div class="kanban-col" id="col-done" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event, 'done')">
-        <div class="col-header">
-          <div class="col-title">
-            <span style="color: var(--success);">●</span> Concluído
+        <!-- Coluna: Concluído -->
+        <div class="kanban-col" id="col-done" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event, 'done')">
+          <div class="col-header">
+            <div class="col-title"><span style="color: var(--success);">●</span> Concluído</div>
+            <span class="col-count" id="count-done">0</span>
           </div>
-          <span class="col-count" id="count-done">0</span>
+          <div class="cards-container" id="cards-done"></div>
         </div>
-        <div class="cards-container" id="container-done"></div>
+      </div>
+    </div>
+
+    <!-- TAB 2: DOCS MARKDOWN -->
+    <div class="view-panel" id="view-docs">
+      <div class="docs-layout">
+        <!-- Sidebar Documentos -->
+        <div class="docs-sidebar">
+          <div class="docs-sidebar-header">
+            <h3 style="font-size: 0.95rem; font-weight: 600;">Documentos</h3>
+            <button class="btn-secondary" style="padding: 4px 8px; font-size: 0.75rem;" onclick="createNewDoc()">+ Novo</button>
+          </div>
+          <div class="docs-list" id="docs-list"></div>
+        </div>
+
+        <!-- Editor & Preview -->
+        <div class="docs-editor-pane">
+          <div class="docs-toolbar">
+            <div class="doc-meta-inputs">
+              <input type="text" id="doc-title" class="doc-input-title" placeholder="Título do Documento" oninput="markDocChanged()">
+              <input type="text" id="doc-author" class="doc-input-author" placeholder="Autor (ex: Gabriel)" oninput="markDocChanged()">
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn-secondary" onclick="deleteCurrentDoc()" id="btn-delete-doc">Excluir</button>
+              <button class="btn-primary" onclick="saveCurrentDoc()">💾 Salvar no SQLite</button>
+            </div>
+          </div>
+
+          <div class="docs-split-view">
+            <div class="editor-box">
+              <div class="editor-label">Markdown Fonte (Edição)</div>
+              <textarea id="doc-editor" class="markdown-textarea" placeholder="Digite seu conteúdo Markdown aqui..." oninput="onEditorChange()"></textarea>
+            </div>
+            <div class="preview-box">
+              <div class="editor-label">Preview Renderizado em Tempo Real</div>
+              <div id="doc-preview" class="rendered-markdown"></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </main>
@@ -530,23 +750,22 @@
   <div class="modal-overlay" id="modal-overlay">
     <div class="modal">
       <div class="modal-header">
-        <h2>Criar Novo Card</h2>
-        <button class="btn-icon" onclick="closeNewCardModal()">✕</button>
+        <h2>Novo Card</h2>
       </div>
       <form id="new-card-form" onsubmit="submitNewCard(event)">
         <div class="form-group">
           <label for="card-title">Título da Tarefa</label>
-          <input type="text" id="card-title" required placeholder="Ex: Adicionar métricas de WebSocket..." autocomplete="off">
+          <input type="text" id="card-title" required placeholder="Ex: Adicionar suporte a Redis">
         </div>
         <div class="form-group">
-          <label for="card-author">Responsável</label>
-          <input type="text" id="card-author" placeholder="Ex: Gabriel" value="Gabriel" autocomplete="off">
+          <label for="card-author">Autor</label>
+          <input type="text" id="card-author" required placeholder="Seu nome" value="Gabriel">
         </div>
         <div class="form-group">
           <label for="card-column">Coluna Inicial</label>
           <select id="card-column">
             <option value="todo">A Fazer</option>
-            <option value="in_progress">Em Andamento</option>
+            <option value="in_progress">Em Progresso</option>
             <option value="done">Concluído</option>
           </select>
         </div>
@@ -561,147 +780,280 @@
   <div id="toast-container"></div>
 
   <script>
-    let ws = null;
-    let boardCards = [];
+    let ws;
     let draggedCardId = null;
+    let currentTab = 'kanban';
+    let docs = [];
+    let currentDocId = null;
 
+    /* Troca de Abas */
+    function switchTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
+
+      if (tab === 'kanban') {
+        document.querySelectorAll('.nav-tab')[0].classList.add('active');
+        document.getElementById('view-kanban').classList.add('active');
+        document.getElementById('btn-header-action').style.display = 'flex';
+        document.getElementById('btn-header-action').textContent = '+ Novo Card';
+        document.getElementById('btn-header-action').onclick = openNewCardModal;
+      } else {
+        document.querySelectorAll('.nav-tab')[1].classList.add('active');
+        document.getElementById('view-docs').classList.add('active');
+        document.getElementById('btn-header-action').style.display = 'flex';
+        document.getElementById('btn-header-action').textContent = '+ Novo Documento';
+        document.getElementById('btn-header-action').onclick = createNewDoc;
+        loadDocs();
+      }
+    }
+
+    /* Toast Notification */
     function showToast(msg) {
-      const container = document.getElementById('toast-container');
-      const toast = document.createElement('div');
-      toast.className = 'toast';
-      toast.innerHTML = `<span>⚡</span><span>${msg}</span>`;
-      container.appendChild(toast);
+      const c = document.getElementById('toast-container');
+      const t = document.createElement('div');
+      t.className = 'toast';
+      t.innerHTML = `<span>⚡</span><span>${msg}</span>`;
+      c.appendChild(t);
       setTimeout(() => {
-        toast.style.transition = 'opacity 0.3s, transform 0.3s';
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateY(10px)';
-        setTimeout(() => toast.remove(), 300);
+        t.style.opacity = '0';
+        t.style.transform = 'translateY(10px)';
+        setTimeout(() => t.remove(), 300);
       }, 3500);
     }
 
-    async function loadBoard(silent = false) {
+    /* Markdown Simples para Preview */
+    function parseMarkdown(md) {
+      if (!md) return '<p style="color: var(--text-muted); font-style: italic;">Nenhum conteúdo para visualizar.</p>';
+      let html = md
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+      // Code blocks
+      html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+      // Headers
+      html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+      html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+      html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+      // Bold & Italic
+      html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+      // Inline code
+      html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+      // Blockquotes
+      html = html.replace(/^\> (.*$)/gim, '<blockquote>$1</blockquote>');
+      // Unordered lists
+      html = html.replace(/^\- (.*$)/gim, '<li>$1</li>');
+      // Paragraphs
+      html = html.replace(/\n\n/g, '</p><p>');
+
+      return `<p>${html}</p>`;
+    }
+
+    function onEditorChange() {
+      const text = document.getElementById('doc-editor').value;
+      document.getElementById('doc-preview').innerHTML = parseMarkdown(text);
+    }
+
+    function markDocChanged() {
+      // Atualização de títulos ou campos
+    }
+
+    /* API Docs */
+    async function loadDocs() {
+      try {
+        const res = await fetch('/api/docs');
+        const data = await res.json();
+        docs = data.docs || [];
+        document.getElementById('total-docs').textContent = docs.length;
+        renderDocsList();
+
+        if (docs.length > 0) {
+          if (!currentDocId || !docs.find(d => d.id === currentDocId)) {
+            selectDoc(docs[0].id);
+          }
+        } else {
+          createNewDoc();
+        }
+      } catch (err) {
+        console.error('Erro ao carregar documentos:', err);
+      }
+    }
+
+    function renderDocsList() {
+      const container = document.getElementById('docs-list');
+      container.innerHTML = '';
+      docs.forEach(doc => {
+        const btn = document.createElement('button');
+        btn.className = 'doc-item-btn' + (doc.id === currentDocId ? ' active' : '');
+        btn.onclick = () => selectDoc(doc.id);
+        btn.innerHTML = `
+          <strong>${doc.title || 'Sem título'}</strong>
+          <span class="doc-item-meta">${doc.author || 'Autor'} • ${doc.updated_at || 'recente'}</span>
+        `;
+        container.appendChild(btn);
+      });
+    }
+
+    function selectDoc(id) {
+      currentDocId = id;
+      renderDocsList();
+      const doc = docs.find(d => d.id === id);
+      if (doc) {
+        document.getElementById('doc-title').value = doc.title;
+        document.getElementById('doc-author').value = doc.author;
+        document.getElementById('doc-editor').value = doc.content;
+        onEditorChange();
+        document.getElementById('btn-delete-doc').style.display = 'inline-block';
+      }
+    }
+
+    function createNewDoc() {
+      currentDocId = null;
+      renderDocsList();
+      document.getElementById('doc-title').value = 'Novo Documento';
+      document.getElementById('doc-author').value = 'Gabriel';
+      document.getElementById('doc-editor').value = '# Novo Documento\n\nComece a escrever seu Markdown aqui...';
+      onEditorChange();
+      document.getElementById('btn-delete-doc').style.display = 'none';
+      document.getElementById('doc-title').focus();
+    }
+
+    async function saveCurrentDoc() {
+      const title = document.getElementById('doc-title').value.trim();
+      const author = document.getElementById('doc-author').value.trim() || 'Gabriel';
+      const content = document.getElementById('doc-editor').value;
+      const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'doc-' + Date.now();
+      const updated_at = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      if (!title) {
+        alert('Título é obrigatório');
+        return;
+      }
+
+      try {
+        if (currentDocId) {
+          const res = await fetch(`/api/docs/${currentDocId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, content, updated_at })
+          });
+          if (res.ok) {
+            showToast('Documento atualizado com sucesso no SQLite');
+            loadDocs();
+          }
+        } else {
+          const res = await fetch('/api/docs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ slug, title, content, author, updated_at })
+          });
+          if (res.ok) {
+            showToast('Novo documento salvo no SQLite');
+            loadDocs();
+          }
+        }
+      } catch (e) {
+        console.error('Falha ao salvar doc:', e);
+      }
+    }
+
+    async function deleteCurrentDoc() {
+      if (!currentDocId) return;
+      if (!confirm('Excluir este documento?')) return;
+      try {
+        const res = await fetch(`/api/docs/${currentDocId}`, { method: 'DELETE' });
+        if (res.ok) {
+          showToast('Documento excluído');
+          currentDocId = null;
+          loadDocs();
+        }
+      } catch (e) {
+        console.error('Erro ao excluir:', e);
+      }
+    }
+
+    /* KANBAN BOARD */
+    async function loadBoard(isSilent = false) {
       try {
         const res = await fetch('/api/board');
-        if (!res.ok) return;
         const data = await res.json();
-        boardCards = data.cards || [];
-        renderCards();
+        renderBoard(data.cards || []);
       } catch (err) {
-        console.error('Erro ao carregar board:', err);
+        console.error('Falha ao carregar board:', err);
       }
     }
 
     async function updateCollaborators() {
       try {
         const res = await fetch('/api/collaborators');
-        if (res.ok) {
-          const data = await res.json();
-          document.getElementById('collaborators-count').textContent = data.online || 1;
-        }
+        const data = await res.json();
+        document.getElementById('collaborators-count').textContent = data.online || 1;
       } catch (e) {}
     }
 
-    function renderCards() {
-      const containers = {
-        todo: document.getElementById('container-todo'),
-        in_progress: document.getElementById('container-in_progress'),
-        done: document.getElementById('container-done')
-      };
-
-      const counts = { todo: 0, in_progress: 0, done: 0 };
-
-      /* Limpa containers */
-      Object.values(containers).forEach(c => c.innerHTML = '');
-
-      boardCards.forEach(card => {
-        const col = containers[card.column] ? card.column : 'todo';
-        counts[col]++;
-
-        const cardEl = document.createElement('div');
-        cardEl.className = 'kanban-card';
-        cardEl.draggable = true;
-        cardEl.id = `card-${card.id}`;
-        cardEl.ondragstart = (e) => onDragStart(e, card.id);
-        cardEl.ondragend = (e) => onDragEnd(e);
-
-        const initial = (card.author || 'A').charAt(0).toUpperCase();
-
-        const moveLeftBtn = col !== 'todo' 
-          ? `<button class="btn-icon" title="Mover para trás" onclick="moveCard(${card.id}, '${col === 'done' ? 'in_progress' : 'todo'}')">←</button>` 
-          : '';
-        const moveRightBtn = col !== 'done' 
-          ? `<button class="btn-icon" title="Avançar" onclick="moveCard(${card.id}, '${col === 'todo' ? 'in_progress' : 'done'}')">→</button>` 
-          : '';
-
-        cardEl.innerHTML = `
-          <div class="card-title">${escapeHtml(card.title)}</div>
-          <div class="card-footer">
-            <div class="author-badge">
-              <span class="author-avatar">${initial}</span>
-              <span>${escapeHtml(card.author || 'Anônimo')}</span>
-            </div>
-            <div class="card-actions">
-              ${moveLeftBtn}
-              ${moveRightBtn}
-              <button class="btn-icon btn-delete" title="Excluir" onclick="deleteCard(${card.id})">✕</button>
-            </div>
-          </div>
-        `;
-        containers[col].appendChild(cardEl);
+    function renderBoard(cards) {
+      const cols = { todo: [], in_progress: [], done: [] };
+      cards.forEach(c => {
+        if (cols[c.column]) cols[c.column].push(c);
+        else cols.todo.push(c);
       });
 
-      document.getElementById('count-todo').textContent = counts.todo;
-      document.getElementById('count-in_progress').textContent = counts.in_progress;
-      document.getElementById('count-done').textContent = counts.done;
-      document.getElementById('total-cards').textContent = boardCards.length;
+      ['todo', 'in_progress', 'done'].forEach(col => {
+        const cont = document.getElementById(`cards-${col}`);
+        const count = document.getElementById(`count-${col}`);
+        cont.innerHTML = '';
+        count.textContent = cols[col].length;
+
+        cols[col].forEach(card => {
+          const el = document.createElement('div');
+          el.className = 'card';
+          el.draggable = true;
+          el.id = `card-${card.id}`;
+          el.innerHTML = `
+            <div class="card-title">${escapeHtml(card.title)}</div>
+            <div class="card-footer">
+              <div class="card-author">👤 ${escapeHtml(card.author)}</div>
+              <div class="card-actions">
+                <button class="btn-icon" onclick="deleteCard(${card.id})" title="Excluir">✕</button>
+              </div>
+            </div>
+          `;
+          el.addEventListener('dragstart', (e) => {
+            draggedCardId = card.id;
+            el.classList.add('dragging');
+            e.dataTransfer.setData('text/plain', card.id);
+          });
+          el.addEventListener('dragend', () => {
+            el.classList.remove('dragging');
+            draggedCardId = null;
+          });
+          cont.appendChild(el);
+        });
+      });
+
+      document.getElementById('total-cards').textContent = cards.length;
     }
 
     function escapeHtml(str) {
-      return (str || '').replace(/[&<>"']/g, m => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
-      }[m]));
+      if (!str) return '';
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
-    /* Drag & Drop */
-    function onDragStart(e, cardId) {
-      draggedCardId = cardId;
-      e.dataTransfer.setData('text/plain', cardId);
-      e.currentTarget.classList.add('dragging');
-    }
-
-    function onDragEnd(e) {
-      e.currentTarget.classList.remove('dragging');
-      document.querySelectorAll('.kanban-col').forEach(c => c.classList.remove('drag-over'));
-    }
-
-    function onDragOver(e) {
+    function onDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('dragover'); }
+    function onDragLeave(e) { e.currentTarget.classList.remove('dragover'); }
+    async function onDrop(e, column) {
       e.preventDefault();
-      e.currentTarget.classList.add('drag-over');
-    }
-
-    function onDragLeave(e) {
-      e.currentTarget.classList.remove('drag-over');
-    }
-
-    async function onDrop(e, targetColumn) {
-      e.preventDefault();
-      e.currentTarget.classList.remove('drag-over');
-      if (draggedCardId) {
-        await moveCard(draggedCardId, targetColumn);
-        draggedCardId = null;
-      }
-    }
-
-    async function moveCard(id, column) {
+      e.currentTarget.classList.remove('dragover');
+      if (!draggedCardId) return;
       try {
-        const res = await fetch(`/api/cards/${id}/move`, {
+        const res = await fetch(`/api/cards/${draggedCardId}/move`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ column })
         });
-        if (res.ok) {
-          loadBoard();
-        }
+        if (res.ok) loadBoard();
       } catch (err) {
         console.error('Falha ao mover card:', err);
       }
@@ -732,7 +1084,6 @@
       const title = document.getElementById('card-title').value.trim();
       const author = document.getElementById('card-author').value.trim();
       const column = document.getElementById('card-column').value;
-
       if (!title) return;
 
       try {
@@ -782,6 +1133,9 @@
           if (data.kind === 'sync') {
             loadBoard(true);
             showToast(data.message || 'Quadro atualizado em tempo real');
+          } else if (data.kind === 'doc_sync') {
+            if (currentTab === 'docs') loadDocs();
+            showToast(data.message || 'Documento sincronizado');
           } else if (data.kind === 'presence') {
             updateCollaborators();
             showToast(data.message);

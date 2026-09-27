@@ -5,8 +5,20 @@ import (
 	"strings"
 
 	"liaf/pkg/ast"
+	"liaf/pkg/builtins"
 	"liaf/pkg/dbdrv"
 )
+
+func init() {
+	for _, dbFn := range []string{"db-connect", "db-close", "db-query", "db-exec", "redis-get", "redis-set"} {
+		fnName := dbFn
+		builtins.RegisterSpecialCheck(fnName, func(ctx builtins.CheckContext, v *ast.CallExpr, want ast.Type) ast.Type {
+			c := ctx.(*Checker)
+			t, _ := c.dbCall(v, fnName)
+			return t
+		})
+	}
+}
 
 // Regras de tipo dos builtins de banco (issue #015).
 //

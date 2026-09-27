@@ -5,7 +5,19 @@ import (
 	"strings"
 
 	"liaf/pkg/ast"
+	"liaf/pkg/builtins"
 )
+
+func init() {
+	for _, wsFn := range []string{"ws-send", "ws-send-json", "ws-close", "ws-broadcast", "ws-join", "ws-leave", "ws-topic-size"} {
+		fnName := wsFn
+		builtins.RegisterSpecialCheck(fnName, func(ctx builtins.CheckContext, v *ast.CallExpr, want ast.Type) ast.Type {
+			c := ctx.(*Checker)
+			t, _ := c.wsCall(v, fnName)
+			return t
+		})
+	}
+}
 
 // Regras de tipo dos builtins e da declaracao (ws-route ...) da issue #016.
 

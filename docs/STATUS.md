@@ -13,7 +13,6 @@ Como as pastas estão organizadas: [README.md](README.md).
 | Issue | Estado | O que falta de fato |
 |---|---|---|
 | [#012 Ergonomia](a-fazer/ISSUE_012_SYNTAX_SUGAR_AND_TOKEN_EFFICIENCY.md) | Parcial | `s.campo` não existe (dá `E_UNEXPECTED_TOKEN`); `(eq x false)` ainda é aceito |
-| [#030 Modularização](a-fazer/ISSUE_030_MODULARIZACAO_MONOLITOS.md) | Aberta, nada feito | `web/cache.go` (784, duplicação de 88%), `builtins/table.go` (1.511), `parser.go` (1.062), `checker.go` (745), `codegen.go` (747) |
 | [#032 Compilar fora do repositório](a-fazer/ISSUE_032_COMPILADOR_AUTONOMO_RUNTIME_EMBUTIDO.md) | Aberta | `liafc build` fora da árvore falha: o código gerado importa `liaf/pkg/runtime` |
 | [#010 Backend C](a-fazer/ISSUE_010_GO_INDEPENDENCE_NATIVE_BACKEND.md) | Parcial | Testes do emissor C passam; sem `--backend` na CLI, sem JSON/web, sem GC, nunca rodado sem Go |
 | [#015 Bancos](a-fazer/ISSUE_015_DATABASE_DRIVERS_NETWORK.md) | Implementada | Nunca testada contra PostgreSQL, MySQL ou Redis de verdade |
@@ -30,6 +29,7 @@ Como as pastas estão organizadas: [README.md](README.md).
 
 | Issue | Evidência |
 |---|---|
+| [#030 Modularização dos monólitos](feito/ISSUE_030_MODULARIZACAO_MONOLITOS.md) | Modularizados os 6 monólitos críticos (cache, table, builtins_hooks, parser, checker, codegen), 4 módulos de prioridade média (mysql, postgres, websocket, liafc) e funções longas |
 | [#028 Sintaxe compacta v0.5](feito/ISSUE_028_SINTAXE_COMPACTA_E_EXPRESSOES.md) | Parser, checker, `liafc fmt` canônico compacto, documentação na `SPEC.md` e `SKILL.md` |
 | [#009 Benchmark AI-First](feito/ISSUE_009_AI_FIRST_BENCHMARK_AND_SHOWCASE.md) | Medição e comparação LIAF vs Python em consumo de tokens realizada |
 | [#027 Segurança web e std](feito/ISSUE_027_SEGURANCA_WEB_E_STD.md) | 7 casos `027_*`, `TestExecutePedidosAPI`, `TestExecuteCobrancaPix`, `TestExecuteStdWeb`. Pendências de auth listadas na issue |

@@ -86,9 +86,12 @@ type Handler func(Request) Response
 type Router struct{ mux *http.ServeMux }
 
 func NewRouter() *Router { return &Router{mux: http.NewServeMux()} }
+// MaxRequestBodySize define o limite máximo padrão do corpo da requisição (padrão: 32MB).
+var MaxRequestBodySize int64 = 32 << 20
+
 func (r *Router) Handle(method, path string, handler Handler) {
 	r.mux.HandleFunc(method+" "+path, func(w http.ResponseWriter, req *http.Request) {
-		body, err := io.ReadAll(http.MaxBytesReader(w, req.Body, 1<<20))
+		body, err := io.ReadAll(http.MaxBytesReader(w, req.Body, MaxRequestBodySize))
 		if err != nil {
 			http.Error(w, "Request body too large or unreadable", http.StatusRequestEntityTooLarge)
 			return
@@ -138,6 +141,10 @@ func (r *Router) Handler(fallback http.Handler) http.Handler {
 }
 func JSONResponse(status int64, body string) Response {
 	return Response{Status: int(status), Body: body, ContentType: "application/json; charset=utf-8"}
+}
+
+func RawResponse(status int64, contentType, body string) Response {
+	return Response{Status: int(status), Body: body, ContentType: contentType}
 }
 
 var defaultRouter = NewRouter()

@@ -1,6 +1,12 @@
 package runtime
 
 import (
+	"io"
+	"mime"
+	"mime/multipart"
+	"path/filepath"
+	"strings"
+
 	"liaf/pkg/web"
 )
 
@@ -32,4 +38,80 @@ func RequestQuery(req web.Request, name string) Result[string, string] {
 
 func ResponseSetHeader(res web.Response, name, value string) web.Response {
 	return res.WithHeader(name, value)
+}
+
+// RequestFileData extrai os dados binários do arquivo enviado na requisição HTTP.
+// Suporta requisições multipart/form-data (buscando pelo campo especificado, ou pelo primeiro arquivo)
+// bem como requisições com corpo binário direto (ex: uploads diretos tipo PUT/POST estilo S3).
+func RequestFileData(req web.Request, fieldName string) Result[string, string] {
+	ct := req.Header.Get("Content-Type")
+	mediaType, params, err := mime.ParseMediaType(ct)
+	if err == nil && strings.HasPrefix(mediaType, "multipart/") {
+		boundary := params["boundary"]
+		if boundary == "" {
+			return Err[string, string]("multipart request missing boundary")
+		}
+		mr := multipart.NewReader(strings.NewReader(req.Body), boundary)
+		for {
+			part, err := mr.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return Err[string, string]("failed parsing multipart body: " + err.Error())
+			}
+			if fieldName == "" || part.FormName() == fieldName {
+				data, readErr := io.ReadAll(part)
+				if readErr != nil {
+					return Err[string, string]("failed reading multipart part: " + readErr.Error())
+				}
+				return Ok[string, string](string(data))
+			}
+		}
+		return Err[string, string]("file field not found in multipart body: " + fieldName)
+	}
+
+	// Caso o corpo direto contenha dados da imagem/arquivo
+	if len(req.Body) > 0 {
+		return Ok[string, string](req.Body)
+	}
+	return Err[string, string]("empty request body and no multipart file found")
+}
+
+// RequestFileName extrai o nome do arquivo enviado na requisição (multipart, cabeçalho X-Filename ou query param).
+func RequestFileName(req web.Request, fieldName string) Result[string, string] {
+	ct := req.Header.Get("Content-Type")
+	mediaType, params, err := mime.ParseMediaType(ct)
+	if err == nil && strings.HasPrefix(mediaType, "multipart/") {
+		boundary := params["boundary"]
+		if boundary == "" {
+			return Err[string, string]("multipart request missing boundary")
+		}
+		mr := multipart.NewReader(strings.NewReader(req.Body), boundary)
+		for {
+			part, err := mr.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return Err[string, string]("failed parsing multipart body: " + err.Error())
+			}
+			if fieldName == "" || part.FormName() == fieldName {
+				fn := part.FileName()
+				if fn != "" {
+					return Ok[string, string](filepath.Base(fn))
+				}
+				return Ok[string, string](part.FormName())
+			}
+		}
+		return Err[string, string]("file field not found in multipart: " + fieldName)
+	}
+
+	if xfn := req.Header.Get("X-Filename"); xfn != "" {
+		return Ok[string, string](filepath.Base(xfn))
+	}
+	if nameQuery := req.Query.Get("name"); nameQuery != "" {
+		return Ok[string, string](filepath.Base(nameQuery))
+	}
+	return Ok[string, string]("upload")
 }

@@ -1,0 +1,43 @@
+;; std/storage - upload, processamento e servico de imagens e arquivos estilo MinIO.
+;;
+;;   (import "std/storage")
+;;   (let ok bool (try (storage-init "uploads")))
+;;   (let file-name str (try (storage-upload-image req "file" "uploads")))
+;;   (let res Response (storage-serve-image "uploads" file-name))
+(module storage
+  ;; Cria a pasta de armazenamento caso ainda nao exista no disco.
+  (fn storage-init (params (dir str)) (returns (result bool str)) (effects fs)
+    (body
+      (return (storage-dir-init dir))))
+
+  ;; Extrai o arquivo da requisicao, converte para WebP lossless e salva na pasta.
+  ;; Retorna o nome do arquivo .webp salvo (ex: "img_1700000000_abc123.webp").
+  (fn storage-upload-image (params (req Request) (field str) (dir str)) (returns (result str str)) (effects fs)
+    (body
+      (let data str "")
+      (match (request-file-data req field)
+        (ok d (set data d))
+        (err e (return (err e))))
+      (let orig-name str "auto")
+      (match (request-file-name req field)
+        (ok name (set orig-name name))
+        (err _ (set orig-name "auto")))
+      (return (storage-save-image dir orig-name data))))
+
+  ;; Serve a imagem da pasta em formato WebP com headers de cache adequados.
+  (fn storage-serve-image (params (dir str) (filename str)) (returns Response) (effects fs)
+    (body
+      (match (storage-file-get dir filename)
+        (ok bytes (return (raw-response 200 "image/webp" bytes)))
+        (err _ (return (raw-response 404 "text/plain; charset=utf-8" "404 Not Found"))))))
+
+  ;; Remove uma imagem ou arquivo do armazenamento.
+  (fn storage-delete-image (params (dir str) (filename str)) (returns (result bool str)) (effects fs)
+    (body
+      (return (storage-file-delete dir filename))))
+
+  ;; Verifica se uma imagem existe no armazenamento.
+  (fn storage-image-exists (params (dir str) (filename str)) (returns bool) (effects fs)
+    (body
+      (return (storage-file-exists dir filename))))
+)

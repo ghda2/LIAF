@@ -1,0 +1,13 @@
+(module main
+  (import "std/storage")
+  (route POST "/api/upload" ((req Request)) Response (effects fs)
+    (match (storage-upload-image req "file" "uploads")
+      (ok filename
+        (return (json-response 200 (concat "{\"status\":\"ok\",\"file\":\"" filename "\"}"))))
+      (err e
+        (return (json-response 400 (concat "{\"error\":\"" e "\"}"))))))
+  (route GET "/uploads/{filename}" ((filename str)) Response (effects fs)
+    (storage-serve-image "uploads" filename))
+  (fn main () void (effects fs io)
+    (let _ (storage-init "uploads"))
+    (println "Servidor de imagens pronto!")))

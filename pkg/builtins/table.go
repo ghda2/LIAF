@@ -1106,6 +1106,138 @@ func init() {
 		UnsupportedC: true,
 	})
 
+	Register(&Builtin{
+		Name:         "raw-response",
+		Category:     "web",
+		Arity:        ExactArity(3),
+		Params:       []string{"int", "str", "str"},
+		Return:       "Response",
+		GoCall:       "web.RawResponse",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "file-response",
+		Category:     "web",
+		Arity:        ExactArity(2),
+		Params:       []string{"str", "str"},
+		Effects:      []string{"fs"},
+		Return:       "(result Response str)",
+		GoCall:       "rt.FileResponse",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "request-file-data",
+		Category:     "web",
+		Arity:        ExactArity(2),
+		Params:       []string{"Request", "str"},
+		Return:       "(result str str)",
+		GoCall:       "rt.RequestFileData",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "request-file-name",
+		Category:     "web",
+		Arity:        ExactArity(2),
+		Params:       []string{"Request", "str"},
+		Return:       "(result str str)",
+		GoCall:       "rt.RequestFileName",
+		UnsupportedC: true,
+	})
+
+	// ---------------------------------------------------------
+	// Imagem e Compressão WebP
+	// ---------------------------------------------------------
+	Register(&Builtin{
+		Name:         "image-to-webp",
+		Category:     "image",
+		Arity:        ExactArity(1),
+		Params:       []string{"str"},
+		Return:       "(result str str)",
+		GoCall:       "rt.ImageToWebP",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "image-to-webp-quality",
+		Category:     "image",
+		Arity:        ExactArity(2),
+		Params:       []string{"str", "int"},
+		Return:       "(result str str)",
+		GoCall:       "rt.ImageToWebPQuality",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "image-dimensions",
+		Category:     "image",
+		Arity:        ExactArity(1),
+		Params:       []string{"str"},
+		Return:       "(result str str)",
+		GoCall:       "rt.ImageDimensions",
+		UnsupportedC: true,
+	})
+
+	// ---------------------------------------------------------
+	// Storage (Estilo MinIO)
+	// ---------------------------------------------------------
+	Register(&Builtin{
+		Name:         "storage-dir-init",
+		Category:     "storage",
+		Arity:        ExactArity(1),
+		Params:       []string{"str"},
+		Effects:      []string{"fs"},
+		Return:       "(result bool str)",
+		GoCall:       "rt.StorageInit",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "storage-save-image",
+		Category:     "storage",
+		Arity:        ExactArity(3),
+		Params:       []string{"str", "str", "str"},
+		Effects:      []string{"fs"},
+		Return:       "(result str str)",
+		GoCall:       "rt.StorageSaveImage",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "storage-file-get",
+		Category:     "storage",
+		Arity:        ExactArity(2),
+		Params:       []string{"str", "str"},
+		Effects:      []string{"fs"},
+		Return:       "(result str str)",
+		GoCall:       "rt.StorageGet",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "storage-file-delete",
+		Category:     "storage",
+		Arity:        ExactArity(2),
+		Params:       []string{"str", "str"},
+		Effects:      []string{"fs"},
+		Return:       "(result bool str)",
+		GoCall:       "rt.StorageDelete",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "storage-file-exists",
+		Category:     "storage",
+		Arity:        ExactArity(2),
+		Params:       []string{"str", "str"},
+		Effects:      []string{"fs"},
+		Return:       "bool",
+		GoCall:       "rt.StorageExists",
+		UnsupportedC: true,
+	})
+
 	// ---------------------------------------------------------
 	// Cliente HTTP
 	// ---------------------------------------------------------

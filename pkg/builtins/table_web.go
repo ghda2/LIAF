@@ -111,12 +111,32 @@ func init() {
 	})
 
 	Register(&Builtin{
+		Name:         "request-cookie",
+		Category:     "web",
+		Arity:        ExactArity(2),
+		Params:       []string{"Request", "str"},
+		Return:       "(result str str)",
+		GoCall:       "rt.RequestCookie",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
 		Name:         "response-set-header",
 		Category:     "web",
 		Arity:        ExactArity(3),
 		Params:       []string{"Response", "str", "str"},
 		Return:       "Response",
 		GoCall:       "rt.ResponseSetHeader",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "response-add-header",
+		Category:     "web",
+		Arity:        ExactArity(3),
+		Params:       []string{"Response", "str", "str"},
+		Return:       "Response",
+		GoCall:       "rt.ResponseAddHeader",
 		UnsupportedC: true,
 	})
 

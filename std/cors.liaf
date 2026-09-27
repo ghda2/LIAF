@@ -29,7 +29,7 @@
   (fn cors-headers (params (res Response) (origem str)) (returns Response) (effects)
     (body
       (let r Response (response-set-header res "Access-Control-Allow-Origin" origem))
-      (return (response-set-header r "Vary" "Origin"))))
+      (return (response-add-header r "Vary" "Origin"))))
 
   ;; Resposta 204 ao preflight. metodos e cabecalhos sao listas separadas por
   ;; virgula, como no HTTP: "GET, POST" e "Authorization, Content-Type".

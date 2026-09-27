@@ -58,3 +58,33 @@ func TestRequestQuery(t *testing.T) {
 		t.Error("request sem query devolveu ok")
 	}
 }
+
+func TestRequestCookie(t *testing.T) {
+	req := web.Request{Header: http.Header{}}
+	req.Header.Add("Cookie", "session=xyz123; user_id=42; theme=dark")
+
+	if r := RequestCookie(req, "session"); !r.OK || r.Value != "xyz123" {
+		t.Errorf("cookie session: %+v", r)
+	}
+	if r := RequestCookie(req, "user_id"); !r.OK || r.Value != "42" {
+		t.Errorf("cookie user_id: %+v", r)
+	}
+	if r := RequestCookie(req, "theme"); !r.OK || r.Value != "dark" {
+		t.Errorf("cookie theme: %+v", r)
+	}
+	if r := RequestCookie(req, "non_existent"); r.OK {
+		t.Errorf("cookie inexistente devolveu ok")
+	}
+}
+
+func TestResponseAddHeader(t *testing.T) {
+	res := web.Response{Status: 200, Body: "ok"}
+	res = ResponseAddHeader(res, "Set-Cookie", "a=1")
+	res = ResponseAddHeader(res, "Set-Cookie", "b=2")
+	res = ResponseAddHeader(res, "Vary", "Origin")
+	res = ResponseAddHeader(res, "Vary", "Accept-Encoding")
+
+	if len(res.Headers) != 4 {
+		t.Fatalf("esperado 4 headers, obteve %d", len(res.Headers))
+	}
+}

@@ -36,20 +36,17 @@ Detalhes de cada passo, com as decisões e o que foi medido: `docs/logs/LOG_2026
 Os casos `028_jwt_*` e `029_campo_reservado` viraram `027_jwt_*` e `027_campo_reservado`, liberando
 os prefixos da #028 e de uma futura #029.
 
-## O que ficou de fora (vira issue própria)
+## Atualização em 27/09/2026: Cookies e Headers Acumulativos Entregues
 
-Levantado ao revisar o `std/auth`. Em ordem de prioridade:
+1. **`request-cookie`**: builtin adicionado para extração direta de cookies da requisição HTTP (`rt.RequestCookie`).
+2. **`std/cookie`**: helpers canônicos `cookie-make`, `cookie-expire`, `response-set-cookie` e `response-delete-cookie` com suporte a `HttpOnly`, `Secure` e `SameSite`.
+3. **`response-add-header` & `Vary` acumulado**: `Response.AddHeader` implementado no runtime web (`pkg/web/router.go`), garantindo que múltiplos `Set-Cookie` e cabeçalhos `Vary` acumulem sem sobrescrever. Testado em `TestExecuteStdWeb/cookies_e_vary`.
 
-1. **`request-cookie`**: não há builtin para ler o header `Cookie`.
-2. **Sessão guardada no servidor**, para revogar no logout ou na troca de senha. O JWT não revoga.
-3. **Helper de `Set-Cookie` seguro** (`HttpOnly; Secure; SameSite; Path`). Hoje é montado à mão.
-4. **CSRF** para quem autentica por cookie.
-5. **Limite de tentativas** no login.
-6. **`Vary` acumulado**: `cors-headers` sobrescreve um `Vary` já existente. Precisa de
-   `response-add-header` no runtime.
-7. `nbf` e tolerância de relógio no `jwt-verify`.
-8. O `pedidos_api` define `Set-Cookie` com o `cors-headers` sem credenciais, então o cookie não
-   funciona entre origens. Decidir se o exemplo passa a usar a variante com credenciais.
+## O que permanece pendente (para issues futuras de Middleware/Sessão)
+
+1. Sessão guardada no servidor com revogação e CSRF.
+2. Limite de tentativas no login (rate limit).
+3. `nbf` e tolerância de relógio no `jwt-verify`.
 
 Autorização por papéis e a proteção de todas as rotas de uma vez dependem de **middleware**, que
 depende de **closures** (seção B da #031).

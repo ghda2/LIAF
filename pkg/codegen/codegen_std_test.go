@@ -304,4 +304,40 @@ func TestExecuteStdWeb(t *testing.T) {
 			t.Errorf("preflight: %d %v", res.StatusCode, res.Header)
 		}
 	})
+	t.Run("cookies_e_vary", func(t *testing.T) {
+		// 1. Set-Cookie acumula múltiplos cookies na resposta
+		res, _ := do("GET", "/cookie/set", nil)
+		if res.StatusCode != 200 {
+			t.Fatalf("status %d em /cookie/set", res.StatusCode)
+		}
+		setCookies := res.Header.Values("Set-Cookie")
+		if len(setCookies) != 2 {
+			t.Fatalf("esperado 2 Set-Cookie, recebeu: %v", setCookies)
+		}
+		if !strings.Contains(setCookies[0], "sid=xyz789") || !strings.Contains(setCookies[0], "HttpOnly") || !strings.Contains(setCookies[0], "Secure") {
+			t.Errorf("cookie sid malformado: %s", setCookies[0])
+		}
+		if !strings.Contains(setCookies[1], "theme=dark") {
+			t.Errorf("cookie theme malformado: %s", setCookies[1])
+		}
+
+		// 2. RequestCookie le o cookie enviado pelo cliente
+		res, body := do("GET", "/cookie/get", map[string]string{"Cookie": "sid=xyz789; theme=dark"})
+		if res.StatusCode != 200 || !strings.Contains(body, "xyz789") {
+			t.Errorf("GET /cookie/get falhou: %d %s", res.StatusCode, body)
+		}
+
+		// 3. Expirar cookie
+		resDel, _ := do("GET", "/cookie/del", nil)
+		delCookies := resDel.Header.Values("Set-Cookie")
+		if len(delCookies) != 1 || !strings.Contains(delCookies[0], "Max-Age=0") {
+			t.Errorf("cookie deletion falhou: %v", delCookies)
+		}
+
+		// 4. Vary acumulado
+		corsRes, _ := do("GET", "/cors", map[string]string{"Origin": permitida})
+		if corsRes.Header.Get("Vary") != "Origin" {
+			t.Errorf("Vary esperado 'Origin', obteve %q", corsRes.Header.Get("Vary"))
+		}
+	})
 }

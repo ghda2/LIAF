@@ -3,6 +3,7 @@
 (module std_web
   (import "std/auth")
   (import "std/cors")
+  (import "std/cookie")
 
   (fn origens (params) (returns (list str)) (effects)
     (body (return (list "https://painel.exemplo.com"))))
@@ -102,6 +103,25 @@
       (match (cors-origin req (origens))
         (ok origem (return (cors-preflight-credentials origem "POST" "Content-Type")))
         (err e (return (texto 403 e))))))
+
+  (route GET "/cookie/set" (params (req Request)) (returns Response) (effects)
+    (body
+      (let r Response (texto 200 "cookies-definidos"))
+      (let c1 str (cookie-make "sid" "xyz789" 3600 "/" true true "Lax"))
+      (let c2 str (cookie-make "theme" "dark" 86400 "/" false false "Lax"))
+      (let r1 Response (response-set-cookie r c1))
+      (return (response-set-cookie r1 c2))))
+
+  (route GET "/cookie/get" (params (req Request)) (returns Response) (effects)
+    (body
+      (match (request-cookie req "sid")
+        (ok valor (return (texto 200 valor)))
+        (err e (return (texto 404 e))))))
+
+  (route GET "/cookie/del" (params (req Request)) (returns Response) (effects)
+    (body
+      (let r Response (texto 200 "cookie-apagado"))
+      (return (response-delete-cookie r "sid" "/"))))
 
   (fn main (params) (returns void) (effects fs io net)
     (body

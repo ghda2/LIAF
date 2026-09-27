@@ -24,15 +24,24 @@ type Response struct {
 	Headers []ResponseHeader
 }
 
-type ResponseHeader struct{ Name, Value string }
+type ResponseHeader struct {
+	Name, Value string
+	Append      bool
+}
 
-// WithHeader devolve uma copia da resposta com o header acrescentado. A
-// Response da LIAF e um valor, nao um objeto mutavel: a mesma resposta base
-// pode ser reaproveitada por varios ramos sem que um contamine o outro.
+// WithHeader devolve uma copia da resposta com o header acrescentado (substitui no envio final).
 func (r Response) WithHeader(name, value string) Response {
 	headers := make([]ResponseHeader, len(r.Headers), len(r.Headers)+1)
 	copy(headers, r.Headers)
-	r.Headers = append(headers, ResponseHeader{name, value})
+	r.Headers = append(headers, ResponseHeader{Name: name, Value: value, Append: false})
+	return r
+}
+
+// AddHeader devolve uma copia da resposta acumulando o header (usa Header.Add no envio final).
+func (r Response) AddHeader(name, value string) Response {
+	headers := make([]ResponseHeader, len(r.Headers), len(r.Headers)+1)
+	copy(headers, r.Headers)
+	r.Headers = append(headers, ResponseHeader{Name: name, Value: value, Append: true})
 	return r
 }
 
@@ -41,8 +50,8 @@ func newRequest(req *http.Request, body string) Request {
 }
 
 // writeHeaders aplica os headers da rota depois do Content-Type padrao, para
-// que a rota possa troca-lo (text/csv, por exemplo). Set-Cookie acumula; os
-// demais substituem, e o ultimo valor vence. Um nome invalido ou um valor com
+// que a rota possa troca-lo (text/csv, por exemplo). Set-Cookie e Vary acumulam; os
+// demais substituem a menos que adicionados com AddHeader. Um nome invalido ou um valor com
 // quebra de linha e erro de programa, e falha alto em vez de sumir: o
 // net/http descartaria o nome e trocaria a quebra por espaco em silencio.
 func writeHeaders(w http.ResponseWriter, res Response) error {
@@ -55,7 +64,8 @@ func writeHeaders(w http.ResponseWriter, res Response) error {
 		if strings.ContainsAny(hd.Value, "\r\n\x00") {
 			return fmt.Errorf("response header %s has a line break or NUL in its value", hd.Name)
 		}
-		if http.CanonicalHeaderKey(hd.Name) == "Set-Cookie" {
+		canonical := http.CanonicalHeaderKey(hd.Name)
+		if hd.Append || canonical == "Set-Cookie" || canonical == "Vary" {
 			h.Add(hd.Name, hd.Value)
 		} else {
 			h.Set(hd.Name, hd.Value)

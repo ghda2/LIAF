@@ -40,6 +40,27 @@ func ResponseSetHeader(res web.Response, name, value string) web.Response {
 	return res.WithHeader(name, value)
 }
 
+func ResponseAddHeader(res web.Response, name, value string) web.Response {
+	return res.AddHeader(name, value)
+}
+
+// RequestCookie le o valor do cookie especificado pelo nome a partir do header Cookie.
+// Se ausente, devolve erro explicito.
+func RequestCookie(req web.Request, name string) Result[string, string] {
+	rawCookies := req.Header.Values("Cookie")
+	for _, line := range rawCookies {
+		for _, part := range strings.Split(line, ";") {
+			part = strings.TrimSpace(part)
+			if k, v, ok := strings.Cut(part, "="); ok {
+				if k == name {
+					return Ok[string, string](v)
+				}
+			}
+		}
+	}
+	return Err[string, string]("cookie not found: " + name)
+}
+
 // RequestFileData extrai os dados binários do arquivo enviado na requisição HTTP.
 // Suporta requisições multipart/form-data (buscando pelo campo especificado, ou pelo primeiro arquivo)
 // bem como requisições com corpo binário direto (ex: uploads diretos tipo PUT/POST estilo S3).

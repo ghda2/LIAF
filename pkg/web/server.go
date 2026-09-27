@@ -84,95 +84,99 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", 405)
 		return
 	}
-	cache := s.CurrentCache()
-
-	// Bloqueia qualquer tentativa de Directory/Path Traversal
 	if strings.Contains(r.URL.Path, "..") {
 		http.NotFound(w, r)
 		return
 	}
 
-	// Jail / Sandbox: sanitiza caminho para sempre ficar restrito à raiz virtual "/"
-	cleanPath := path.Clean("/" + r.URL.Path)
-
-	// 1. Busca exata do asset no VFS (ex: /style.css, /img/logo.png, /api/data.json)
-	asset, found := cache.Get(cleanPath)
-
-	// 2. Se for diretório (ex: "/" ou "/blog/"), busca index.html naquele diretório
-	if !found {
-		if cleanPath == "/" {
-			asset, found = cache.Get("/index.html")
-		} else {
-			asset, found = cache.Get(cleanPath + "/index.html")
-		}
-	}
-
-	// 3. URLs limpas para HTML (ex: /sobre => /sobre.html)
-	if !found {
-		asset, found = cache.Get(cleanPath + ".html")
-	}
-
-	// 4. Fallback de assets relativos compartilhados:
-	// Se uma subpasta pediu "./style.css" (recebido como /sub/style.css), mas o CSS está na raiz /style.css
-	if !found && path.Dir(cleanPath) != "/" {
-		rootFallback := "/" + path.Base(cleanPath)
-		asset, found = cache.Get(rootFallback)
-	}
-
-	// 5. Fallback para SPA: apenas se a rota NÃO tiver extensão de arquivo
-	if !found {
-		ext := path.Ext(cleanPath)
-		if ext == "" {
-			asset, found = cache.Get("/index.html")
-		}
-	}
-
-	// Se ainda não encontrou (ex: imagem ou script inexistente), retorna 404
+	asset, found := s.findAsset(r.URL.Path)
 	if !found {
 		http.NotFound(w, r)
 		return
 	}
 
-	// Tier 2 (Disco / Streaming): Mídias pesadas servidas diretamente de disco com Range Requests (HTTP 206)
 	if asset.IsDisk && asset.DiskPath != "" {
-		root, err := os.OpenRoot(s.options.Dir)
-		if err != nil {
-			http.NotFound(w, r)
-			return
-		}
-		defer root.Close()
-		rel, err := filepath.Rel(s.options.Dir, asset.DiskPath)
-		if err != nil {
-			http.NotFound(w, r)
-			return
-		}
-		file, err := root.Open(rel)
-		if err != nil {
-			http.NotFound(w, r)
-			return
-		}
-		defer file.Close()
-		stat, err := file.Stat()
-		if err != nil {
-			http.NotFound(w, r)
-			return
-		}
+		s.serveDiskAsset(w, r, asset)
+		return
+	}
+	s.serveRAMAsset(w, r, asset)
+}
 
-		w.Header().Set("ETag", fmt.Sprintf("\"disk-%x-%x\"", stat.ModTime().UnixNano(), stat.Size()))
-		w.Header().Set("Content-Type", asset.ContentType)
-		w.Header().Set("X-Powered-By", "LIAF Web Engine (Streaming)")
+func (s *Server) findAsset(rawPath string) (*CachedAsset, bool) {
+	cache := s.CurrentCache()
+	cleanPath := path.Clean("/" + rawPath)
 
-		if r.URL.Query().Get("v") != "" {
-			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-		} else {
-			w.Header().Set("Cache-Control", "public, max-age=86400")
+	// 1. Busca exata do asset no VFS (ex: /style.css, /img/logo.png, /api/data.json)
+	if asset, found := cache.Get(cleanPath); found {
+		return asset, true
+	}
+	// 2. Se for diretório (ex: "/" ou "/blog/"), busca index.html naquele diretório
+	dirIndex := cleanPath + "/index.html"
+	if cleanPath == "/" {
+		dirIndex = "/index.html"
+	}
+	if asset, found := cache.Get(dirIndex); found {
+		return asset, true
+	}
+	// 3. URLs limpas para HTML (ex: /sobre => /sobre.html)
+	if asset, found := cache.Get(cleanPath + ".html"); found {
+		return asset, true
+	}
+	// 4. Fallback de assets relativos compartilhados:
+	if path.Dir(cleanPath) != "/" {
+		if asset, found := cache.Get("/" + path.Base(cleanPath)); found {
+			return asset, true
 		}
+	}
+	// 5. Fallback para SPA: apenas se a rota NÃO tiver extensão de arquivo
+	if path.Ext(cleanPath) == "" {
+		if asset, found := cache.Get("/index.html"); found {
+			return asset, true
+		}
+	}
+	return nil, false
+}
 
-		http.ServeContent(w, r, path.Base(asset.Path), stat.ModTime(), file)
+func (s *Server) serveDiskAsset(w http.ResponseWriter, r *http.Request, asset *CachedAsset) {
+	root, err := os.OpenRoot(s.options.Dir)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer root.Close()
+
+	rel, err := filepath.Rel(s.options.Dir, asset.DiskPath)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	file, err := root.Open(rel)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer file.Close()
+
+	stat, err := file.Stat()
+	if err != nil {
+		http.NotFound(w, r)
 		return
 	}
 
-	// 1. ETag & Cache Validation (304 Not Modified)
+	w.Header().Set("ETag", fmt.Sprintf("\"disk-%x-%x\"", stat.ModTime().UnixNano(), stat.Size()))
+	w.Header().Set("Content-Type", asset.ContentType)
+	w.Header().Set("X-Powered-By", "LIAF Web Engine (Streaming)")
+
+	if r.URL.Query().Get("v") != "" {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	} else {
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+	}
+
+	http.ServeContent(w, r, path.Base(asset.Path), stat.ModTime(), file)
+}
+
+func (s *Server) serveRAMAsset(w http.ResponseWriter, r *http.Request, asset *CachedAsset) {
 	w.Header().Set("ETag", asset.ETag)
 	w.Header().Set("Vary", "Accept-Encoding")
 	if match := r.Header.Get("If-None-Match"); match != "" && match == asset.ETag {
@@ -180,17 +184,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("ETag", asset.ETag)
 	w.Header().Set("Content-Type", asset.ContentType)
 
-	// Controle inteligente de cache:
 	// HTML nunca fica em cache obsoleto (sempre traz os novos hashes de CSS/JS)
 	if strings.HasPrefix(asset.ContentType, "text/html") {
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		w.Header().Set("Pragma", "no-cache")
 		w.Header().Set("Expires", "0")
 	} else if r.URL.Query().Get("v") != "" {
-		// Assets com hash na URL (?v=hash) são imutáveis e ultrarrápidos
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	} else {
 		w.Header().Set("Cache-Control", "no-cache, must-revalidate")
@@ -198,11 +199,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("X-Powered-By", "LIAF Web Engine")
 
-	// 2. Gzip Compression Check
 	acceptsGzip := strings.Contains(r.Header.Get("Accept-Encoding"), "gzip")
 	if acceptsGzip && len(asset.GzipContent) > 0 {
 		w.Header().Set("Content-Encoding", "gzip")
-		w.Header().Set("Vary", "Accept-Encoding")
 		w.WriteHeader(http.StatusOK)
 		if r.Method != http.MethodHead {
 			w.Write(asset.GzipContent)
@@ -210,7 +209,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. Fallback to uncompressed
 	w.WriteHeader(http.StatusOK)
 	if r.Method != http.MethodHead {
 		w.Write(asset.Content)

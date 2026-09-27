@@ -1,0 +1,60 @@
+// API REST em Sintaxe Linear v0.6 com persistência atômica
+module api_rest_exemplo
+
+struct Item
+  id int
+  nome str
+  preco float
+end
+
+struct Estado
+  proximo_id int
+  itens (list Item)
+end
+
+struct CriarItemInput
+  nome str
+  preco float
+end
+
+fn carregar_estado() (result Estado str) effects(fs)
+  if not(fs-exists("dados.json"))
+    return ok(new Estado(1, make-list(Item)))
+  end
+  let texto = try fs-read-file("dados.json")
+  let estado = try json-decode(texto, Estado)
+  ok(estado)
+end
+
+fn salvar_estado(estado Estado) (result bool str) effects(fs)
+  let texto = try json-encode(estado)
+  try fs-write-atomic("dados.json", texto)
+  ok(true)
+end
+
+route GET "/api/itens" () Response effects(fs)
+  on-err err_msg
+    json-response(500, err_msg)
+  end
+  let estado = try carregar_estado()
+  json-response(200, try json-encode(estado.itens))
+end
+
+route POST "/api/itens" (input CriarItemInput) Response effects(fs)
+  on-err err_msg
+    json-response(500, err_msg)
+  end
+  let estado = try carregar_estado()
+  let novo_item = new Item(estado.proximo_id, input.nome, input.preco)
+  let lista = estado.itens
+  list-push(lista, novo_item)
+  let novo_estado = new Estado(estado.proximo_id + 1, lista)
+  try salvar_estado(novo_estado)
+  json-response(201, try json-encode(novo_item))
+end
+
+fn main() void effects(fs, io, net)
+  let porta = unwrap-or(list-get(args(), 0), "8080")
+  println(fmt("Servidor ouvindo em http://localhost:{}", porta))
+  unwrap-or(serve-hybrid("./public", porta), false)
+end

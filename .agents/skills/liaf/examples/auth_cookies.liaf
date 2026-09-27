@@ -1,0 +1,37 @@
+// Autenticação com Cookies Seguros em Sintaxe Linear v0.6
+module auth_cookies_exemplo
+
+import "std/cookie"
+
+struct LoginInput
+  usuario str
+  senha str
+end
+
+route POST "/login" (input LoginInput) Response effects(rand)
+  if str-eq(input.usuario, "admin") && str-eq(input.senha, "123456")
+    let token = random-token()
+    let c = cookie-make("sid", token, 86400, "/", true, true, "Lax")
+    let r = json-response(200, "{\"status\":\"logado\"}")
+    return response-set-cookie(r, c)
+  end
+  json-response(401, "{\"error\":\"Credenciais inválidas\"}")
+end
+
+route GET "/perfil" (req Request) Response
+  on-err _
+    json-response(401, "{\"error\":\"Não autenticado\"}")
+  end
+  let sid = try request-cookie(req, "sid")
+  json-response(200, fmt("{{\"usuario\":\"admin\",\"sessao\":\"{}\"}}", sid))
+end
+
+route POST "/logout" () Response
+  let r = json-response(200, "{\"status\":\"deslogado\"}")
+  response-delete-cookie(r, "sid", "/")
+end
+
+fn main() void effects(fs, io, net)
+  println("Servidor de autenticação rodando na porta 8080")
+  unwrap-or(serve-hybrid("./public", "8080"), false)
+end

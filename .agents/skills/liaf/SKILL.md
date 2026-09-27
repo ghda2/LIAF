@@ -1,32 +1,32 @@
 ---
 name: liaf
-description: Guia e workflow para agentes de IA escreverem, validarem com auto-cura, compilarem e realizarem deploy de aplicações na linguagem LIAF (Language for AI First).
+description: Guia definitivo e workflow para agentes de IA escreverem, validarem com auto-cura mecânica, compilarem e realizarem deploy de aplicações na linguagem LIAF (Language for AI First).
 ---
 
 # LIAF — AI Agent Skill
 
-Este guia capacita agentes de IA a interagir, gerar código, auto-curar erros e fazer deploy de aplicações utilizando a linguagem **LIAF (Language for AI First)**.
+Este guia capacita agentes de IA a gerar código, auto-curar erros e compilar aplicações utilizando a linguagem **LIAF (Language for AI First)**.
 
 ---
 
-## 1. Sintaxe Linear — LIAF v0.6 (Recomendada para Agentes / -69% de Tokens)
+## 1. Princípio Fundamental: Sintaxe Linear v0.6 (69% Menos Tokens)
 
-A partir da v0.6, a LIAF suporta **sintaxe linear baseada em linhas e delimitadores leves (`end`)**, eliminando as pirâmides de parênteses aninhados e reduzindo em até 69% o consumo de tokens:
+A partir da versão v0.6, a LIAF adota **sintaxe linear baseada em linhas e delimitadores leves (`end`)**. Não use pirâmides de parênteses aninhados da v0.1/v0.3.
 
 ```liaf
-// Tipos de dados
+// Definição de tipos
 struct Task
   id int
   title str
   done bool
 end
 
-// Funções puras ou com efeitos
+// Funções com operadores infixos naturais
 fn somar(a int, b int) int
   a + b
 end
 
-// Rotas HTTP declarativas
+// Rotas declarativas com try/on-err planos
 route GET "/tasks" () Response effects(fs)
   on-err msg
     json-response(500, msg)
@@ -34,172 +34,58 @@ route GET "/tasks" () Response effects(fs)
   let state = try load-state()
   json-response(200, try json-encode(state.tasks))
 end
-
-// WebSocket
-ws-route "/ws/chat" (req Request, conn WSConn) effects(io, net)
-  on-open
-    ws-join(conn, "chat_geral")
-    println("Conectado")
-  end
-
-  on-message text
-    try ws-broadcast("chat_geral", text)
-  end
-end
 ```
 
-### Sintaxe S-expressions — LIAF v0.5 (Compatibilidade Retroativa)
-A forma canônica anterior em S-expressions compactas continua 100% suportada:
-
-```liaf
-(module exemplo
-  (struct Task (id int) (title str) (done bool))
-
-  (fn soma ((a int) (b int)) int (effects)
-    (add a b)))
-```
-
-Regras:
-
-1. **Assinatura compacta sem tags redundantes:**
-   - Funções: `(fn nome (params) retorno (effects...) stmts...)`
-   - Rotas: `(route METODO path (params) retorno (effects...) stmts...)`
-   - Parâmetros vazios são expressos por `()`: `(fn main () void (effects io) (println "Olá"))`
-2. **Retorno implícito:** Em funções e rotas não-void, a última expressão avaliada é o retorno implícito:
-   ```liaf
-   (fn dobro ((n int)) int (effects)
-     (mul n 2))
-   ```
-3. **Struct compacta:** Sem tag `fields`: `(struct User (id int) (name str) (email str))`.
-4. **`match` como expressão de valor:** Atribui diretamente a variáveis sem necessidade de mutação imperativa com `set`:
-   ```liaf
-   (let token str
-     (match (request-header req "Authorization")
-       (ok t t)
-       (err _ "")))
-   ```
-5. **Combinador `unwrap-or`:** Desempacota `(result T E)` ou `(option T)` com fallback em 1 linha:
-   ```liaf
-   (let status str (unwrap-or (request-query req "status") "todos"))
-   ```
-6. **Interpolação com `(fmt ...)`:** Substitui chamadas recursivas de `concat`:
-   ```liaf
-   (println (fmt "Usuário {} conectado na sala {}" user room))
-   ```
-7. **Tratamento de erro com `try` e `on-err`:**
-   ```liaf
-   (fn salvar ((estado Estado)) Response (effects fs io)
-     (on-err message (json-response 500 message))
-     (let texto str (try (json-encode estado)))
-     (try (fs-write-atomic "estado.json" texto))
-     (json-response 200 "{\"ok\":true}"))
-   ```
-8. **Efeitos obrigatórios:** `io`, `fs`, `net`, `clock`, `spawn`, `db`. São transitivos. Pura é `(effects)`.
-
-### Rotas HTTP declarativas
-
-```liaf
-(route PUT "/tasks/{id}" ((id int) (input UpdateInput)) Response (effects fs io)
-  (on-err message (json-response 500 message))
-  (let estado Estado (try (carregar-estado)))
-  (atualizar estado id input))
-```
-
-- Cada `{nome}` no caminho precisa de um parâmetro homônimo, `int` ou `str`. Ele chega convertido.
-- Parâmetro de struct recebe o corpo JSON já desserializado; corpo inválido vira `400` sozinho.
-- Não chame `http-get` para uma rota declarativa.
-
-### Armadilhas comuns
-
-- `fs-write-file`, `fs-rename` e `fs-write-atomic` retornam `(result void str)`. `ok` já significa
-  que gravou; não existe `ok false` para testar.
-- `json-encode` de `(list T)` produz array JSON nativo `[...]`. Não monte colchetes com `concat`.
-- Structs são imutáveis: não há `set-field`, construa uma nova com `(new Tipo ...)`.
-- Leitura de campo é `objeto.campo`, sem espaços, e encadeia: `req.user.name`. Só a base variável tem
-  ponto; com base composta use `(field (get xs 0) nome)`. O `liafc fmt` normaliza `(field s x)` para `s.x`.
-- Não compare com `true`/`false`: `(eq x false)` é `E_REDUNDANT_BOOL_COMPARE`. Escreva `(not x)` ou `x`.
-
-Exemplo completo e executável: `pkg/codegen/testdata/task_api_v03.liaf`.
+### Regras de Ouro para Modelos de IA:
+1. **Delimitadores explícitos:** Blocos como `struct`, `fn`, `route`, `ws-route`, `if`, `while`, `for-range` terminam sempre com `end`.
+2. **Retorno implícito:** Em funções e rotas não-void, a **última expressão avaliada é o retorno**. Evite `return` redundante no final do bloco.
+3. **Operadores infixos:** Use `+`, `-`, `*`, `/`, `==`, `!=`, `<`, `<=`, `>`, `>=`, `&&`, `||`, `!`.
+4. **Tratamento de erros:** Use `try expr` para propagar resultados e `on-err errVar` para capturar falhas sem aninhar `match`.
+5. **Inferência de tipos:** `let nome = expr` infere o tipo automaticamente. Especifique apenas se necessário (`let x int = 10`).
+6. **Acesso a campos:** Use `objeto.campo` diretamente (ex: `state.next_id`, `req.user.name`).
+7. **Efeitos obrigatórios:** Declare `effects(...)` para operações impuras (`io`, `fs`, `net`, `clock`, `db`, `rand`). Funções puras omitem ou usam `effects()`.
 
 ---
 
-## 2. Loop de Auto-Cura (Auto-Healing Loop)
+## 2. Loop de Auto-Cura Mecânica (Auto-Healing Loop)
 
-Sempre que gerar ou editar um arquivo `.liaf`, execute o ciclo de validação autônoma:
+Sempre que gerar ou editar um arquivo `.liaf`, execute a validação autônoma:
 
-### Passo 1: Executar o checker com saída JSON
 ```bash
-liafc check <caminho/arquivo.liaf> --json
+liafc check caminho/app.liaf --json
 ```
 
-### Passo 2: Analisar a resposta JSON
-- Se `"status": "success"`, prossiga para a compilação.
-- Se `"status": "error"`, examine a lista `errors`:
-  - `code`: Tipo do erro (ex: `TAG_NAME_MISMATCH`, `TYPE_MISMATCH`, `CHANNEL_TYPE_MISMATCH`).
-  - `line` e `col`: Coordenadas exatas no arquivo.
-  - `suggested_patch`: Correção pontual sugerida pelo compilador.
+### Resposta JSON do Compilador:
+- Se `"status": "success"`: Código pronto para compilar.
+- Se `"status": "error"`: O compilador devolve as coordenadas e o patch exato:
+  - `code`: Identificador estático do erro (ex: `E_UNDEFINED_SYMBOL`, `E_TYPE_MISMATCH`).
+  - `line` e `col`: Coordenadas exatas.
+  - `suggested_patch`: Correção mecânica recomendada pelo compilador.
 
-### Passo 3: Aplicar o patch e revalidar
-Substitua o trecho defeituoso com base em `suggested_patch` e execute o `liafc check` novamente até obter `status: success`.
+Aplique o patch sugerido e reexecute `liafc check` até obter sucesso. Veja o catálogo detalhado em [references/auto_healing.md](references/auto_healing.md).
 
 ---
 
-## 3. Web Engine Autônomo
+## 3. Comandos do Compilador (`liafc`)
 
-Para criar um servidor web estático de alta performance (RAM < 4 MB):
+O executável `liafc` é a ferramenta central:
 
-### Código LIAF (`web_engine.liaf`)
-```liaf
-(module web-engine
-  (fn main (params) (returns void) (effects fs io net)
-    (body
-      (do (println "Iniciando LIAF Web Engine na porta 7070..."))
-      (do (serve-site "./public" "" "7070" false)))))
-```
-- Argumentos de `serve-site`:
-  1. Diretório público (ex: `"./public"` com index.html, style.css, js).
-  2. Domínio para Auto-TLS (ou `""` para desativar).
-  3. Porta (ex: `"7070"`).
-  4. Auto-TLS booleano (`false` ou `true`).
-
-### Componentização e Layouts em RAM
-O LIAF Web Engine suporta montagem de templates diretamente na inicialização em RAM:
-- **Layout Base:** Use `<!-- content -->` ou `<!-- slot -->` no arquivo base (ex: `base.html`).
-- **Páginas Filhas:** No topo do arquivo HTML da página, declare `<!-- layout "base.html" -->`.
-- **Inclusão de Parciais:** Use `<!-- include "menu.html" -->` ou `<!-- include "footer.html" -->`.
-- **URLs Limpas:** Rotas como `/sobre` ou `/servicos` servem automaticamente `sobre.html` e `servicos.html`.
-- **Versionamento Automático (Zero Ctrl+F5):** O runtime calcula o hash SHA1 dos arquivos CSS/JS e injeta automaticamente `?v=<hash>` nas tags `<link>` e `<script>` do HTML.
-- **Hot-Reload VFS:** Chame `POST /_liaf/reload` para recarregar todos os arquivos na RAM em ~3ms sem reiniciar o processo.
+| Ação | Comando | Descrição |
+|---|---|---|
+| **Checar** | `liafc check app.liaf --json` | Valida sintaxe e tipos emitindo JSON para auto-cura |
+| **Formatar** | `liafc fmt app.liaf -w` | Normaliza a indentação e o layout canônico |
+| **Executar** | `liafc run app.liaf` | Executa o programa diretamente |
+| **Compilar** | `liafc build app.liaf -o server.exe` | Compila executável nativo autônomo |
+| **Cross-compilar** | `$env:GOOS="linux"; liafc build app.liaf -o app_linux` | Gera binário para servidor Linux x86_64 |
 
 ---
 
-## 4. Pipeline de Compilação e Deploy
+## 4. Biblioteca de Referência
 
-### Formatar na forma canônica
-```bash
-liafc fmt arquivo.liaf        # imprime
-liafc fmt -l *.liaf  # lista o que está fora do formato
-```
-O formatador ainda não preserva comentários, então `-w` recusa gravar em arquivo comentado sem
-`--drop-comments`.
-
-### Compilar localmente (Windows)
-```bash
-liafc build ./app.liaf -o server.exe
-```
-Funciona em qualquer pasta: não precisa de `go.mod`, `replace` nem do repositório da LIAF, só do
-comando `go`. O runtime vem embutido no `liafc`. No Windows, `-o` sem extensão ganha `.exe`.
-
-### Cross-compilar para Linux (Produção x86_64)
-No PowerShell:
-```powershell
-$env:GOOS="linux"; $env:GOARCH="amd64"; liafc build ./app.liaf -o liaf_server_linux; Remove-Item Env:\GOOS; Remove-Item Env:\GOARCH
-```
-
-### Deploy Remoto via SSH
-1. Enviar binário e pasta pública:
-   ```bash
-   scp -B -C -r liaf_server_linux public/ HOST:/opt/app/
-   ```
-2. Configurar permissão e serviço systemd (`/etc/systemd/system/app.service`).
-3. Se houver proxy reverso (Caddy / Nginx), apontar para a porta configurada no script LIAF.
+Consulte os guias especializados da skill conforme sua necessidade:
+- [references/syntax.md](references/syntax.md): Especificação completa da gramática v0.6 e v0.5.
+- [references/stdlib.md](references/stdlib.md): Guia de `std/cookie`, `std/auth`, `std/jwt`, `std/cors` e `std/storage`.
+- [references/auto_healing.md](references/auto_healing.md): Tabela de códigos de erro e estratégias de correção.
+- [examples/rest_api.liaf](examples/rest_api.liaf): Exemplo canônico de API REST com persistência atômica.
+- [examples/websocket.liaf](examples/websocket.liaf): Exemplo canônico de WebSockets e pub/sub.
+- [examples/auth_cookies.liaf](examples/auth_cookies.liaf): Exemplo canônico de autenticação por Cookies e rotas seguras.

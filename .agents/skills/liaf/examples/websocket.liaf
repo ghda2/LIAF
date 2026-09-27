@@ -1,0 +1,27 @@
+// WebSocket em Sintaxe Linear v0.6
+module websocket_exemplo
+
+ws-route "/ws/chat" (req Request, conn WSConn) effects(io, net)
+  on-err err_msg
+    println(fmt("Erro no websocket: {}", err_msg))
+  end
+
+  on-open
+    let nome = unwrap-or(request-query(req, "user"), "Visitante")
+    ws-join(conn, "chat_geral")
+    try ws-broadcast("chat_geral", fmt(">>> {} entrou na sala", nome))
+  end
+
+  on-message msg
+    try ws-broadcast("chat_geral", msg)
+  end
+
+  on-close
+    println("Conexão WebSocket finalizada")
+  end
+end
+
+fn main() void effects(fs, io, net)
+  println("Servidor WebSocket pronto na porta 7070")
+  unwrap-or(serve-hybrid("./public", "7070"), false)
+end

@@ -1,6 +1,6 @@
 # Issue #030 — Modularização dos monólitos (continuação da #014)
 
-**Estado:** Prioridade alta concluída. **Criada em:** 26/09/2026. **Tipo:** dívida técnica / manutenibilidade.
+**Estado:** Concluída (100%). **Criada em:** 26/09/2026. **Tipo:** dívida técnica / manutenibilidade.
 **Substitui como plano de execução:** [#014](../arquivo/ISSUE_014_MODULARIZACAO_CODEBASE.md), cujo relatório é de
 16/09/2026 e ficou defasado.
 
@@ -131,29 +131,29 @@ expr.go      genExpr, genCall, genBinaryOp
 types.go     mapType, mapTypeName, opaqueGoTypes, sanitizeIdent, fieldIdent
 ```
 
-## Prioridade média — 4 arquivos
+## Prioridade média — 4 arquivos [TODOS CONCLUÍDOS]
 
-Grandes, mas coesos. Dividir ajuda a navegar; não há urgência.
+Grandes, mas coesos. Dividir ajuda a navegar.
 
-| Arquivo | Linhas | Divisão natural |
-|---|---|---|
-| `pkg/dbdrv/mysql.go` | 899 (33 funções) | `mysql.go` (Conn: Query, Exec, Begin...), `mysql_auth.go` (handshake, authResponse, finishAuth), `mysql_rows.go` (readColumns, decodificação binária de valores e datas), `mysql_wire.go` (write, read, lenenc, myError) |
-| `pkg/dbdrv/postgres.go` | 546 | Mesma divisão do MySQL |
-| `pkg/web/websocket.go` | 516 | Duas responsabilidades: RFC 6455 (`Upgrade`, frames, `WSConn`) e pub/sub (`wsHub`, `WSJoin`, `WSBroadcast`...) → `websocket.go` + `pubsub.go` |
-| `cmd/liafc/main.go` | 392 | `main.go` (dispatch e usage), `build.go` (`runBuild`, 103 linhas), `run.go`, `check.go`, `publish.go`, `fsutil.go` (`copyDirectory`, `findGoMod`) |
+| Arquivo | Linhas originais | Divisão realizada | Estado |
+|---|---|---|---|
+| `pkg/dbdrv/mysql.go` | 899 (33 funções) | `mysql.go` (Conn: Query, Exec, Begin...), `mysql_auth.go` (handshake, authResponse, finishAuth), `mysql_rows.go` (readColumns, decodificação binária de valores e datas), `mysql_wire.go` (write, read, lenenc, myError) | [CONCLUÍDO - Commit 1af74b7] |
+| `pkg/dbdrv/postgres.go` | 546 | `postgres.go`, `postgres_auth.go`, `postgres_rows.go`, `postgres_wire.go` | [CONCLUÍDO - Commit c43741b] |
+| `pkg/web/websocket.go` | 516 | RFC 6455 (`Upgrade`, frames, `WSConn`) em `websocket.go` e pub/sub (`wsHub`, `WSJoin`, `WSBroadcast`...) em `pubsub.go` | [CONCLUÍDO - Commit 881e96c] |
+| `cmd/liafc/main.go` | 392 | `main.go` (dispatch e usage), `build.go` (`runBuild`), `run.go`, `check.go`, `publish.go`, `fsutil.go` (`copyDirectory`, `findGoMod`) | [CONCLUÍDO - Commit 97c745b] |
 
-## Funções longas em arquivos que estão bem
+## Funções longas em arquivos que estão bem [TODAS CONCLUÍDAS]
 
-Refatorar por dentro, sem mover arquivo:
+Refatoradas por dentro, sem mover arquivo:
 
-| Função | Arquivo | Linhas |
-|---|---|---|
-| `Server.ServeHTTP` | `pkg/web/server.go` | 142 |
-| `RenderHTML` | `pkg/markdown/markdown.go` | 134 |
-| `Parser.parseMatch` | `pkg/parser/control.go` | 123 |
-| `Server.serveAdmin` | `pkg/web/admin.go` | 119 |
-| `Checker.wsRoute` | `pkg/checker/websocket.go` | 109 |
-| `Generator.genWSRoute` | `pkg/codegen/websocket.go` | 96 |
+| Função | Arquivo | Linhas originais | Resolução | Estado |
+|---|---|---|---|---|
+| `Server.ServeHTTP` | `pkg/web/server.go` | 142 | Extraídos `findAsset`, `serveDiskAsset` e `serveRAMAsset` | [CONCLUÍDO - Commit 867c401] |
+| `RenderHTML` | `pkg/markdown/markdown.go` | 134 | Encapsulado em `markdownRenderer` com handlers por bloco | [CONCLUÍDO - Commit 868631b] |
+| `Parser.parseMatch` | `pkg/parser/control.go` | 123 | Decomposto em `parseMatchSome` e `parseMatchOk` | [CONCLUÍDO - Commit 1b96c32] |
+| `Server.serveAdmin` | `pkg/web/admin.go` | 119 | Decomposto em `authenticateAdmin`, `handleReload`, `handlePublish` | [CONCLUÍDO - Commit 867c401] |
+| `Checker.wsRoute` | `pkg/checker/websocket.go` | 109 | Decomposto em `validateWSEffects`, `validateWSParams` e `checkWSBodies` | [CONCLUÍDO - Commit 342fbdb] |
+| `Generator.genWSRoute` | `pkg/codegen/websocket.go` | 96 | Extraídos `genWSPathParams` e `genWSLoop` | [CONCLUÍDO - Commit 33ed5f8] |
 
 ## Manter como está
 

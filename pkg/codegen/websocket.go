@@ -33,14 +33,24 @@ func (g *Generator) genWSRoute(w *ast.WSRouteDecl) {
 	g.sb.WriteString(fmt.Sprintf("\tweb.RegisterWS(%q, func(_liaf_conn *web.WSConn, _liaf_req web.Request) {\n", w.Path))
 	g.indent += 2
 
-	// Indice de cada {nome} no padrao do path, pela mesma razao de genRoute:
-	// usar o ultimo segmento quebraria /ws/{sala}/eventos.
+	callArgs := g.genWSPathParams(w)
+	joined := strings.Join(callArgs, ", ")
+
+	g.genWSLoop(open, message, closed, joined)
+
+	g.indent -= 2
+	g.sb.WriteString("\t})\n")
+	g.sb.WriteString("}\n\n")
+}
+
+func (g *Generator) genWSPathParams(w *ast.WSRouteDecl) []string {
 	pathIndex := map[string]int{}
 	for i, seg := range strings.Split(strings.Trim(w.Path, "/"), "/") {
 		if len(seg) > 2 && strings.HasPrefix(seg, "{") && strings.HasSuffix(seg, "}") {
 			pathIndex[seg[1:len(seg)-1]] = i
 		}
 	}
+
 	partsEmitted := false
 	var callArgs []string
 	for _, p := range w.Params {
@@ -77,8 +87,10 @@ func (g *Generator) genWSRoute(w *ast.WSRouteDecl) {
 		g.sb.WriteString("}\n")
 		callArgs = append(callArgs, pName)
 	}
+	return callArgs
+}
 
-	joined := strings.Join(callArgs, ", ")
+func (g *Generator) genWSLoop(open, message, closed, joined string) {
 	g.writeIndent()
 	g.sb.WriteString(fmt.Sprintf("%s(%s)\n", open, joined))
 	g.writeIndent()
@@ -99,15 +111,8 @@ func (g *Generator) genWSRoute(w *ast.WSRouteDecl) {
 	g.indent--
 	g.writeIndent()
 	g.sb.WriteString("}\n")
-	// Next devolve false tanto no fechamento limpo quanto na queda da
-	// conexao, entao (on-close ...) roda sempre — que e a garantia de que
-	// um cliente nunca fica pendurado num topico.
 	g.writeIndent()
 	g.sb.WriteString(fmt.Sprintf("%s(%s)\n", closed, joined))
-
-	g.indent -= 2
-	g.sb.WriteString("\t})\n")
-	g.sb.WriteString("}\n\n")
 }
 
 func appendArg(joined, extra string) string {

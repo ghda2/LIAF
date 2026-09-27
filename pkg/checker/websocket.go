@@ -118,6 +118,15 @@ func (c *Checker) wsRoute(w *ast.WSRouteDecl) {
 	c.loops = 0
 	c.used = map[string]bool{}
 
+	c.validateWSEffects(w, where)
+	c.validateWSParams(w)
+	c.checkWSBodies(w)
+
+	c.unusedEffects(w, w.Effects, where)
+	c.pop()
+}
+
+func (c *Checker) validateWSEffects(w *ast.WSRouteDecl, where string) {
 	declaredEffects := map[string]bool{}
 	for _, e := range w.Effects {
 		if !validEffect(e) {
@@ -135,7 +144,9 @@ func (c *Checker) wsRoute(w *ast.WSRouteDecl) {
 		c.error(w, "E_UNDECLARED_EFFECT", where+" holds a network connection and must declare the net effect")
 	}
 	c.used["net"] = true
+}
 
+func (c *Checker) validateWSParams(w *ast.WSRouteDecl) {
 	pathParams := map[string]bool{}
 	for _, seg := range strings.Split(strings.Trim(w.Path, "/"), "/") {
 		if len(seg) > 2 && strings.HasPrefix(seg, "{") && strings.HasSuffix(seg, "}") {
@@ -153,16 +164,11 @@ func (c *Checker) wsRoute(w *ast.WSRouteDecl) {
 			connections++
 			continue
 		}
-		// O Request e o do handshake: da acesso a headers e a query string,
-		// que e por onde o navegador consegue mandar um token (a API de
-		// WebSocket do navegador nao deixa definir Authorization).
 		if name(p.Type) == "Request" {
 			requests++
 			continue
 		}
 		if !pathParams[p.Name] {
-			// Nao ha corpo JSON num handshake de WebSocket, entao um
-			// parametro que nao vem do path nao teria de onde ser preenchido.
 			c.error(w, "E_WS_PARAM", fmt.Sprintf(
 				"parameter %s does not match any {name} in the path; a ws-route only takes path parameters, one %s and optionally one Request", p.Name, wsConnType))
 			continue
@@ -182,7 +188,9 @@ func (c *Checker) wsRoute(w *ast.WSRouteDecl) {
 	if requests > 1 {
 		c.error(w, "E_WS_PARAM", fmt.Sprintf("a ws-route accepts at most one parameter of type Request, found %d", requests))
 	}
+}
 
+func (c *Checker) checkWSBodies(w *ast.WSRouteDecl) {
 	if w.OnErrVar != "" {
 		c.push()
 		c.define(w.OnErrVar, primitive("str"), w, false)
@@ -202,7 +210,5 @@ func (c *Checker) wsRoute(w *ast.WSRouteDecl) {
 	c.push()
 	c.statements(w.OnClose)
 	c.pop()
-
-	c.unusedEffects(w, w.Effects, where)
-	c.pop()
 }
+

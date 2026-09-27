@@ -1,0 +1,37 @@
+(module db-mysql
+  (struct Product (fields (id int) (title str) (price float)))
+  (struct ProductCount (fields (total int)))
+
+  (fn run (params (db DBConnection)) (returns (result bool str)) (effects db io)
+    (body
+      (try (db-exec db "CREATE TABLE IF NOT EXISTS products (id int PRIMARY KEY, title varchar(100) NOT NULL, price double NOT NULL)"))
+      (try (db-exec db "DELETE FROM products"))
+      (db-transaction db
+        (try (db-exec db "INSERT INTO products (id, title, price) VALUES (?, ?, ?)" 10 "Mouse Gamer" 150.50))
+        (try (db-exec db "INSERT INTO products (id, title, price) VALUES (?, ?, ?)" 20 "Teclado Mecanico" 350.00)))
+      (let items (list Product)
+        (try (db-query db "SELECT id, title, price FROM products WHERE id >= ? ORDER BY id" Product 10)))
+      (for-each p items
+        (println (concat (str-from-int p.id) ": " p.title " (R$ " (str-from-float p.price) ")")))
+      (let totals (list ProductCount)
+        (try (db-query db "SELECT count(*) AS total FROM products" ProductCount)))
+      (match (list-get totals 0)
+        (ok row (println (concat "total=" (str-from-int row.total))))
+        (err message (println message)))
+      (return (ok true))))
+
+  (fn main (params) (returns void) (effects io db)
+    (body
+      (match (list-get (args) 0)
+        (ok dsn
+          (match (db-connect "mysql" dsn)
+            (ok db
+              (match (run db)
+                (ok done (println "pronto"))
+                (err message (println message)))
+              (match (db-close db)
+                (ok closed (println "conexao encerrada"))
+                (err message (println message))))
+            (err message (println (concat "conexao falhou: " message)))))
+        (err message (println "Uso: db_mysql mysql://usuario:senha@localhost:3306/banco?tls=false")))))
+)

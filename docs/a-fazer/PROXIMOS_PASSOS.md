@@ -41,7 +41,7 @@ Itens de biblioteca e runtime, sem mudar a linguagem:
 
 - Pendências de autenticação da [#027](../feito/ISSUE_027_SEGURANCA_WEB_E_STD.md): `request-cookie`,
   `std/cookie`, sessão no servidor, `response-add-header` para o `Vary`.
-- Validar a #015 contra bancos reais (PostgreSQL, MySQL com `caching_sha2_password`, Redis).
+- ~~Validar a #015 contra bancos reais (PostgreSQL, MySQL com `caching_sha2_password`, Redis)~~ — Concluída em 27/09 via Docker.
 - #030, item 1: `web/cache.go` tem 88% de código duplicado — é risco, não só desconforto.
 
 ## Cuidados com o ambiente

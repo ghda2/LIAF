@@ -1,6 +1,6 @@
 # Issue #015: Drivers Nativos para Bancos de Dados Externos (PostgreSQL, MySQL, Redis)
 
-**Status:** Implementada (16/09/2026) — falta validação contra servidores reais  
+**Status:** Concluída e Validada em Servidores Reais (27/09/2026)  
 **Componente:** `pkg/dbdrv`, `pkg/runtime`, `pkg/checker`, `pkg/codegen`, `pkg/parser`, `pkg/ast`  
 **Data:** 16 de setembro de 2026  
 
@@ -79,7 +79,14 @@ A forma entregue é `(db-query conn "SQL" TipoLinha arg...)` e `(db-exec conn "S
 - `examples/db_redis.liaf` compilado e **executado** contra um servidor RESP falso: `db-connect`, `redis-set`, `redis-get`, `json-decode` e o erro de chave ausente, tudo pelo binário gerado.
 - `examples/db_postgres.liaf` compilado e executado; falha de conexão chega ao usuário como mensagem, sem panic.
 
-**Não verificado:** nenhum servidor PostgreSQL, MySQL ou Redis real foi usado. Os testes cobrem o enquadramento contra servidores falsos, o que não substitui a validação contra implementações reais — em especial o caminho `caching_sha2_password` com RSA do MySQL, que não tem servidor falso.
+### 5.1 Validação com Servidores Reais (27/09/2026)
+
+Ambiente Docker configurado com `docker-compose.test.yml`:
+- **PostgreSQL 16 (Alpine):** Testado handshake, SSLRequest, DDL, DML parametrizado, transações ACID e Rollback.
+- **MySQL 8.0:** Validado caminho completo de autenticação moderna `caching_sha2_password` com troca de chaves RSA em texto puro (`tls=false`), enquadramento binário, prepared statements e transações.
+- **Redis 7 (Alpine):** Validado protocolo RESP2 com autenticação via senha, comandos `SET` (com TTL), `GET` e tratamento de chaves inexistentes.
+- **Testes Go automatizados:** `TestRealDatabases` em `pkg/dbdrv/dbdrv_real_test.go` passou 100%.
+- **Execução ponta a ponta nativa:** Executados `db_postgres.liaf`, `db_mysql.liaf` e `db_redis.liaf` diretamente pelo compilador `liafc run`.
 
 ---
 

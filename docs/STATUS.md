@@ -13,7 +13,6 @@ Como as pastas estão organizadas: [README.md](README.md).
 | Issue | Estado | O que falta de fato |
 |---|---|---|
 | [#010 Backend C](a-fazer/ISSUE_010_GO_INDEPENDENCE_NATIVE_BACKEND.md) | Parcial | Testes do emissor C passam; sem `--backend` na CLI, sem JSON/web, sem GC, nunca rodado sem Go |
-| [#015 Bancos](a-fazer/ISSUE_015_DATABASE_DRIVERS_NETWORK.md) | Implementada | Nunca testada contra PostgreSQL, MySQL ou Redis de verdade |
 | [#007 Deploy](a-fazer/ISSUE_007_AUTONOMOUS_AI_DEPLOY_PIPELINE.md) | Implementada | Esta revisão não foi instalada em servidor |
 | [#001 SSG](a-fazer/ISSUE_001_SSG_EVOLUTION.md) | Implementada | Metas de desempenho (RAM <5 MB, reload <5 ms) nunca medidas sob carga definida |
 | [#006 Result](a-fazer/ISSUE_006_STRUCTURED_ERROR_HANDLING.md) | Implementada | Revisão de fluxo entre ramos e loops, sem registro de andamento desde 16/09 |
@@ -27,6 +26,7 @@ Como as pastas estão organizadas: [README.md](README.md).
 
 | Issue | Evidência |
 |---|---|
+| [#015 Bancos](feito/ISSUE_015_DATABASE_DRIVERS_NETWORK.md) | Drivers nativos testados e validados contra PostgreSQL 16, MySQL 8 (caching_sha2_password) e Redis 7 reais via Docker; programas `db_postgres.liaf`, `db_mysql.liaf` e `db_redis.liaf` executados |
 | [#030 Modularização dos monólitos](feito/ISSUE_030_MODULARIZACAO_MONOLITOS.md) | Modularizados os 6 monólitos críticos (cache, table, builtins_hooks, parser, checker, codegen), 4 módulos de prioridade média (mysql, postgres, websocket, liafc) e funções longas |
 | [#032 Compilar fora do repositório](feito/ISSUE_032_COMPILADOR_AUTONOMO_RUNTIME_EMBUTIDO.md) | Runtime embutido (`runtime_embed.go`, `pkg/toolchain`); `TestLiafcBuildsOutsideRepository` compila e roda fora da árvore com `GOPROXY=off`. Ainda exige o comando `go` |
 | [#012 Ergonomia](feito/ISSUE_012_SYNTAX_SUGAR_AND_TOKEN_EFFICIENCY.md) | `s.campo` e `E_REDUNDANT_BOOL_COMPARE`: `field_path_test.go`, `checker_canonical_test.go`, caso `012_campo_ponto` |

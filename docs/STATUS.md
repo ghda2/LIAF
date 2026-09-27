@@ -12,7 +12,6 @@ Como as pastas estão organizadas: [README.md](README.md).
 
 | Issue | Estado | O que falta de fato |
 |---|---|---|
-| [#032 Compilar fora do repositório](a-fazer/ISSUE_032_COMPILADOR_AUTONOMO_RUNTIME_EMBUTIDO.md) | Aberta | `liafc build` fora da árvore falha: o código gerado importa `liaf/pkg/runtime` |
 | [#010 Backend C](a-fazer/ISSUE_010_GO_INDEPENDENCE_NATIVE_BACKEND.md) | Parcial | Testes do emissor C passam; sem `--backend` na CLI, sem JSON/web, sem GC, nunca rodado sem Go |
 | [#015 Bancos](a-fazer/ISSUE_015_DATABASE_DRIVERS_NETWORK.md) | Implementada | Nunca testada contra PostgreSQL, MySQL ou Redis de verdade |
 | [#007 Deploy](a-fazer/ISSUE_007_AUTONOMOUS_AI_DEPLOY_PIPELINE.md) | Implementada | Esta revisão não foi instalada em servidor |
@@ -29,6 +28,7 @@ Como as pastas estão organizadas: [README.md](README.md).
 | Issue | Evidência |
 |---|---|
 | [#030 Modularização dos monólitos](feito/ISSUE_030_MODULARIZACAO_MONOLITOS.md) | Modularizados os 6 monólitos críticos (cache, table, builtins_hooks, parser, checker, codegen), 4 módulos de prioridade média (mysql, postgres, websocket, liafc) e funções longas |
+| [#032 Compilar fora do repositório](feito/ISSUE_032_COMPILADOR_AUTONOMO_RUNTIME_EMBUTIDO.md) | Runtime embutido (`runtime_embed.go`, `pkg/toolchain`); `TestLiafcBuildsOutsideRepository` compila e roda fora da árvore com `GOPROXY=off`. Ainda exige o comando `go` |
 | [#012 Ergonomia](feito/ISSUE_012_SYNTAX_SUGAR_AND_TOKEN_EFFICIENCY.md) | `s.campo` e `E_REDUNDANT_BOOL_COMPARE`: `field_path_test.go`, `checker_canonical_test.go`, caso `012_campo_ponto` |
 | [#028 Sintaxe compacta v0.5](feito/ISSUE_028_SINTAXE_COMPACTA_E_EXPRESSOES.md) | Parser, checker, `liafc fmt` canônico compacto, documentação na `SPEC.md` e `SKILL.md` |
 | [#009 Benchmark AI-First](feito/ISSUE_009_AI_FIRST_BENCHMARK_AND_SHOWCASE.md) | Medição e comparação LIAF vs Python em consumo de tokens realizada |

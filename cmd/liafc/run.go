@@ -1,15 +1,17 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 )
 
 func runRun(args []string) {
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "Uso: liafc run <arquivo.liaf>")
+		fmt.Fprintln(os.Stderr, "Uso: liafc run <arquivo.liaf> [argumentos do programa...]")
 		os.Exit(1)
 	}
 
@@ -28,28 +30,32 @@ func runRun(args []string) {
 		fmt.Fprintf(os.Stderr, "Erro ao criar pasta temporária: %v\n", err)
 		os.Exit(1)
 	}
-	defer os.RemoveAll(tmpDir)
 
-	tmpGo := filepath.Join(tmpDir, "main.go")
-	if err := os.WriteFile(tmpGo, []byte(generatedCode), 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "Erro ao gravar código gerado: %v\n", err)
+	// Compila e executa em vez de "go run": o programa roda na pasta atual do
+	// usuario (caminhos relativos de fs-* resolvem ali, nao no cache do
+	// runtime) e o codigo de saida dele chega intacto a quem chamou.
+	bin := filepath.Join(tmpDir, "programa")
+	if runtime.GOOS == "windows" {
+		bin += ".exe"
+	}
+	if err := compileGo(generatedCode, "", bin); err != nil {
+		os.RemoveAll(tmpDir)
+		fmt.Fprintf(os.Stderr, "Erro compilando programa: %v\n", err)
 		os.Exit(1)
 	}
 
-	execDir, _ := os.Getwd()
-	goModDir := findGoMod(execDir)
-	if goModDir == "" {
-		goModDir = execDir
-	}
-
-	cmd := exec.Command("go", "run", tmpGo)
-	cmd.Dir = goModDir
+	cmd := exec.Command(bin, args[1:]...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
-	cmd.Env = os.Environ()
+	err = cmd.Run()
+	os.RemoveAll(tmpDir)
 
-	if err := cmd.Run(); err != nil {
+	var exitErr *exec.ExitError
+	switch {
+	case errors.As(err, &exitErr):
+		os.Exit(exitErr.ExitCode())
+	case err != nil:
 		fmt.Fprintf(os.Stderr, "Erro executando programa: %v\n", err)
 		os.Exit(1)
 	}

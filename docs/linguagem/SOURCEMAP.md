@@ -20,6 +20,7 @@ Módulo Go: `liaf` (Go 1.26). Única dependência direta relevante: `modernc.org
 | [std/](../../std/) | Biblioteca padrão escrita em LIAF, embutida no `liafc`: `auth`, `jwt`, `cors` |
 | [docs/linguagem/SPEC.md](SPEC.md) | Especificação da linguagem |
 | `go.mod`, `go.sum` | Módulo Go `liaf` |
+| [runtime_embed.go](../../runtime_embed.go) | Fontes do runtime embutidos no `liafc` para compilar fora do repositório (#032) |
 
 **Em volta da linguagem** — usa a LIAF, mas não faz parte dela:
 
@@ -133,9 +134,15 @@ consultada pelos dois.
 | `fmt.go` | `fmt` — atenção: a AST não guarda comentários, então formatar apaga comentários |
 | `deploy.go` | `deploy` |
 
-Fluxo do `build`: `parseAndCheck` → codegen gera `main.go` num diretório temporário `liaf_build_*`
-→ (opcional) copia a pasta de assets para `public/` e injeta um `//go:embed` → `go build` usando o
-`go.mod` deste repositório (`findGoMod`). Por isso compilar exige Go e o repo; o binário final não.
+Fluxo do `build`: `parseAndCheck` → codegen gera `main.go` → [pkg/toolchain](../../pkg/toolchain/toolchain.go)
+grava o runtime embutido no `liafc` ([runtime_embed.go](../../runtime_embed.go): `go.mod`, `go.sum`,
+`pkg/runtime`, `web`, `dbdrv`, `markdown`, `minifier`) em `<UserCacheDir>/liaf/runtime-<hash>/`
+(ou `$LIAF_CACHE`), uma vez por versão → o `main.go` vira um pacote `app-*` temporário dentro desse
+módulo → (opcional) a pasta de assets vai para `app-*/public/` com `//go:embed` → `go build` com
+`GOWORK=off` e `CGO_ENABLED=0` (se não definido). Funciona em qualquer pasta, sem o repositório
+(issue #032); exige o comando `go` e, na primeira vez, as dependências de terceiros no cache de
+módulos ou acesso ao proxy. `run` compila do mesmo jeito e executa na pasta atual do usuário,
+repassando o código de saída.
 
 ---
 

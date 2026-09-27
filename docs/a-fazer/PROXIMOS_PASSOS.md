@@ -29,8 +29,8 @@ cada frente no seu commit. O `storage` ainda não tem issue: criar a #029 para e
 ### 4. Depois do resultado
 
 **Se a LIAF ganhar:** #030 (modularizar `parser`, `checker` e `codegen` antes de mexer neles) →
-closures → middleware → tipos soma, funções privadas, testes em LIAF → #032 (compilar fora do
-repositório) → bytes, upload, data/hora, regex.
+closures → middleware → tipos soma, funções privadas, testes em LIAF → ~~#032 (compilar fora do
+repositório)~~ (feito em 27/09) → bytes, upload, data/hora, regex.
 
 **Se perder:** atacar tokens primeiro — ~~resto da #012 (`s.campo`)~~ (feito em 27/09), `on-err` padrão por módulo, e decidir
 se a #033 (sintaxe sem parênteses) vale a troca. Medir de novo antes de crescer.

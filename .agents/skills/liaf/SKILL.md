@@ -149,6 +149,8 @@ O formatador ainda não preserva comentários, então `-w` recusa gravar em arqu
 ```bash
 liafc build ./app.liaf -o server.exe
 ```
+Funciona em qualquer pasta: não precisa de `go.mod`, `replace` nem do repositório da LIAF, só do
+comando `go`. O runtime vem embutido no `liafc`. No Windows, `-o` sem extensão ganha `.exe`.
 
 ### Cross-compilar para Linux (Produção x86_64)
 No PowerShell:

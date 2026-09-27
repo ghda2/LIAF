@@ -25,18 +25,3 @@ func copyDirectory(src, dst string) error {
 		return os.WriteFile(target, data, info.Mode())
 	})
 }
-
-func findGoMod(startDir string) string {
-	curr := startDir
-	for {
-		if _, err := os.Stat(filepath.Join(curr, "go.mod")); err == nil {
-			return curr
-		}
-		parent := filepath.Dir(curr)
-		if parent == curr {
-			break
-		}
-		curr = parent
-	}
-	return ""
-}

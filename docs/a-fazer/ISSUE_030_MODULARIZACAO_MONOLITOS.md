@@ -1,6 +1,6 @@
 # Issue #030 — Modularização dos monólitos (continuação da #014)
 
-**Estado:** Aberta. **Criada em:** 26/09/2026. **Tipo:** dívida técnica / manutenibilidade.
+**Estado:** Prioridade alta concluída. **Criada em:** 26/09/2026. **Tipo:** dívida técnica / manutenibilidade.
 **Substitui como plano de execução:** [#014](../arquivo/ISSUE_014_MODULARIZACAO_CODEBASE.md), cujo relatório é de
 16/09/2026 e ficou defasado.
 
@@ -20,11 +20,11 @@ Critério de corte (o mesmo da #014): arquivo com mais de uma responsabilidade, 
 | `pkg/checker/checker.go` | 763 → 753 linhas; o `call()` gigante saiu, mas `expr`, `Check` e `statements` passam de 150 linhas cada |
 | `pkg/codegen/codegen.go` | 645 → 678 linhas |
 | `pkg/parser/parser.go` | **799 → 1.047 linhas** |
-| `cmd/liafc/main.go` | 409 → 392 linhas; `runBuild` continua com 103 |
+| `cmd/cmd/liafc/main.go` | 409 → 392 linhas; `runBuild` continua com 103 |
 
-## Prioridade alta — 6 arquivos
+## Prioridade alta — 6 arquivos [TODOS CONCLUÍDOS]
 
-### 1. `pkg/web/cache.go` — 784 linhas (fazer primeiro)
+### 1. `pkg/web/cache.go` — [CONCLUÍDO - Commit 5db40f4]
 
 Duplicação medida linha a linha (sem comentários e linhas vazias):
 
@@ -45,7 +45,7 @@ mime.go         detectContentType e tabelas de extensão
 Cuidado: o caminho de disco hoje passa pela restrição de `os.Root` (`files.go`). Ao unificar sobre
 `fs.FS`, confirmar que o sandbox continua valendo (`TestSandboxedVFS`).
 
-### 2. `pkg/builtins/table.go` — 1.339 linhas
+### 2. `pkg/builtins/table.go` — [CONCLUÍDO - Commit 7196eb2]
 
 Uma única função `init` de **1.311 linhas** registra todos os builtins, de cerca de 20 categorias:
 
@@ -81,12 +81,12 @@ table_crypto.go      crypto
 Verificar se a ordem de `orderedBuiltins` importa para alguma saída (listagem, documentação): com
 vários `init`, a ordem passa a seguir o nome dos arquivos.
 
-### 3. `pkg/checker/builtins_hooks.go` — 403 linhas
+### 3. `pkg/checker/builtins_hooks.go` — [CONCLUÍDO - Commit 586bd2e]
 
 `init` de 383 linhas com as 15 checagens especiais. Seguir os mesmos grupos do item 2, ao lado dos
 arquivos que já existem (`crypto.go`, `httpclient.go`, `database.go`, `websocket.go`).
 
-### 4. `pkg/parser/parser.go` — 1.047 linhas
+### 4. `pkg/parser/parser.go` — [CONCLUÍDO - Commit a507a60]
 
 Declarações, comandos, expressões e tipos no mesmo arquivo; `parseExpression` tem 126 linhas. O
 padrão certo já existe (`control.go`, `database.go`, `websocket.go`).
@@ -100,7 +100,7 @@ expr.go         parseExpression, parseIfExpr, parseCallArgs
 types.go        parseType
 ```
 
-### 5. `pkg/checker/checker.go` — 753 linhas
+### 5. `pkg/checker/checker.go` — [CONCLUÍDO - Commit 48af565]
 
 | Função | Linhas | `case` |
 |---|---|---|
@@ -118,7 +118,7 @@ types.go     primitive, applied, name, parts, IsResult, validType, scalar, requi
 
 `Check` e `statements` também precisam ser quebradas por dentro, não só movidas.
 
-### 6. `pkg/codegen/codegen.go` — 678 linhas
+### 6. `pkg/codegen/codegen.go` — [CONCLUÍDO - Commit 7bd4eea]
 
 `genStmt` (159 linhas, 14 `case`) e `genRoute` (136 linhas, que mistura extração de parâmetro de
 caminho, `json.Unmarshal` do corpo e serialização da resposta).

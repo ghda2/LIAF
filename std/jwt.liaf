@@ -51,15 +51,15 @@
         (then (return (err "jwt: invalid signature"))))
 
       (let header JwtHeader (try (json-decode (try (base64url-decode cabecalho)) JwtHeader)))
-      (if (not (str-eq (field header alg) "HS256"))
+      (if (not (str-eq header.alg "HS256"))
         (then (return (err "jwt: unsupported alg"))))
 
       (let payload str (try (base64url-decode corpo)))
       (let claims JwtExp (try (json-decode payload JwtExp)))
-      (if (lte (field claims exp) 0)
+      (if (lte claims.exp 0)
         (then (return (err "jwt: missing exp claim"))))
       (let agora int (try (div (now-ms) 1000)))
-      (if (lte (field claims exp) agora)
+      (if (lte claims.exp agora)
         (then (return (err "jwt: token expired"))))
       (return (ok payload))))
 )

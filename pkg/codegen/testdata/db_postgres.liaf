@@ -36,11 +36,11 @@
       (let users (list User)
         (try (db-query db "SELECT id, name, email FROM users WHERE id >= $1 ORDER BY id" User minimum)))
       (for-each u users
-        (println (concat (str-from-int (field u id)) " " (field u name) " " (field u email))))
+        (println (concat (str-from-int u.id) " " u.name " " u.email)))
       (let totals (list UserCount)
         (try (db-query db "SELECT count(*) AS total FROM users" UserCount)))
       (match (list-get totals 0)
-        (ok row (println (concat "total=" (str-from-int (field row total)))))
+        (ok row (println (concat "total=" (str-from-int row.total))))
         (err message (println message)))
       (return (ok true))))
 

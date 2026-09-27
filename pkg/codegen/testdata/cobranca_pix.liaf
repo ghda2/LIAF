@@ -31,6 +31,6 @@
       (let token str (try (env-get "PSP_TOKEN")))
       (let valor int (try (int-from-str (try (list-get (args) 0)))))
       (let criada Criada (try (criar-cobranca base token (new Cobranca valor "Pedido LIAF"))))
-      (println (concat "txid: " (field criada txid)))
-      (println (concat "pix: " (field criada copia_e_cola)))))
+      (println (concat "txid: " criada.txid))
+      (println (concat "pix: " criada.copia_e_cola))))
 )

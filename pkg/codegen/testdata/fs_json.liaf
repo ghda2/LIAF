@@ -10,7 +10,7 @@
               (match (call fs-read-file "liaf-example.json")
                 (ok text
                   (match (call json-decode text User)
-                    (ok restored (do (call println (call field restored name))))
+                    (ok restored (do (call println restored.name)))
                     (err message (do (call println message)))))
                 (err message (do (call println message)))))
             (err message (do (call println message)))))

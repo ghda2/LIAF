@@ -6,6 +6,7 @@ import (
 
 	"liaf/pkg/ast"
 	"liaf/pkg/builtins"
+	"liaf/pkg/diagnostic"
 )
 
 func (c *Checker) expr(e ast.Expr, want ast.Type) (t ast.Type) {
@@ -41,6 +42,7 @@ func (c *Checker) expr(e ast.Expr, want ast.Type) (t ast.Type) {
 			c.require(e, l, primitive("bool"))
 			return primitive("bool")
 		case "eq", "neq":
+			c.redundantBoolCompare(v)
 			if l != nil && !scalar(l) {
 				c.error(e, "E_TYPE_MISMATCH", "Equality requires scalar operands")
 			}
@@ -163,6 +165,31 @@ func (c *Checker) expr(e ast.Expr, want ast.Type) (t ast.Type) {
 		return primitive("void")
 	}
 	return nil
+}
+
+// redundantBoolCompare recusa comparar com true/false (issue #012): cada
+// construcao tem uma so forma valida, e (eq x false) e (not x) escrito de
+// outro jeito. O diagnostico traz a forma canonica pronta para colar.
+func (c *Checker) redundantBoolCompare(v *ast.BinaryOpExpr) {
+	other, lit := v.Left, v.Right
+	b, ok := lit.(*ast.BoolLiteral)
+	if !ok {
+		other, lit = v.Right, v.Left
+		if b, ok = lit.(*ast.BoolLiteral); !ok {
+			return
+		}
+	}
+	// (eq x true) e (neq x false) sao x; (eq x false) e (neq x true) sao (not x).
+	patch := ast.FormatExpr(other)
+	if b.Value == (v.Op == "neq") {
+		patch = "(not " + patch + ")"
+	}
+	l, col := v.Pos()
+	c.Errors = append(c.Errors, diagnostic.Diagnostic{
+		Code: "E_REDUNDANT_BOOL_COMPARE", File: c.file, Line: l, Col: col,
+		Message:        fmt.Sprintf("comparar com %t e redundante; use %s", b.Value, patch),
+		SuggestedPatch: patch,
+	})
 }
 
 func (c *Checker) arity(v *ast.CallExpr, n int) bool {

@@ -139,8 +139,13 @@ func (p *printer) printStruct(s *StructDecl, suffix string) {
 }
 
 func isParenExpr(expr Expr) bool {
-	switch expr.(type) {
-	case *CallExpr, *BinaryOpExpr, *IfExpr, *MatchExpr, *TryExpr:
+	switch e := expr.(type) {
+	case *CallExpr:
+		// s.campo e um atomo impresso sem parenteses: como retorno implicito
+		// seria lido como comando, entao fica (return s.campo).
+		_, isPath := fieldPath(e)
+		return !isPath
+	case *BinaryOpExpr, *IfExpr, *MatchExpr, *TryExpr:
 		return true
 	default:
 		return false
@@ -342,7 +347,7 @@ func (p *printer) printStmt(stmt Stmt, suffix string) {
 	case *SendStmt:
 		p.sb.WriteString(fmt.Sprintf("(send %s %s)%s", formatExpr(s.Channel), formatExpr(s.Value), suffix))
 	case *ExprStmt:
-		if call, ok := s.Expr.(*CallExpr); ok && !call.HasCall {
+		if call, ok := s.Expr.(*CallExpr); ok && !call.HasCall && strings.HasPrefix(formatExpr(call), "(") {
 			p.sb.WriteString(formatExpr(s.Expr) + suffix)
 		} else if _, ok := s.Expr.(*TryExpr); ok {
 			p.sb.WriteString(formatExpr(s.Expr) + suffix)
@@ -434,6 +439,33 @@ func (p *printer) printIf(s *IfStmt, suffix string) {
 	p.indent--
 }
 
+// FormatExpr devolve a forma canonica de uma expressao, a mesma que liafc fmt
+// imprime. O checker a usa para montar o SuggestedPatch dos diagnosticos.
+func FormatExpr(expr Expr) string { return formatExpr(expr) }
+
+// fieldPath devolve a forma canonica com ponto (issue #012) de um acesso a
+// campo cuja base e uma variavel ou outra cadeia de campos: (field s x) vira
+// s.x e (field (field a b) c) vira a.b.c. Outras bases, como
+// (field (get xs 0) nome), ficam na forma com parenteses.
+func fieldPath(e *CallExpr) (string, bool) {
+	if e.Func != "field" || len(e.Args) != 2 {
+		return "", false
+	}
+	name, ok := e.Args[1].(*IdentExpr)
+	if !ok || name.Name == "true" || name.Name == "false" {
+		return "", false
+	}
+	switch base := e.Args[0].(type) {
+	case *IdentExpr:
+		return base.Name + "." + name.Name, true
+	case *CallExpr:
+		if inner, ok := fieldPath(base); ok {
+			return inner + "." + name.Name, true
+		}
+	}
+	return "", false
+}
+
 func formatExpr(expr Expr) string {
 	switch e := expr.(type) {
 	case *IntLiteral:
@@ -450,6 +482,9 @@ func formatExpr(expr Expr) string {
 	case *IdentExpr:
 		return e.Name
 	case *CallExpr:
+		if path, ok := fieldPath(e); ok {
+			return path
+		}
 		var res string
 		if e.HasCall {
 			res = "(call " + e.Func

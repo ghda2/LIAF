@@ -65,7 +65,7 @@
         (err ausente (set filtro "todos")))
       (let escolhidos (list Pedido) (make-list Pedido))
       (for-each p (pedidos-de restaurante)
-        (if (or (str-eq filtro "todos") (str-eq (field p status) filtro))
+        (if (or (str-eq filtro "todos") (str-eq p.status filtro))
           (then (list-push escolhidos p))))
       (let corpo str (try (json-encode (new ListaPedidos restaurante filtro escolhidos))))
       (return (com-cabecalhos req (json-response 200 corpo)))))
@@ -79,9 +79,9 @@
 
   (route POST "/api/login" (params (req Request) (input LoginInput)) (returns Response) (effects)
     (body
-      (match (restaurante-do-token (field input token))
+      (match (restaurante-do-token input.token)
         (ok r
-          (let cookie str (concat "sessao=" (field input token) "; HttpOnly; Secure; SameSite=Strict; Path=/"))
+          (let cookie str (concat "sessao=" input.token "; HttpOnly; Secure; SameSite=Strict; Path=/"))
           (return (response-set-header (com-cabecalhos req (json-response 200 (concat "{\"restaurante\":\"" r "\"}"))) "Set-Cookie" cookie)))
         (err e (return (erro req 401 "token invalido"))))))
 

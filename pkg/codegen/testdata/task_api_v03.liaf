@@ -37,7 +37,7 @@
   (fn tasks-response (params (state State)) (returns Response) (effects)
     (on-err message (return (error-response 500 message)))
     (body
-      (let payload str (try (json-encode (field state tasks))))
+      (let payload str (try (json-encode state.tasks)))
       (return (json-response 200 payload))))
 
   (fn task-response (params (task Task) (status int)) (returns Response) (effects)
@@ -48,19 +48,19 @@
 
   (fn find-task (params (state State) (id int)) (returns Response) (effects)
     (body
-      (for-each task (field state tasks)
-        (if (eq (field task id) id)
+      (for-each task state.tasks
+        (if (eq task.id id)
           (then (return (task-response task 200)))))
       (return (error-response 404 "Task not found"))))
 
   (fn create-task (params (state State) (input CreateInput)) (returns Response) (effects fs)
     (on-err message (return (error-response 500 message)))
     (body
-      (let id int (field state next-id))
+      (let id int state.next-id)
       (if (lte id 0)
         (then (return (error-response 500 "ID counter invalid"))))
-      (let task Task (new Task id (field input title) false))
-      (let tasks (list Task) (field state tasks))
+      (let task Task (new Task id input.title false))
+      (let tasks (list Task) state.tasks)
       (do (list-push tasks task))
       (try (save-state (new State (add id 1) tasks)))
       (return (task-response task 201))))
@@ -69,17 +69,17 @@
     (on-err message (return (error-response 500 message)))
     (body
       (let tasks (list Task) (make-list Task))
-      (let replacement Task (new Task id (field input title) (field input done)))
+      (let replacement Task (new Task id input.title input.done))
       (let found bool false)
-      (for-each task (field state tasks)
-        (if (eq (field task id) id)
+      (for-each task state.tasks
+        (if (eq task.id id)
           (then
             (do (list-push tasks replacement))
             (set found true))
           (else (do (list-push tasks task)))))
       (if (not found)
         (then (return (error-response 404 "Task not found"))))
-      (try (save-state (new State (field state next-id) tasks)))
+      (try (save-state (new State state.next-id tasks)))
       (return (task-response replacement 200))))
 
   (fn delete-task (params (state State) (id int)) (returns Response) (effects fs)
@@ -87,13 +87,13 @@
     (body
       (let tasks (list Task) (make-list Task))
       (let found bool false)
-      (for-each task (field state tasks)
-        (if (eq (field task id) id)
+      (for-each task state.tasks
+        (if (eq task.id id)
           (then (set found true))
           (else (do (list-push tasks task)))))
       (if (not found)
         (then (return (error-response 404 "Task not found"))))
-      (try (save-state (new State (field state next-id) tasks)))
+      (try (save-state (new State state.next-id tasks)))
       (return (json-response 200 "{\"deleted\":true}"))))
 
   ;; --- Rotas declarativas -----------------------------------------------
@@ -112,7 +112,7 @@
   (route POST "/tasks" (params (input CreateInput)) (returns Response) (effects fs)
     (on-err message (return (error-response 500 message)))
     (body
-      (if (str-eq (field input title) "")
+      (if (str-eq input.title "")
         (then (return (error-response 400 "A nonempty title is required"))))
       (let state State (try (load-state)))
       (return (create-task state input))))
@@ -130,7 +130,7 @@
     (body
       (if (lte id 0)
         (then (return (error-response 400 "ID must be positive"))))
-      (if (str-eq (field input title) "")
+      (if (str-eq input.title "")
         (then (return (error-response 400 "A nonempty title is required"))))
       (let state State (try (load-state)))
       (return (update-task state id input))))

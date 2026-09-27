@@ -115,6 +115,7 @@ Existem apenas estas categorias léxicas:
 LParen      ::= "("
 RParen      ::= ")"
 Identifier  ::= Letter { Letter | Digit | "-" | "_" }
+Path        ::= Identifier "." Identifier { "." Identifier }   ; sem espaços, ver 25.7
 Integer     ::= [ "-" ] Digit { Digit }
 Float       ::= [ "-" ] Digit { Digit } "." Digit { Digit }
 Boolean     ::= "true" | "false"
@@ -199,7 +200,7 @@ Spawn         ::= "(" "spawn" Call ")"
 Send          ::= "(" "send" Expression Expression ")"
 ExprStatement ::= "(" "do" Expression ")"
 
-Expression    ::= Literal | Identifier | Call | Operator | Receive
+Expression    ::= Literal | Identifier | Path | Call | Operator | Receive
 Call          ::= "(" "call" Identifier { Expression } ")"
 Operator      ::= "(" OperatorName Expression Expression ")"
 Receive       ::= "(" "recv" Expression ")"
@@ -1143,7 +1144,7 @@ Exemplo — sessão com JWT:
 (let sessao Sessao (try (json-decode (try (jwt-verify segredo token)) Sessao)))
 ```
 
-Nomes de campo aceitam palavras reservadas (`sub`, `return`, `if`...), exceto `true` e `false`: o nome do campo é só um rótulo e a chave no JSON, e é assim que os claims registrados do JWT (`sub`, `exp`) se decodificam com os nomes originais. `(field sessao sub)` lê o campo; `(sub a b)` continua sendo subtração.
+Nomes de campo aceitam palavras reservadas (`sub`, `return`, `if`...), exceto `true` e `false`: o nome do campo é só um rótulo e a chave no JSON, e é assim que os claims registrados do JWT (`sub`, `exp`) se decodificam com os nomes originais. `sessao.sub` (ou `(field sessao sub)`) lê o campo; `(sub a b)` continua sendo subtração.
 
 Como a linguagem ainda não tem middleware, o preflight de CORS exige uma `(route OPTIONS ...)` por caminho; `pkg/codegen/testdata/pedidos_api.liaf` mostra o padrão.
 
@@ -1226,3 +1227,18 @@ Substitui cadeias profundas de `concat` por interpolação posicional `{}`:
 (println (fmt "Usuário {} conectado na sala {}" user room))
 ```
 
+
+### 25.7 Acesso a campo com ponto (#012)
+`objeto.campo` lê um campo e é a forma canônica de `(field objeto campo)`. O ponto encadeia (`req.user.name`) e não admite espaços em volta. É um token léxico (`PATH`): o parser o expande para a mesma AST de `field`, então tipos, diagnósticos (`E_UNKNOWN_FIELD`) e código gerado não mudam.
+```liaf
+(for-each task state.tasks
+  (if (eq task.id id)
+    (then (return (task-response task 200)))))
+```
+- A base é sempre uma variável; palavra reservada como base (`if.x`) é `E_INVALID_EXPR`. Com base composta, a forma com parênteses continua: `(field (get xs 0) nome)`.
+- Os segmentos depois do ponto são nomes de campo e, como na seção 23, aceitam palavras reservadas (`claims.sub`, `v.return`), exceto `true` e `false` (`E_EXPECTED_FIELD_NAME`).
+- `(field ...)` e `(call field ...)` continuam aceitos; `liafc fmt` os reescreve com ponto sempre que a base é uma variável ou outra cadeia de campos.
+- O ponto só existe em leitura: `let`, `set` e parâmetros exigem identificador simples.
+
+### 25.8 Comparação redundante com booleano (#012)
+Comparar com os literais `true` ou `false` é erro `E_REDUNDANT_BOOL_COMPARE`, porque cada construção tem uma só forma válida. `(eq x false)` e `(neq x true)` se escrevem `(not x)`; `(eq x true)` e `(neq x false)` se escrevem `x`. O diagnóstico traz a forma canônica em `suggested_patch`. Comparar duas expressões booleanas, como `(eq a b)`, continua válido.

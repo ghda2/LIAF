@@ -102,6 +102,9 @@ func (l *Lexer) NextToken() token.Token {
 	default:
 		if isLetter(l.ch) {
 			lit := l.readIdentifier()
+			if l.ch == '.' && isLetter(l.peekChar()) {
+				return l.readPath(lit, tokLine, tokCol)
+			}
 			tokType := token.LookupIdent(lit)
 			return token.Token{Type: tokType, Literal: lit, Line: tokLine, Col: tokCol}
 		} else if isDigit(l.ch) || (l.ch == '-' && isDigit(l.peekChar())) {
@@ -129,6 +132,21 @@ func (l *Lexer) readIdentifier() string {
 		l.readChar()
 	}
 	return l.input[startPos:l.position]
+}
+
+// readPath continua um identificador ja lido com os segmentos ".campo" que o
+// seguem, sem espaco entre eles: state.tasks, req.user.name. Os segmentos
+// depois do primeiro sao nomes de campo, entao palavras reservadas valem
+// (claims.sub); o parser e quem valida a base e recusa true/false.
+func (l *Lexer) readPath(base string, line, col int) token.Token {
+	var sb strings.Builder
+	sb.WriteString(base)
+	for l.ch == '.' && isLetter(l.peekChar()) {
+		l.readChar()
+		sb.WriteByte('.')
+		sb.WriteString(l.readIdentifier())
+	}
+	return token.Token{Type: token.PATH, Literal: sb.String(), Line: line, Col: col}
 }
 
 func (l *Lexer) readNumber() (string, bool, bool) {

@@ -29,7 +29,7 @@
     (body
       (try (save-session cache "session:42" (new Session "alice" "admin")))
       (let restored Session (try (load-session cache "session:42")))
-      (println (concat (field restored user) " / " (field restored role)))
+      (println (concat restored.user " / " restored.role))
       ;; Chave ausente e erro, nao string vazia: (result str str) nao tem um
       ;; terceiro caso para representar a ausencia.
       (match (redis-get cache "session:inexistente")

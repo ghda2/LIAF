@@ -3,6 +3,7 @@ package parser
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"liaf/pkg/ast"
 	"liaf/pkg/token"
@@ -87,6 +88,11 @@ func (p *Parser) parseExpression() ast.Expr {
 		ident := &ast.IdentExpr{Name: p.curToken.Literal, Line: line, Col: col}
 		p.nextToken()
 		return ident
+
+	case token.PATH:
+		expr := p.parsePath()
+		p.nextToken()
+		return expr
 
 	case token.LPAREN:
 		p.nextToken()
@@ -175,6 +181,28 @@ func (p *Parser) parseExpression() ast.Expr {
 		p.addError(fmt.Sprintf("Token inesperado ao iniciar expressão: %q", p.curToken.Literal), "E_UNEXPECTED_TOKEN")
 		return nil
 	}
+}
+
+// parsePath expande o token PATH (issue #012) na mesma AST de (field ...):
+// a.b.c vira (field (field a b) c). Checker e codegen nao sabem que o ponto
+// existiu, e liafc fmt reimprime a cadeia com ponto.
+func (p *Parser) parsePath() ast.Expr {
+	tok := p.curToken
+	segs := strings.Split(tok.Literal, ".")
+	if token.LookupIdent(segs[0]) != token.IDENT {
+		p.addError(fmt.Sprintf("%q e palavra reservada e nao pode ser a base de %s; use um nome de variavel", segs[0], tok.Literal), "E_INVALID_EXPR")
+		return nil
+	}
+	var cur ast.Expr = &ast.IdentExpr{Name: segs[0], Line: tok.Line, Col: tok.Col}
+	for _, seg := range segs[1:] {
+		if seg == "true" || seg == "false" {
+			p.addError(fmt.Sprintf("%q nao e nome de campo em %s", seg, tok.Literal), "E_EXPECTED_FIELD_NAME")
+			return nil
+		}
+		name := &ast.IdentExpr{Name: seg, Line: tok.Line, Col: tok.Col}
+		cur = &ast.CallExpr{Func: "field", Args: []ast.Expr{cur, name}, Line: tok.Line, Col: tok.Col}
+	}
+	return cur
 }
 
 // parseCallArgs le os argumentos ate o ')'. O segundo argumento de field e

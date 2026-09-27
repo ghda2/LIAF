@@ -12,5 +12,5 @@
       (let segredo str "segredo-de-teste-com-32-bytes-ok")
       (let token str (try (jwt-sign segredo "{\"sub\":\"ana\",\"exp\":4102444800}")))
       (let c Claims (try (json-decode (try (jwt-verify segredo token)) Claims)))
-      (println (field c sub))
-      (println (field c exp)))))
+      (println c.sub)
+      (println c.exp))))

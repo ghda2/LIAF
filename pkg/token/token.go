@@ -16,6 +16,9 @@ const (
 	FLOAT  TokenType = "FLOAT"
 	BOOL   TokenType = "BOOL"
 	STRING TokenType = "STRING"
+	// PATH e o acesso a campo com ponto (issue #012): obj.campo ou a.b.c.
+	// O parser o expande para (field obj campo).
+	PATH TokenType = "PATH"
 
 	// Keywords
 	MODULE  TokenType = "module"

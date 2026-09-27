@@ -1,0 +1,18 @@
+;; issue: #012
+;; status: done
+;; out: ana 30
+;; out: centro
+;; out: ana x
+;; out: maior
+(module caso
+  (struct Endereco (fields (bairro str)))
+  (struct Pessoa (fields (nome str) (idade int) (casa Endereco)))
+  (struct Claims (fields (sub str) (return str)))
+  (fn main (params) (returns void) (effects io)
+    (body
+      (let p Pessoa (new Pessoa "ana" 30 (new Endereco "centro")))
+      (println (concat p.nome " " (str-from-int p.idade)))
+      (println p.casa.bairro)
+      (let c Claims (new Claims "ana" "x"))
+      (println (concat c.sub " " c.return))
+      (if (not (lt p.idade 18)) (then (println "maior"))))))

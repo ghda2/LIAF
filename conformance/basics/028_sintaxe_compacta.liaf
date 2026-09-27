@@ -14,7 +14,7 @@
     (add a b c))
 
   (fn show-user ((u User)) str
-    (fmt "User: {} {}" (field u id) (field u name)))
+    (fmt "User: {} {}" u.id u.name))
 
   (fn main () void (effects io)
     (let u User (new User 1 "Ada"))

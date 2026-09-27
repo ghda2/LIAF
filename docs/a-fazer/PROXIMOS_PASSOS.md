@@ -32,7 +32,7 @@ cada frente no seu commit. O `storage` ainda não tem issue: criar a #029 para e
 closures → middleware → tipos soma, funções privadas, testes em LIAF → #032 (compilar fora do
 repositório) → bytes, upload, data/hora, regex.
 
-**Se perder:** atacar tokens primeiro — resto da #012 (`s.campo`), `on-err` padrão por módulo, e decidir
+**Se perder:** atacar tokens primeiro — ~~resto da #012 (`s.campo`)~~ (feito em 27/09), `on-err` padrão por módulo, e decidir
 se a #033 (sintaxe sem parênteses) vale a troca. Medir de novo antes de crescer.
 
 ### A qualquer momento (não dependem do benchmark)

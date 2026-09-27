@@ -77,7 +77,9 @@ Regras:
   que gravou; não existe `ok false` para testar.
 - `json-encode` de `(list T)` produz array JSON nativo `[...]`. Não monte colchetes com `concat`.
 - Structs são imutáveis: não há `set-field`, construa uma nova com `(new Tipo ...)`.
-- Leitura de campo é `(field objeto campo)`.
+- Leitura de campo é `objeto.campo`, sem espaços, e encadeia: `req.user.name`. Só a base variável tem
+  ponto; com base composta use `(field (get xs 0) nome)`. O `liafc fmt` normaliza `(field s x)` para `s.x`.
+- Não compare com `true`/`false`: `(eq x false)` é `E_REDUNDANT_BOOL_COMPARE`. Escreva `(not x)` ou `x`.
 
 Exemplo completo e executável: `pkg/codegen/testdata/task_api_v03.liaf`.
 

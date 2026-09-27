@@ -60,7 +60,7 @@ func (l *Lexer) skipWhitespaceAndComments() {
 			l.line++
 			l.col = 0
 			l.readChar()
-		} else if l.ch == ';' {
+		} else if l.ch == ';' || (l.ch == '/' && l.peekChar() == '/') {
 			// Comentário até o fim da linha
 			for l.ch != '\n' && l.ch != 0 {
 				l.readChar()
@@ -92,6 +92,85 @@ func (l *Lexer) NextToken() token.Token {
 	case ')':
 		tok = token.Token{Type: token.RPAREN, Literal: ")", Line: tokLine, Col: tokCol}
 		l.readChar()
+	case ',':
+		tok = token.Token{Type: token.COMMA, Literal: ",", Line: tokLine, Col: tokCol}
+		l.readChar()
+	case ':':
+		tok = token.Token{Type: token.COLON, Literal: ":", Line: tokLine, Col: tokCol}
+		l.readChar()
+	case '=':
+		if l.peekChar() == '=' {
+			l.readChar()
+			tok = token.Token{Type: token.EQ, Literal: "eq", Line: tokLine, Col: tokCol}
+		} else {
+			tok = token.Token{Type: token.ASSIGN, Literal: "=", Line: tokLine, Col: tokCol}
+		}
+		l.readChar()
+	case '!':
+		if l.peekChar() == '=' {
+			l.readChar()
+			tok = token.Token{Type: token.NEQ, Literal: "neq", Line: tokLine, Col: tokCol}
+		} else {
+			tok = token.Token{Type: token.NOT, Literal: "not", Line: tokLine, Col: tokCol}
+		}
+		l.readChar()
+	case '+':
+		tok = token.Token{Type: token.ADD, Literal: "add", Line: tokLine, Col: tokCol}
+		l.readChar()
+	case '-':
+		if isDigit(l.peekChar()) {
+			lit, isFloat, ok := l.readNumber()
+			if !ok {
+				tok = token.Token{Type: token.ILLEGAL, Literal: lit, Line: tokLine, Col: tokCol}
+			} else if isFloat {
+				tok = token.Token{Type: token.FLOAT, Literal: lit, Line: tokLine, Col: tokCol}
+			} else {
+				tok = token.Token{Type: token.INT, Literal: lit, Line: tokLine, Col: tokCol}
+			}
+		} else {
+			tok = token.Token{Type: token.SUB, Literal: "sub", Line: tokLine, Col: tokCol}
+			l.readChar()
+		}
+	case '*':
+		tok = token.Token{Type: token.MUL, Literal: "mul", Line: tokLine, Col: tokCol}
+		l.readChar()
+	case '/':
+		tok = token.Token{Type: token.DIV, Literal: "div", Line: tokLine, Col: tokCol}
+		l.readChar()
+	case '<':
+		if l.peekChar() == '=' {
+			l.readChar()
+			tok = token.Token{Type: token.LTE, Literal: "lte", Line: tokLine, Col: tokCol}
+		} else {
+			tok = token.Token{Type: token.LT, Literal: "lt", Line: tokLine, Col: tokCol}
+		}
+		l.readChar()
+	case '>':
+		if l.peekChar() == '=' {
+			l.readChar()
+			tok = token.Token{Type: token.GTE, Literal: "gte", Line: tokLine, Col: tokCol}
+		} else {
+			tok = token.Token{Type: token.GT, Literal: "gt", Line: tokLine, Col: tokCol}
+		}
+		l.readChar()
+	case '&':
+		if l.peekChar() == '&' {
+			l.readChar()
+			tok = token.Token{Type: token.AND, Literal: "and", Line: tokLine, Col: tokCol}
+			l.readChar()
+		} else {
+			tok = token.Token{Type: token.ILLEGAL, Literal: "&", Line: tokLine, Col: tokCol}
+			l.readChar()
+		}
+	case '|':
+		if l.peekChar() == '|' {
+			l.readChar()
+			tok = token.Token{Type: token.OR, Literal: "or", Line: tokLine, Col: tokCol}
+			l.readChar()
+		} else {
+			tok = token.Token{Type: token.ILLEGAL, Literal: "|", Line: tokLine, Col: tokCol}
+			l.readChar()
+		}
 	case '"':
 		str, ok := l.readString()
 		if !ok {

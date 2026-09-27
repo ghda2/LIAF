@@ -69,7 +69,7 @@ func (p *Parser) addError(msg string, code string) {
 
 type parseAbort struct{}
 
-// ParseModule analisa o arquivo completo, exigindo a declaração do módulo
+// ParseModule analisa o arquivo completo, suportando tanto S-expressions (v0.2-v0.5) quanto sintaxe linear (v0.6)
 func (p *Parser) ParseModule() (result *ast.Module) {
 	defer func() {
 		if v := recover(); v != nil {
@@ -79,10 +79,15 @@ func (p *Parser) ParseModule() (result *ast.Module) {
 			result = nil
 		}
 	}()
-	if !p.curTokenIs(token.LPAREN) {
-		p.addError("Todo programa LIAF v0.2 deve iniciar com '('", "E_EXPECTED_LPAREN")
-		return nil
+
+	if p.curTokenIs(token.LPAREN) && p.peekTokenIs(token.MODULE) {
+		return p.parseSExprModule()
 	}
+
+	return p.parseLinearModule()
+}
+
+func (p *Parser) parseSExprModule() *ast.Module {
 	startLine, startCol := p.curToken.Line, p.curToken.Col
 	p.nextToken() // consome '('
 

@@ -162,6 +162,15 @@ func (p *Parser) parseExpression() ast.Expr {
 			return p.parseMatchExpr(innerLine, innerCol)
 		}
 
+		if p.curTokenIs(token.NOT) {
+			p.nextToken()
+			args := p.parseCallArgs("not")
+			if !p.expectCur(token.RPAREN) {
+				return nil
+			}
+			return &ast.CallExpr{Func: "not", Args: args, HasCall: false, Line: innerLine, Col: innerCol}
+		}
+
 		// Chamada direta de função: (fn-name arg1 arg2 ...)
 		if p.curTokenIs(token.IDENT) {
 			fnName := p.curToken.Literal

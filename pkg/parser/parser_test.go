@@ -223,19 +223,19 @@ func TestParseIfThenElse(t *testing.T) {
 }
 
 func TestParseErrors(t *testing.T) {
-	badInput := `(module erro (fn foo (params) (returns void) (effects) (body)))`
+	badInput := `(outro modulo)`
 	l := lexer.New(badInput)
 	p := New(l, "erro.liaf")
 	mod := p.ParseModule()
-	if len(p.Diagnostics) == 0 && mod != nil {
-		t.Logf("ParseModule com sucesso: %v", mod.Name)
+	if mod != nil || len(p.Diagnostics) == 0 {
+		t.Errorf("esperava falha ao não ter 'module' após '('")
 	}
 
-	badInput2 := `module sem-parenteses`
+	badInput2 := `42`
 	l2 := lexer.New(badInput2)
 	p2 := New(l2, "erro2.liaf")
 	mod2 := p2.ParseModule()
 	if mod2 != nil || len(p2.Diagnostics) == 0 {
-		t.Errorf("esperava falha ao não iniciar com '('")
+		t.Errorf("esperava falha ao ter top-level inválido na sintaxe linear")
 	}
 }

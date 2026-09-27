@@ -9,6 +9,10 @@ const (
 	// Delimiters
 	LPAREN TokenType = "("
 	RPAREN TokenType = ")"
+	COMMA  TokenType = ","
+	COLON  TokenType = ":"
+	ASSIGN TokenType = "="
+	END    TokenType = "end"
 
 	// Literals & Identifiers
 	IDENT  TokenType = "IDENT"
@@ -77,6 +81,7 @@ const (
 	LTE TokenType = "lte"
 	AND TokenType = "and"
 	OR  TokenType = "or"
+	NOT TokenType = "not"
 )
 
 var keywords = map[string]TokenType{
@@ -117,6 +122,7 @@ var keywords = map[string]TokenType{
 	"lte":     LTE,
 	"and":     AND,
 	"or":      OR,
+	"end":     END,
 	"true":    BOOL,
 	"false":   BOOL,
 }
@@ -144,7 +150,7 @@ func IsName(tok Token) bool {
 // IsOperator verifica se o tipo de token é um operador do núcleo
 func IsOperator(tok TokenType) bool {
 	switch tok {
-	case ADD, SUB, MUL, DIV, EQ, NEQ, GT, LT, GTE, LTE, AND, OR:
+	case ADD, SUB, MUL, DIV, EQ, NEQ, GT, LT, GTE, LTE, AND, OR, NOT:
 		return true
 	default:
 		return false

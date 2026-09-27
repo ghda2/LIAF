@@ -9,9 +9,47 @@ Este guia capacita agentes de IA a interagir, gerar código, auto-curar erros e 
 
 ---
 
-## 1. Sintaxe Canônica — LIAF v0.5 (Compacta e Redução de Tokens)
+## 1. Sintaxe Linear — LIAF v0.6 (Recomendada para Agentes / -69% de Tokens)
 
-A fonte oficial é em S-expressions compactas. A sintaxe de tags redundantes (`fields`, `params`, `returns`, `body` e `return` final obrigatório) pertence a versões antigas; utilize sempre a **forma canônica v0.5**:
+A partir da v0.6, a LIAF suporta **sintaxe linear baseada em linhas e delimitadores leves (`end`)**, eliminando as pirâmides de parênteses aninhados e reduzindo em até 69% o consumo de tokens:
+
+```liaf
+// Tipos de dados
+struct Task
+  id int
+  title str
+  done bool
+end
+
+// Funções puras ou com efeitos
+fn somar(a int, b int) int
+  a + b
+end
+
+// Rotas HTTP declarativas
+route GET "/tasks" () Response effects(fs)
+  on-err msg
+    json-response(500, msg)
+  end
+  let state = try load-state()
+  json-response(200, try json-encode(state.tasks))
+end
+
+// WebSocket
+ws-route "/ws/chat" (req Request, conn WSConn) effects(io, net)
+  on-open
+    ws-join(conn, "chat_geral")
+    println("Conectado")
+  end
+
+  on-message text
+    try ws-broadcast("chat_geral", text)
+  end
+end
+```
+
+### Sintaxe S-expressions — LIAF v0.5 (Compatibilidade Retroativa)
+A forma canônica anterior em S-expressions compactas continua 100% suportada:
 
 ```liaf
 (module exemplo

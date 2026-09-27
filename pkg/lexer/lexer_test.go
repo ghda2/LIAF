@@ -129,3 +129,32 @@ func TestLexerErrors(t *testing.T) {
 		t.Errorf("esperava token ILLEGAL para escape inválido, obteve %v", tok2.Type)
 	}
 }
+
+func TestLexerLinearV06(t *testing.T) {
+	input := `
+	// comentário de linha
+	struct Item
+	  id int
+	end
+	a + b - c * d / e
+	x == y && z != w || p <= q && r >= s
+	let v = 10
+	`
+	l := New(input)
+	expectedTokens := []token.TokenType{
+		token.STRUCT, token.IDENT,
+		token.IDENT, token.IDENT,
+		token.END,
+		token.IDENT, token.ADD, token.IDENT, token.SUB, token.IDENT, token.MUL, token.IDENT, token.DIV, token.IDENT,
+		token.IDENT, token.EQ, token.IDENT, token.AND, token.IDENT, token.NEQ, token.IDENT, token.OR, token.IDENT, token.LTE, token.IDENT, token.AND, token.IDENT, token.GTE, token.IDENT,
+		token.LET, token.IDENT, token.ASSIGN, token.INT,
+		token.EOF,
+	}
+
+	for i, exp := range expectedTokens {
+		tok := l.NextToken()
+		if tok.Type != exp {
+			t.Fatalf("[%d] tipo errado: esperado %v, obteve %v (%q) na linha %d:%d", i, exp, tok.Type, tok.Literal, tok.Line, tok.Col)
+		}
+	}
+}

@@ -218,9 +218,23 @@ Exemplo completo: `pkg/codegen/testdata/pedidos_api.liaf` (Bearer, filtro por qu
 
 - `(import "std/auth")` usa a biblioteca padrão embutida; `(import "./arquivo.liaf")` usa um arquivo seu.
 - Não declare funções com o prefixo de um módulo da std que você importou (`auth-...`): é `E_DUPLICATE_DECL`.
-- `std/auth`: `(auth-bearer-token req)` retorna o token Bearer como `(result str str)`.
-- `std/jwt`: `(jwt-sign segredo payload-json)` e `(jwt-verify segredo token)` (efeito `clock`). O payload precisa de `exp` em segundos; o verify retorna o payload JSON para `json-decode`.
-- `std/cors`: `(cors-origin req (list "https://site"))`, `(cors-headers res origem)`, `(cors-preflight origem "GET, POST" "Authorization")`. Uma `(route OPTIONS ...)` por caminho.
+- `std/auth`: `(auth-bearer-token req)` retorna o token Bearer como `(result str str)`. Aceita `bearer` minúsculo.
+- `std/jwt`: `(jwt-sign segredo payload-json)` e `(jwt-verify segredo token)` (efeito `clock`) retornam `(result str str)`: use `try` nos dois. O segredo precisa de pelo menos 32 bytes. O payload precisa de `exp` em segundos; o verify retorna o payload JSON para `json-decode`.
+- `std/cors`: `(cors-origin req (list "https://site"))`, `(cors-headers res origem)`, `(cors-preflight origem "GET, POST" "Authorization")`. Uma `(route OPTIONS ...)` por caminho. Com cookie, use `cors-headers-credentials` e `cors-preflight-credentials`.
+- `std/storage`: `(storage-init dir)` (efeito `fs`), `(storage-upload-image req "campo" dir)` (converte para WebP lossless e salva em disco, retornando o nome do arquivo), `(storage-serve-image dir filename)` (serve com headers de cache HTTP), `(storage-delete-image dir filename)` e `(storage-image-exists dir filename)`.
+
+## Upload, Imagens e Storage (`std/storage`)
+
+Para upload, compressão e entrega de arquivos e imagens estilo MinIO:
+
+- **Upload e conversão automática:** `(storage-upload-image req "file" "uploads")` (efeito `fs`) aceita requisições `multipart/form-data` ou corpo binário direto (limite padrão de 32MB). Converte imagens (PNG, JPEG, GIF, BMP) para WebP com algoritmo estritamente sem perdas (lossless VP8L), mantendo 100% da fidelidade visual e reduzindo o consumo de disco. Salva no disco sanitizando o nome contra directory traversal.
+- **Serviço de imagem:** `(storage-serve-image "uploads" filename)` (efeito `fs`) retorna `Response` com `Content-Type: image/webp` e headers de cache HTTP (`Cache-Control: public, max-age=31536000, immutable`).
+- **Builtins de suporte:**
+  - `(image-to-webp data)`: converte bytes de imagem em WebP lossless em memória.
+  - `(image-to-webp-quality data level)`: define o nível de esforço de compressão sem perdas (0 a 9).
+  - `(image-dimensions data)`: retorna as dimensões `"LARGURAxALTURA"` (ex: `"1920x1080"`).
+  - `(raw-response status contentType body)`: constrói `Response` com Content-Type e dados binários arbitrários.
+  - `(file-response path contentType)`: serve arquivo estático direto de disco.
 
 ## Cliente HTTP
 

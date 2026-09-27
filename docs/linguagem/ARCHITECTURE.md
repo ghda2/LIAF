@@ -26,7 +26,7 @@ O pipeline da LIAF é desenhado para latência ultra-baixa de compilação e exe
 
 1. **`pkg/token`**: Vocabulário de tokens e palavras-chave, sem ambiguidade de caracteres para BPE.
 2. **`pkg/lexer`**: Tokenizador. Identificadores ASCII; NUL no meio da entrada é erro, não EOF.
-3. **`pkg/parser`**: Constrói a AST validando correspondência de tags de fechamento (`[fn x ... /fn x]`).
+3. **`pkg/parser`**: Constrói a AST a partir das S-expressions; aceita a forma longa (`params`, `returns`, `body`) e a compacta da v0.5.
    Interrompe no primeiro erro estruturado. Estruturas de controle (`loop`, `match`) ficam em `control.go`.
 4. **`pkg/ast`**: Nós da árvore (`ast.go`) e formatador canônico (`printer.go`).
 5. **`pkg/checker`**: Analisador semântico de tipos, escopos, efeitos transitivos e tratamento

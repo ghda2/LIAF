@@ -1125,9 +1125,9 @@ Módulos disponíveis:
 
 | Módulo | Oferece |
 |---|---|
-| `std/auth` | `(auth-bearer-token req) -> (result str str)`: o token de `Authorization: Bearer ...`; erro se o header faltar, usar outro esquema ou vier vazio |
-| `std/jwt` | `(jwt-sign segredo payload-json) -> str` e `(jwt-verify segredo token) -> (result str str)`, com efeito `clock`. Só HS256. O verify confere a assinatura antes de interpretar qualquer parte, recusa `alg` diferente de HS256 (inclusive `none`), exige o claim `exp` e recusa token vencido; devolve o payload JSON para o programa decodificar no próprio struct |
-| `std/cors` | `(cors-origin req permitidas) -> (result str str)`: a origem, se estiver na lista; `(cors-headers res origem) -> Response`: `Access-Control-Allow-Origin` + `Vary: Origin`; `(cors-preflight origem metodos cabecalhos) -> Response`: 204 para o `OPTIONS`. Nunca usa `*` |
+| `std/auth` | `(auth-bearer-token req) -> (result str str)`: o token de `Authorization: Bearer ...`, com o nome do esquema sem diferenciar maiúsculas (`bearer` vale); erro se o header faltar, usar outro esquema ou vier vazio |
+| `std/jwt` | `(jwt-sign segredo payload-json) -> (result str str)` e `(jwt-verify segredo token) -> (result str str)`, com efeito `clock`. Só HS256. Os dois recusam segredo com menos de 32 bytes (RFC 7518 §3.2), para que uma variável de ambiente ausente não vire token assinado com `""`. O verify confere a assinatura antes de interpretar qualquer parte, recusa `alg` diferente de HS256 (inclusive `none`), exige o claim `exp` e recusa token vencido; devolve o payload JSON para o programa decodificar no próprio struct |
+| `std/cors` | `(cors-origin req permitidas) -> (result str str)`: a origem, se estiver na lista; `(cors-headers res origem) -> Response`: `Access-Control-Allow-Origin` + `Vary: Origin`; `(cors-preflight origem metodos cabecalhos) -> Response`: 204 para o `OPTIONS`. Nunca usa `*`. Para API autenticada por cookie, `cors-headers-credentials` e `cors-preflight-credentials` acrescentam `Access-Control-Allow-Credentials: true`, sem o qual o navegador descarta a resposta |
 
 Exemplo — sessão com JWT:
 
@@ -1137,7 +1137,7 @@ Exemplo — sessão com JWT:
 
 ;; login
 (let expira int (add (try (div (now-ms) 1000)) 3600))
-(let token str (jwt-sign segredo (try (json-encode (new Sessao usuario expira)))))
+(let token str (try (jwt-sign segredo (try (json-encode (new Sessao usuario expira))))))
 
 ;; em cada requisição
 (let sessao Sessao (try (json-decode (try (jwt-verify segredo token)) Sessao)))
@@ -1173,3 +1173,56 @@ Como a linguagem ainda não tem middleware, o preflight de CORS exige uma `(rout
 Exemplo completo, com token, chave de idempotência e tratamento do erro do provedor: `pkg/codegen/testdata/cobranca_pix.liaf`.
 
 **Cuidado:** chamar uma URL que veio do usuário deixa ele apontar o servidor para endereços internos (SSRF). Monte a URL a partir de uma base fixa.
+
+## 25. Sintaxe Canônica v0.5 (Compacta e Redução de Tokens)
+
+A partir da v0.5, a LIAF adota uma sintaxe canônica compacta voltada para economia de tokens BPE em modelos de IA e eliminação de mutabilidade imperativa:
+
+### 25.1 Structs compactas
+Elimina a tag `fields`. Os campos são listados diretamente após o nome:
+```liaf
+(struct User (id int) (name str) (email str))
+```
+
+### 25.2 Funções e Rotas compactas
+A assinatura segue a ordem posicional: `[nome] [params] [retorno] [efeitos] [corpo...]`.
+Elimina as tags redundantes `params`, `returns` e `body`:
+```liaf
+;; Parâmetros vazios são expressos por ()
+(fn main () void (effects io)
+  (println "Olá mundo"))
+
+;; Função tipada com parâmetros
+(fn somar ((a int) (b int)) int (effects)
+  (add a b))
+
+;; Rota HTTP declarativa compacta
+(route GET "/api/users/{id}" ((id int)) Response (effects db)
+  (let user User (try (db-query db "SELECT id, name FROM users WHERE id = ?" User id)))
+  (json-response 200 (try (json-encode user))))
+```
+
+### 25.3 Retorno Implícito
+Em funções e rotas não-`void`, a última expressão avaliada no bloco é retornada implicitamente, eliminando a obrigatoriedade da tag `(return ...)` final quando a expressão é auto-contida.
+
+### 25.4 `match` como expressão de valor
+O bloco `match` pode ser avaliado como valor e atribuído diretamente a um `let`:
+```liaf
+(let token str
+  (match (request-header req "Authorization")
+    (ok t t)
+    (err _ "")))
+```
+
+### 25.5 Combinador `unwrap-or`
+Desempacota `(result T E)` ou `(option T)` diretamente com valor de fallback em 1 linha:
+```liaf
+(let status str (unwrap-or (request-query req "status") "todos"))
+```
+
+### 25.6 Interpolação `(fmt ...)`
+Substitui cadeias profundas de `concat` por interpolação posicional `{}`:
+```liaf
+(println (fmt "Usuário {} conectado na sala {}" user room))
+```
+

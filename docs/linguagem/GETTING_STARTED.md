@@ -71,4 +71,4 @@ Para escutar só na sua máquina (e evitar o aviso do firewall do Windows a cada
 - `pkg/runtime`: Biblioteca de apoio do código gerado (Result, listas, mapas, FS, JSON).
 - `pkg/web`: Web engine de ultra baixa latência com rotas dinâmicas e SSG.
 - `pkg/codegen/testdata/`: Programas LIAF completos usados pelos testes de ponta a ponta.
-- `docs/`: Documentação técnica completa e especificações.
+- `docs/`: Documentação: `linguagem/` (guias e SPEC), `a-fazer/` e `feito/` (issues), `STATUS.md`.

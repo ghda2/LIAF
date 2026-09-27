@@ -3,8 +3,8 @@
 .env.*
 !.env.example
 
-# Documentação interna, logs e rascunhos de desenvolvimento
-.docs/
+# Documentação privada: logs e notas de servidor (IPs, hosts)
+/docs/privado/
 
 # Binários
 *.exe

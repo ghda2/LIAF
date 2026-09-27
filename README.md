@@ -20,16 +20,16 @@ Recursos: loops, listas e mapas tipados, `Result` com `match` e `try`/`on-err`, 
 
 ## Documentação
 
-- [Primeiros passos](docs/GETTING_STARTED.md) — compilar, rodar, formatar
-- [Guia de agentes](docs/AI_GUIDE.md) — o que um modelo precisa saber para escrever LIAF correta
-- [Especificação da linguagem](docs/SPEC.md) — núcleo v0.2; a seção 18 cobre as adições da v0.3
-- [Arquitetura](docs/ARCHITECTURE.md) — pipeline do compilador e pacotes
-- [Mapa do código](docs/SOURCEMAP.md) — onde cada coisa mora no repositório
+- [Primeiros passos](docs/linguagem/GETTING_STARTED.md) — compilar, rodar, formatar
+- [Guia de agentes](docs/linguagem/AI_GUIDE.md) — o que um modelo precisa saber para escrever LIAF correta
+- [Especificação da linguagem](docs/linguagem/SPEC.md) — núcleo v0.2; a seção 18 cobre as adições da v0.3
+- [Arquitetura](docs/linguagem/ARCHITECTURE.md) — pipeline do compilador e pacotes
+- [Mapa do código](docs/linguagem/SOURCEMAP.md) — onde cada coisa mora no repositório
 
 Exemplo completo em v0.3: [`pkg/codegen/testdata/task_api_v03.liaf`](pkg/codegen/testdata/task_api_v03.liaf) — API REST com
 rotas declarativas, `try`/`on-err` e escrita atômica de estado.
 
-O diretório `.docs/` contém o acompanhamento interno do projeto (issues, status, logs) e não é
-publicado neste repositório.
+O estado do projeto está em [docs/STATUS.md](docs/STATUS.md): o que falta em [docs/a-fazer/](docs/a-fazer/)
+e o que já foi entregue em [docs/feito/](docs/feito/). Índice completo: [docs/README.md](docs/README.md).
 
 Publish/reload são desabilitados sem token configurado. Defina `LIAF_DEPLOY_TOKEN` e use POST com `Authorization: Bearer ...`. Assets embutidos são imutáveis; publicação dinâmica requer diretório em disco.

@@ -127,56 +127,48 @@ func (p *printer) printWSRoute(w *WSRouteDecl, suffix string) {
 }
 
 func (p *printer) printStruct(s *StructDecl, suffix string) {
-	p.sb.WriteString("(struct " + s.Name + "\n")
-	p.indent++
-	p.writeIndent()
+	p.sb.WriteString("(struct " + s.Name)
 	if len(s.Fields) == 0 {
-		p.sb.WriteString("(fields))" + suffix)
-		p.indent--
+		p.sb.WriteString(")" + suffix)
 		return
 	}
-	p.sb.WriteString("(fields\n")
-	p.indent++
-	for i, f := range s.Fields {
-		p.writeIndent()
-		if i == len(s.Fields)-1 {
-			p.sb.WriteString(fmt.Sprintf("(%s %s)))%s", f.Name, f.Type.String(), suffix))
-		} else {
-			p.sb.WriteString(fmt.Sprintf("(%s %s)\n", f.Name, f.Type.String()))
-		}
+	for _, f := range s.Fields {
+		p.sb.WriteString(fmt.Sprintf(" (%s %s)", f.Name, f.Type.String()))
 	}
-	p.indent -= 2
+	p.sb.WriteString(")" + suffix)
+}
+
+func isParenExpr(expr Expr) bool {
+	switch expr.(type) {
+	case *CallExpr, *BinaryOpExpr, *IfExpr, *MatchExpr, *TryExpr:
+		return true
+	default:
+		return false
+	}
 }
 
 func (p *printer) printFunc(f *FuncDecl, suffix string) {
-	p.sb.WriteString("(fn " + f.Name + "\n")
-	p.indent++
+	p.sb.WriteString("(fn " + f.Name + " ")
 
 	// Params
-	p.writeIndent()
 	if len(f.Params) == 0 {
-		p.sb.WriteString("(params)\n")
+		p.sb.WriteString("()")
 	} else {
-		p.sb.WriteString("(params\n")
-		p.indent++
+		p.sb.WriteString("(")
 		for i, param := range f.Params {
-			p.writeIndent()
-			if i == len(f.Params)-1 {
-				p.sb.WriteString(fmt.Sprintf("(%s %s))\n", param.Name, param.Type.String()))
-			} else {
-				p.sb.WriteString(fmt.Sprintf("(%s %s)\n", param.Name, param.Type.String()))
+			if i > 0 {
+				p.sb.WriteString(" ")
 			}
+			p.sb.WriteString(fmt.Sprintf("(%s %s)", param.Name, param.Type.String()))
 		}
-		p.indent--
+		p.sb.WriteString(")")
 	}
 
 	// Returns
-	p.writeIndent()
-	p.sb.WriteString(fmt.Sprintf("(returns %s)\n", f.ReturnType.String()))
+	p.sb.WriteString(" " + f.ReturnType.String())
 
 	// Effects
-	p.writeIndent()
-	p.sb.WriteString("(effects")
+	p.sb.WriteString(" (effects")
 	if len(f.Effects) > 0 {
 		effects := append([]string(nil), f.Effects...)
 		sort.Strings(effects)
@@ -184,66 +176,65 @@ func (p *printer) printFunc(f *FuncDecl, suffix string) {
 			p.sb.WriteString(" " + eff)
 		}
 	}
-	p.sb.WriteString(")\n")
+	p.sb.WriteString(")")
 
 	// On-Err (opcional)
 	if f.OnErrVar != "" {
+		p.sb.WriteString("\n")
+		p.indent++
 		p.writeIndent()
 		p.sb.WriteString("(on-err " + f.OnErrVar)
-		p.printBlock(f.OnErrBody, "\n")
-	}
-
-	// Body
-	p.writeIndent()
-	if len(f.Body) == 0 {
-		p.sb.WriteString("(body))" + suffix)
-	} else {
-		p.sb.WriteString("(body\n")
-		p.indent++
-		for i, stmt := range f.Body {
-			p.writeIndent()
-			if i == len(f.Body)-1 {
-				p.printStmt(stmt, "))"+suffix)
-			} else {
-				p.printStmt(stmt, "")
-				p.sb.WriteString("\n")
-			}
-		}
+		p.printBlock(f.OnErrBody, "")
 		p.indent--
 	}
 
+	// Body sem tag (body ...)
+	if len(f.Body) == 0 {
+		p.sb.WriteString(")" + suffix)
+		return
+	}
+
+	p.sb.WriteString("\n")
+	p.indent++
+	for i, stmt := range f.Body {
+		p.writeIndent()
+		isLast := i == len(f.Body)-1
+		if isLast {
+			if retStmt, ok := stmt.(*ReturnStmt); ok && f.ReturnType.String() != "void" && retStmt.Value != nil && isParenExpr(retStmt.Value) {
+				p.sb.WriteString(formatExpr(retStmt.Value) + ")" + suffix)
+				continue
+			}
+			p.printStmt(stmt, ")"+suffix)
+		} else {
+			p.printStmt(stmt, "")
+			p.sb.WriteString("\n")
+		}
+	}
 	p.indent--
 }
 
 func (p *printer) printRoute(r *RouteDecl, suffix string) {
-	p.sb.WriteString(fmt.Sprintf("(route %s %q\n", r.Method, r.Path))
-	p.indent++
+	p.sb.WriteString(fmt.Sprintf("(route %s %q ", r.Method, r.Path))
 
 	// Params
-	p.writeIndent()
 	if len(r.Params) == 0 {
-		p.sb.WriteString("(params)\n")
+		p.sb.WriteString("()")
 	} else {
-		p.sb.WriteString("(params\n")
-		p.indent++
+		p.sb.WriteString("(")
 		for i, param := range r.Params {
-			p.writeIndent()
-			if i == len(r.Params)-1 {
-				p.sb.WriteString(fmt.Sprintf("(%s %s))\n", param.Name, param.Type.String()))
-			} else {
-				p.sb.WriteString(fmt.Sprintf("(%s %s)\n", param.Name, param.Type.String()))
+			if i > 0 {
+				p.sb.WriteString(" ")
 			}
+			p.sb.WriteString(fmt.Sprintf("(%s %s)", param.Name, param.Type.String()))
 		}
-		p.indent--
+		p.sb.WriteString(")")
 	}
 
 	// Returns
-	p.writeIndent()
-	p.sb.WriteString(fmt.Sprintf("(returns %s)\n", r.ReturnType.String()))
+	p.sb.WriteString(" " + r.ReturnType.String())
 
 	// Effects
-	p.writeIndent()
-	p.sb.WriteString("(effects")
+	p.sb.WriteString(" (effects")
 	if len(r.Effects) > 0 {
 		effects := append([]string(nil), r.Effects...)
 		sort.Strings(effects)
@@ -251,34 +242,40 @@ func (p *printer) printRoute(r *RouteDecl, suffix string) {
 			p.sb.WriteString(" " + eff)
 		}
 	}
-	p.sb.WriteString(")\n")
+	p.sb.WriteString(")")
 
 	// On-Err (opcional)
 	if r.OnErrVar != "" {
+		p.sb.WriteString("\n")
+		p.indent++
 		p.writeIndent()
 		p.sb.WriteString("(on-err " + r.OnErrVar)
-		p.printBlock(r.OnErrBody, "\n")
-	}
-
-	// Body
-	p.writeIndent()
-	if len(r.Body) == 0 {
-		p.sb.WriteString("(body))" + suffix)
-	} else {
-		p.sb.WriteString("(body\n")
-		p.indent++
-		for i, stmt := range r.Body {
-			p.writeIndent()
-			if i == len(r.Body)-1 {
-				p.printStmt(stmt, "))"+suffix)
-			} else {
-				p.printStmt(stmt, "")
-				p.sb.WriteString("\n")
-			}
-		}
+		p.printBlock(r.OnErrBody, "")
 		p.indent--
 	}
 
+	// Body sem tag (body ...)
+	if len(r.Body) == 0 {
+		p.sb.WriteString(")" + suffix)
+		return
+	}
+
+	p.sb.WriteString("\n")
+	p.indent++
+	for i, stmt := range r.Body {
+		p.writeIndent()
+		isLast := i == len(r.Body)-1
+		if isLast {
+			if retStmt, ok := stmt.(*ReturnStmt); ok && r.ReturnType.String() != "void" && retStmt.Value != nil && isParenExpr(retStmt.Value) {
+				p.sb.WriteString(formatExpr(retStmt.Value) + ")" + suffix)
+				continue
+			}
+			p.printStmt(stmt, ")"+suffix)
+		} else {
+			p.printStmt(stmt, "")
+			p.sb.WriteString("\n")
+		}
+	}
 	p.indent--
 }
 
@@ -325,7 +322,11 @@ func (p *printer) printStmt(stmt Stmt, suffix string) {
 		}
 		p.indent--
 	case *LetStmt:
-		p.sb.WriteString(fmt.Sprintf("(let %s %s %s)%s", s.Name, s.Type.String(), formatExpr(s.Value), suffix))
+		if s.Type != nil {
+			p.sb.WriteString(fmt.Sprintf("(let %s %s %s)%s", s.Name, s.Type.String(), formatExpr(s.Value), suffix))
+		} else {
+			p.sb.WriteString(fmt.Sprintf("(let %s %s)%s", s.Name, formatExpr(s.Value), suffix))
+		}
 	case *SetStmt:
 		p.sb.WriteString(fmt.Sprintf("(set %s %s)%s", s.Name, formatExpr(s.Value), suffix))
 	case *ReturnStmt:

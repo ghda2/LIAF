@@ -9,58 +9,62 @@ Este guia capacita agentes de IA a interagir, gerar código, auto-curar erros e 
 
 ---
 
-## 1. Sintaxe — LIAF v0.3
+## 1. Sintaxe Canônica — LIAF v0.5 (Compacta e Redução de Tokens)
 
-A fonte é uma AST textual em S-expressions. **A sintaxe de tags `[fn nome ...] /fn nome]` é da v0.1
-e o compilador a rejeita.** Não a use.
+A fonte oficial é em S-expressions compactas. A sintaxe de tags redundantes (`fields`, `params`, `returns`, `body` e `return` final obrigatório) pertence a versões antigas; utilize sempre a **forma canônica v0.5**:
 
 ```liaf
 (module exemplo
-  (struct Task (fields (id int) (title str) (done bool)))
+  (struct Task (id int) (title str) (done bool))
 
-  (fn soma (params (a int) (b int)) (returns int) (effects)
-    (body (return (add a b)))))
+  (fn soma ((a int) (b int)) int (effects)
+    (add a b)))
 ```
 
 Regras:
 
-1. **Chamada direta:** `(println "oi")`, `(json-encode task)`, `(add a b)`. A forma `(call ...)` da
-   v0.2 ainda é aceita, mas não é a canônica.
-2. **Toda função declara `params`, `returns` e `effects`.** Efeitos são `io`, `fs`, `net`, `clock`,
-   `spawn`, e são transitivos: se você chama uma função com `fs`, você declara `fs`. Declarar um
-   efeito que o corpo não usa é erro (`E_UNUSED_EFFECT`). Função pura é `(effects)`, nunca
-   `(effects none)`.
-3. **Operações falíveis devolvem `(result T E)` e não podem ser ignoradas.**
-4. **Modularização e Imports:** Divida arquivos usando `(import "./caminho.liaf")` ou compile uma pasta inteira com `liafc build ./pasta`. Todos os módulos são resolvidos e compilados para um binário único.
-
-### Tratamento de erro: `try` e `on-err`
-
-`(try expr)` desempacota um `(result T E)` e, no erro, sai da função na hora. O destino é o bloco
-`(on-err var ...)`, que vem **antes** de `(body ...)`:
-
-```liaf
-(fn salvar (params (estado Estado)) (returns Response) (effects fs io)
-  (on-err message (return (json-response 500 message)))
-  (body
-    (let texto str (try (json-encode estado)))
-    (try (fs-write-atomic "estado.json" texto))
-    (return (json-response 200 "{\"ok\":true}"))))
-```
-
-Use `try` quando o erro só precisa ser propagado — é a maioria dos casos, e evita a pirâmide de
-`match` aninhado. Use `(match expr (ok v ...) (err m ...))` quando os dois lados fazem coisas
-diferentes.
+1. **Assinatura compacta sem tags redundantes:**
+   - Funções: `(fn nome (params) retorno (effects...) stmts...)`
+   - Rotas: `(route METODO path (params) retorno (effects...) stmts...)`
+   - Parâmetros vazios são expressos por `()`: `(fn main () void (effects io) (println "Olá"))`
+2. **Retorno implícito:** Em funções e rotas não-void, a última expressão avaliada é o retorno implícito:
+   ```liaf
+   (fn dobro ((n int)) int (effects)
+     (mul n 2))
+   ```
+3. **Struct compacta:** Sem tag `fields`: `(struct User (id int) (name str) (email str))`.
+4. **`match` como expressão de valor:** Atribui diretamente a variáveis sem necessidade de mutação imperativa com `set`:
+   ```liaf
+   (let token str
+     (match (request-header req "Authorization")
+       (ok t t)
+       (err _ "")))
+   ```
+5. **Combinador `unwrap-or`:** Desempacota `(result T E)` ou `(option T)` com fallback em 1 linha:
+   ```liaf
+   (let status str (unwrap-or (request-query req "status") "todos"))
+   ```
+6. **Interpolação com `(fmt ...)`:** Substitui chamadas recursivas de `concat`:
+   ```liaf
+   (println (fmt "Usuário {} conectado na sala {}" user room))
+   ```
+7. **Tratamento de erro com `try` e `on-err`:**
+   ```liaf
+   (fn salvar ((estado Estado)) Response (effects fs io)
+     (on-err message (json-response 500 message))
+     (let texto str (try (json-encode estado)))
+     (try (fs-write-atomic "estado.json" texto))
+     (json-response 200 "{\"ok\":true}"))
+   ```
+8. **Efeitos obrigatórios:** `io`, `fs`, `net`, `clock`, `spawn`, `db`. São transitivos. Pura é `(effects)`.
 
 ### Rotas HTTP declarativas
 
-`route` é declaração de topo, irmã de `fn`, e se registra sozinha:
-
 ```liaf
-(route PUT "/tasks/{id}" (params (id int) (input UpdateInput)) (returns Response) (effects fs io)
-  (on-err message (return (json-response 500 message)))
-  (body
-    (let estado Estado (try (carregar-estado)))
-    (return (atualizar estado id input))))
+(route PUT "/tasks/{id}" ((id int) (input UpdateInput)) Response (effects fs io)
+  (on-err message (json-response 500 message))
+  (let estado Estado (try (carregar-estado)))
+  (atualizar estado id input))
 ```
 
 - Cada `{nome}` no caminho precisa de um parâmetro homônimo, `int` ou `str`. Ele chega convertido.

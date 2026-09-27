@@ -41,7 +41,15 @@ func TestParseV03DirectCallsAndTry(t *testing.T) {
 	}
 
 	formatted := ast.Format(mod)
-	expectedClean := strings.TrimSpace(input)
+	expectedClean := strings.TrimSpace(`(module test-v03
+  (fn calculate ((val int)) (result int str) (effects)
+    (on-err msg
+      (return (err msg)))
+    (let res int (try (ok val)))
+    (ok res))
+  (fn main () void (effects io)
+    (let r (result int str) (calculate 42))
+    (println "Done")))`)
 	formattedClean := strings.TrimSpace(formatted)
 
 	if expectedClean != formattedClean {

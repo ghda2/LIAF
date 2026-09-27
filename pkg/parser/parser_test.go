@@ -48,7 +48,11 @@ func TestParseCanonicalMathExample(t *testing.T) {
 	}
 
 	formatted := ast.Format(mod)
-	expectedClean := strings.TrimSpace(input)
+	expectedClean := strings.TrimSpace(`(module example
+  (fn sum ((a int) (b int)) int (effects)
+    (add a b))
+  (fn main () void (effects io)
+    (do (call println (call sum 20 22)))))`)
 	formattedClean := strings.TrimSpace(formatted)
 
 	if expectedClean != formattedClean {
@@ -122,8 +126,20 @@ func TestParseConcurrencyExample(t *testing.T) {
 	}
 
 	formatted := ast.Format(mod)
-	if strings.TrimSpace(formatted) != strings.TrimSpace(input) {
-		t.Errorf("formatação canônica divergente!\nEsperado:\n%s\nObtido:\n%s", strings.TrimSpace(input), strings.TrimSpace(formatted))
+	expectedClean := strings.TrimSpace(`(module concurrency-example
+  (fn worker ((channel (chan str)) (id int)) void (effects clock)
+    (do (call sleep-ms 50))
+    (send channel (call concat "worker-" (call str-from-int id))))
+  (fn main () void (effects io spawn)
+    (let channel (chan str) (call make-chan str))
+    (spawn (call worker channel 1))
+    (spawn (call worker channel 2))
+    (let first str (recv channel))
+    (let second str (recv channel))
+    (do (call println first))
+    (do (call println second))))`)
+	if strings.TrimSpace(formatted) != expectedClean {
+		t.Errorf("formatação canônica divergente!\nEsperado:\n%s\nObtido:\n%s", expectedClean, strings.TrimSpace(formatted))
 	}
 }
 

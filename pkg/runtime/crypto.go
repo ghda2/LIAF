@@ -67,6 +67,27 @@ func Base64URLDecode(text string) Result[string, string] {
 	return Ok[string, string](string(data))
 }
 
+// Base64Encode codifica em Base64 padrao RFC 4648 (com padding).
+func Base64Encode(text string) string {
+	return base64.StdEncoding.EncodeToString([]byte(text))
+}
+
+// Base64Decode decodifica Base64 padrao RFC 4648 (aceita com ou sem padding).
+func Base64Decode(text string) Result[string, string] {
+	s := strings.TrimSpace(text)
+	if rem := len(s) % 4; rem != 0 {
+		s += strings.Repeat("=", 4-rem)
+	}
+	data, err := base64.StdEncoding.DecodeString(s)
+	if err != nil {
+		return Err[string, string]("base64-decode: invalid input")
+	}
+	if !utf8.Valid(data) {
+		return Err[string, string]("base64-decode: decoded data is not UTF-8 text")
+	}
+	return Ok[string, string](string(data))
+}
+
 // RandomToken devolve 32 bytes do gerador criptografico (256 bits) em
 // base64url: 43 caracteres, seguros em URL, cookie e header.
 func RandomToken() string {

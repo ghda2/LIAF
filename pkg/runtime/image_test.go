@@ -73,3 +73,45 @@ func TestImageInvalidFormat(t *testing.T) {
 		t.Fatal("esperava erro ao tentar converter dados inválidos em imagem")
 	}
 }
+
+func TestImageResizeProportional(t *testing.T) {
+	// Imagem original 200x100 (proporção 2:1)
+	pngData := createTestPNG(200, 100)
+
+	// Redimensiona limitando max-width a 100 e max-height a 100
+	res := runtime.ImageResize(string(pngData), 100, 100)
+	if !res.OK {
+		t.Fatalf("ImageResize falhou: %s", res.Error)
+	}
+
+	decodedImg, err := nativewebp.Decode(bytes.NewReader([]byte(res.Value)))
+	if err != nil {
+		t.Fatalf("falha ao decodificar imagem redimensionada: %v", err)
+	}
+
+	bounds := decodedImg.Bounds()
+	// Como a proporção é 2:1, para caber em 100x100 deve virar 100x50
+	if bounds.Dx() != 100 || bounds.Dy() != 50 {
+		t.Errorf("dimensões redimensionadas incorretas: esperado 100x50, obteve %dx%d", bounds.Dx(), bounds.Dy())
+	}
+}
+
+func TestImageProcessQualityAndNoUpscale(t *testing.T) {
+	// Imagem 50x50 não deve ser aumentada se maxWidth/maxHeight forem maiores (500x500)
+	pngData := createTestPNG(50, 50)
+
+	res := runtime.ImageProcess(string(pngData), 500, 500, 9)
+	if !res.OK {
+		t.Fatalf("ImageProcess falhou: %s", res.Error)
+	}
+
+	decodedImg, err := nativewebp.Decode(bytes.NewReader([]byte(res.Value)))
+	if err != nil {
+		t.Fatalf("falha ao decodificar imagem: %v", err)
+	}
+
+	bounds := decodedImg.Bounds()
+	if bounds.Dx() != 50 || bounds.Dy() != 50 {
+		t.Errorf("imagem pequena não deveria ter sofrido upscale: esperado 50x50, obteve %dx%d", bounds.Dx(), bounds.Dy())
+	}
+}

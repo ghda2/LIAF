@@ -1,21 +1,69 @@
-;; std/auth - autenticacao por header HTTP.
+;; std/auth - autenticacao completa e segura para servicos web LIAF.
 ;;
 ;;   (import "std/auth")
-;;   (let token str (try (auth-bearer-token req)))
 ;;
-;; Os nomes publicos comecam com "auth-" porque o import mescla tudo num
-;; espaco unico: o prefixo evita colidir com as funcoes do programa.
+;; Fornece:
+;;   - Bearer Token: extrai e valida tokens no cabecalho Authorization (RFC 7235).
+;;   - Basic Auth: decodifica e valida credenciais usuario:senha em base64 (RFC 7617).
+;;   - API Key: extrai chave de headers customizados e valida contra timing attacks.
+;;   - Cookies: parser resiliente de cookies e formatador seguro de Set-Cookie (RFC 6265).
+;;   - Senhas: hash seguro via Argon2id (PHC string) com protecao contra senhas curtas.
+;;   - JWT Bearer: integracao com std/jwt para extracao e validacao em passo unico.
 (module auth
-  ;; Le "Authorization: Bearer <token>". Ausente, com outro esquema (Basic)
-  ;; ou com o token vazio, devolve (err ...) com o motivo. O nome do esquema
-  ;; nao diferencia maiusculas (RFC 7235): "bearer" e "BEARER" tambem valem.
+  (import "std/jwt")
+
+  ;; --- Basic Auth -------------------------------------------------------------
+
+  (struct BasicAuth (fields (user str) (password str)))
+
+  ;; Extrai e decodifica credenciais de "Authorization: Basic <base64>".
+  ;; Devolve erro para cabecalho ausente, esquema divergente, base64 invalido
+  ;; ou credenciais sem separador ":".
+  (fn auth-basic (params (req Request)) (returns (result BasicAuth str)) (effects)
+    (body
+      (let header str "")
+      (match (request-header req "Authorization")
+        (ok h (set header h))
+        (err e (return (err "missing Authorization header"))))
+      (if (str-eq (str-lower header) "basic")
+        (then (return (err "empty basic token"))))
+      (if (lt (str-len header) 6)
+        (then (return (err "expected Authorization: Basic <token>"))))
+      (if (not (str-eq (str-lower (try (str-slice header 0 6))) "basic "))
+        (then (return (err "expected Authorization: Basic <token>"))))
+      (let token str (str-trim (try (str-slice header 6 (str-len header)))))
+      (if (str-eq token "")
+        (then (return (err "empty basic token"))))
+      (let decoded str "")
+      (match (base64-decode token)
+        (ok d (set decoded d))
+        (err e (return (err "invalid base64 in basic auth"))))
+      (let sep int (str-index decoded ":"))
+      (if (lt sep 0)
+        (then (return (err "malformed basic credentials: missing colon"))))
+      (let u str (try (str-slice decoded 0 sep)))
+      (let p str (try (str-slice decoded (add sep 1) (str-len decoded))))
+      (return (ok (new BasicAuth u p)))))
+
+  ;; Valida credenciais BasicAuth contra valores esperados usando comparacao
+  ;; em tempo constante em ambas as partes para fechar timing attacks.
+  (fn auth-validate-basic (params (creds BasicAuth) (expected_user str) (expected_pass str)) (returns bool) (effects)
+    (body
+      (let u bool (secure-eq creds.user expected_user))
+      (let p bool (secure-eq creds.password expected_pass))
+      (return (and u p))))
+
+  ;; --- Bearer Token -----------------------------------------------------------
+
+  ;; Le "Authorization: Bearer <token>". Ausente, com outro esquema ou com o
+  ;; token vazio, devolve (err ...) com o motivo. O nome do esquema nao diferencia
+  ;; maiusculas (RFC 7235).
   (fn auth-bearer-token (params (req Request)) (returns (result str str)) (effects)
     (body
       (let header str "")
       (match (request-header req "Authorization")
         (ok h (set header h))
         (err e (return (err "missing Authorization header"))))
-      ;; O HTTP apaga os espacos do fim do header: "Bearer " chega "Bearer".
       (if (str-eq (str-lower header) "bearer")
         (then (return (err "empty bearer token"))))
       (if (lt (str-len header) 7)
@@ -26,4 +74,109 @@
       (if (str-eq token "")
         (then (return (err "empty bearer token"))))
       (return (ok token))))
+
+  ;; --- API Key ----------------------------------------------------------------
+
+  ;; Le uma API Key enviada pelo cliente. Se header_name for "", o padrao
+  ;; "X-API-Key" e utilizado.
+  (fn auth-api-key (params (req Request) (header_name str)) (returns (result str str)) (effects)
+    (body
+      (let hname str header_name)
+      (if (str-eq (str-trim hname) "")
+        (then (set hname "X-API-Key")))
+      (let chave str "")
+      (match (request-header req hname)
+        (ok k (set chave (str-trim k)))
+        (err e (return (err "missing API key header"))))
+      (if (str-eq chave "")
+        (then (return (err "empty API key"))))
+      (return (ok chave))))
+
+  ;; Valida uma API Key em tempo constante contra uma chave esperada.
+  (fn auth-validate-api-key (params (provided str) (expected str)) (returns bool) (effects)
+    (body
+      (if (or (str-eq provided "") (str-eq expected ""))
+        (then (return false)))
+      (return (secure-eq provided expected))))
+
+  ;; --- Cookies Web ------------------------------------------------------------
+
+  (struct Cookie (fields (name str) (value str) (max_age int) (path str) (domain str) (secure bool) (http_only bool) (same_site str)))
+
+  ;; Extrai o valor de um cookie especifico do cabecalho "Cookie".
+  ;; Tolera espacos e remove aspas opcionais do valor.
+  (fn auth-cookie (params (req Request) (cookie_name str)) (returns (result str str)) (effects)
+    (body
+      (if (str-eq (str-trim cookie_name) "")
+        (then (return (err "cookie name cannot be empty"))))
+      (let header str "")
+      (match (request-header req "Cookie")
+        (ok c (set header c))
+        (err e (return (err "missing Cookie header"))))
+      (let pares (list str) (str-split header ";"))
+      (for-each par pares
+        (let limpo str (str-trim par))
+        (let idx int (str-index limpo "="))
+        (if (gt idx 0)
+          (then
+            (let k str (str-trim (try (str-slice limpo 0 idx))))
+            (if (str-eq k cookie_name)
+              (then
+                (let v str (str-trim (try (str-slice limpo (add idx 1) (str-len limpo)))))
+                (if (gte (str-len v) 2)
+                  (then
+                    (if (and (str-starts-with v "\"") (str-ends-with v "\""))
+                      (then
+                        (set v (try (str-slice v 1 (sub (str-len v) 1))))))))
+                (return (ok v)))))))
+      (return (err "cookie not found"))))
+
+  ;; Formata um cookie seguro para o cabecalho "Set-Cookie".
+  ;; max_age < 0 emite Max-Age=0 (exclusao imediata do cookie).
+  ;; Se path for vazio, atribui padrao seguro "/".
+  (fn auth-format-cookie (params (c Cookie)) (returns str) (effects)
+    (body
+      (let out str (concat c.name "=" c.value))
+      (if (gt c.max_age 0)
+        (then (set out (concat out "; Max-Age=" (str-from-int c.max_age))))
+        (else
+          (if (lt c.max_age 0)
+            (then (set out (concat out "; Max-Age=0"))))))
+      (if (str-eq c.path "")
+        (then (set out (concat out "; Path=/")))
+        (else (set out (concat out "; Path=" c.path))))
+      (if (neq c.domain "")
+        (then (set out (concat out "; Domain=" c.domain))))
+      (if c.secure
+        (then (set out (concat out "; Secure"))))
+      (if c.http_only
+        (then (set out (concat out "; HttpOnly"))))
+      (if (neq c.same_site "")
+        (then (set out (concat out "; SameSite=" c.same_site))))
+      (return out)))
+
+  ;; --- Senhas Fortes (Argon2id) ----------------------------------------------
+
+  ;; Gera um hash Argon2id (formato PHC). Exige senha com pelo menos 8 caracteres.
+  (fn auth-hash-password (params (password str)) (returns (result str str)) (effects rand)
+    (body
+      (if (lt (str-len password) 8)
+        (then (return (err "password must have at least 8 characters"))))
+      (return (ok (password-hash password)))))
+
+  ;; Verifica uma senha contra um hash Argon2id.
+  (fn auth-verify-password (params (password str) (hash str)) (returns bool) (effects)
+    (body
+      (if (or (str-eq password "") (str-eq hash ""))
+        (then (return false)))
+      (return (password-verify password hash))))
+
+  ;; --- Integracao JWT Bearer --------------------------------------------------
+
+  ;; Extrai o Bearer token do cabecalho e verifica sua assinatura e validade
+  ;; utilizando a std/jwt. Devolve o payload JSON se valido.
+  (fn auth-jwt-bearer (params (req Request) (segredo str)) (returns (result str str)) (effects clock)
+    (body
+      (let token str (try (auth-bearer-token req)))
+      (return (jwt-verify segredo token))))
 )

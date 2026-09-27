@@ -58,6 +58,28 @@ func TestBase64URL(t *testing.T) {
 	}
 }
 
+func TestBase64Std(t *testing.T) {
+	for _, text := range []string{"", "a", "ab", "abc", "usuário:senha!", "?>>"} {
+		enc := Base64Encode(text)
+		if r := Base64Decode(enc); !r.OK || r.Value != text {
+			t.Errorf("%q: ida e volta base64 std: %+v", text, r)
+		}
+	}
+	// Basic auth com padding e sem padding
+	if r := Base64Decode("YWRtaW46c2VjcmV0"); !r.OK || r.Value != "admin:secret" {
+		t.Errorf("basic auth sem padding: %+v", r)
+	}
+	if r := Base64Decode("YQ=="); !r.OK || r.Value != "a" {
+		t.Errorf("com padding: %+v", r)
+	}
+	// Entrada invalida
+	for _, bad := range []string{"não é base64", "!!!"} {
+		if r := Base64Decode(bad); r.OK {
+			t.Errorf("%q: aceito como valido: %+v", bad, r)
+		}
+	}
+}
+
 func TestSecureEq(t *testing.T) {
 	if !SecureEq("abc", "abc") || SecureEq("abc", "abd") || SecureEq("abc", "ab") || SecureEq("", "a") {
 		t.Error("secure-eq devolveu o resultado errado")

@@ -14,15 +14,26 @@
   ;; Retorna o nome do arquivo .webp salvo (ex: "img_1700000000_abc123.webp").
   (fn storage-upload-image (params (req Request) (field str) (dir str)) (returns (result str str)) (effects fs)
     (body
+      (return (storage-upload-image-opt req field dir 0 0 0 4))))
+
+  ;; Upload com opções avançadas de otimização e limites:
+  ;; - max-w: largura máxima em pixels (0 = sem redimensionamento)
+  ;; - max-h: altura máxima em pixels (0 = sem redimensionamento)
+  ;; - max-bytes: tamanho máximo permitido em bytes (0 = sem limite)
+  ;; - level: esforço de compressão WebP (0 mais rápido até 9 máxima redução, 4 padrão)
+  (fn storage-upload-image-opt (params (req Request) (field str) (dir str) (max-w int) (max-h int) (max-bytes int) (level int)) (returns (result str str)) (effects fs)
+    (body
       (let data str "")
       (match (request-file-data req field)
         (ok d (set data d))
         (err e (return (err e))))
+      (if (and (gt max-bytes 0) (gt (str-len data) max-bytes))
+        (then (return (err "file exceeds maximum allowed size"))))
       (let orig-name str "auto")
       (match (request-file-name req field)
         (ok name (set orig-name name))
         (err _ (set orig-name "auto")))
-      (return (storage-save-image dir orig-name data))))
+      (return (storage-save-image-opt dir orig-name data max-w max-h max-bytes level))))
 
   ;; Serve a imagem da pasta em formato WebP com headers de cache adequados.
   (fn storage-serve-image (params (dir str) (filename str)) (returns Response) (effects fs)

@@ -16,6 +16,67 @@
         (ok t (return (texto 200 t)))
         (err e (return (texto 401 e))))))
 
+  (route GET "/auth/basic" (params (req Request)) (returns Response) (effects)
+    (body
+      (let creds BasicAuth (new BasicAuth "" ""))
+      (match (auth-basic req)
+        (ok c (set creds c))
+        (err e (return (texto 401 e))))
+      (if (auth-validate-basic creds "admin" "militar123")
+        (then (return (texto 200 (concat creds.user ":" creds.password))))
+        (else (return (texto 403 "forbidden: invalid credentials"))))))
+
+  (route GET "/auth/api-key" (params (req Request)) (returns Response) (effects)
+    (body
+      (let key str "")
+      (match (auth-api-key req "")
+        (ok k (set key k))
+        (err e (return (texto 401 e))))
+      (if (auth-validate-api-key key "militar-super-secret-key-2026")
+        (then (return (texto 200 key)))
+        (else (return (texto 403 "forbidden: invalid key"))))))
+
+  (route GET "/auth/api-key-custom" (params (req Request)) (returns Response) (effects)
+    (body
+      (let key str "")
+      (match (auth-api-key req "X-Custom-Auth")
+        (ok k (set key k))
+        (err e (return (texto 401 e))))
+      (if (auth-validate-api-key key "custom-key-999")
+        (then (return (texto 200 key)))
+        (else (return (texto 403 "forbidden: invalid custom key"))))))
+
+  (route GET "/auth/cookie" (params (req Request)) (returns Response) (effects)
+    (body
+      (match (auth-cookie req "session_id")
+        (ok sess (return (texto 200 sess)))
+        (err e (return (texto 401 e))))))
+
+  (route GET "/auth/set-cookie" (params (req Request)) (returns Response) (effects)
+    (body
+      (let c Cookie (new Cookie "session_id" "segredo123" 3600 "/app" "exemplo.com" true true "Lax"))
+      (let r Response (texto 200 "cookie set"))
+      (return (response-set-header r "Set-Cookie" (auth-format-cookie c)))))
+
+  (route GET "/auth/jwt" (params (req Request)) (returns Response) (effects clock)
+    (body
+      (match (auth-jwt-bearer req "chave-secreta-militar-32-bytes-ok!")
+        (ok payload (return (texto 200 payload)))
+        (err e (return (texto 401 e))))))
+
+  (route POST "/auth/password" (params (req Request)) (returns Response) (effects rand)
+    (body
+      (let senha str "minha-senha-secreta")
+      (let hash str "")
+      (match (auth-hash-password senha)
+        (ok h (set hash h))
+        (err e (return (texto 400 e))))
+      (let ok1 bool (auth-verify-password senha hash))
+      (let ok2 bool (auth-verify-password "senha-errada" hash))
+      (if (and ok1 (not ok2))
+        (then (return (texto 200 "password verify ok")))
+        (else (return (texto 500 "password verify failed"))))))
+
   (route GET "/cors" (params (req Request)) (returns Response) (effects)
     (body
       (let r Response (texto 200 "ok"))

@@ -727,8 +727,9 @@ Não há middleware: o preflight exige uma `(route OPTIONS "/caminho" ...)` por 
 
 | Forma | Retorna | Efeitos | Notas |
 |---|---|---|---|
-| `(storage-init pasta)` | `(result bool str)` | `fs` | |
-| `(storage-upload-image req "campo" pasta)` | `(result str str)` | `fs` | Lê o upload (multipart ou corpo direto), converte para WebP sem perdas, salva e devolve o nome |
+| `(storage-init pasta)` | `(result bool str)` | `fs` | Cria a pasta de armazenamento caso não exista |
+| `(storage-upload-image req "campo" pasta)` | `(result str str)` | `fs` | Lê o upload, converte para WebP lossless (nível 4), salva e devolve o nome |
+| `(storage-upload-image-opt req "campo" pasta max-w max-h max-bytes level)` | `(result str str)` | `fs` | Upload com redimensionamento proporcional, limite de bytes e nível de compressão WebP (0-9) |
 | `(storage-serve-image pasta nome)` | `Response` | `fs` | `image/webp` com cache longo; `404` se não existe |
 | `(storage-delete-image pasta nome)` | `(result bool str)` | `fs` | |
 | `(storage-image-exists pasta nome)` | `bool` | `fs` | |

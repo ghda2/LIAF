@@ -2,6 +2,10 @@ package codegen
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -98,6 +102,140 @@ func TestExecuteStdWeb(t *testing.T) {
 					t.Errorf("recebido %d %s, esperado %d com %q", res.StatusCode, body, tc.status, tc.body)
 				}
 			})
+		}
+	})
+
+	t.Run("basic auth", func(t *testing.T) {
+		for _, tc := range []struct {
+			name, header string
+			status       int
+			body         string
+		}{
+			{"sem header", "", 401, "missing Authorization header"},
+			{"valido", "Basic " + base64.StdEncoding.EncodeToString([]byte("admin:militar123")), 200, "admin:militar123"},
+			{"senha errada", "Basic " + base64.StdEncoding.EncodeToString([]byte("admin:errada")), 403, "forbidden: invalid credentials"},
+			{"usuario errado", "Basic " + base64.StdEncoding.EncodeToString([]byte("root:militar123")), 403, "forbidden: invalid credentials"},
+			{"sem separador", "Basic " + base64.StdEncoding.EncodeToString([]byte("adminpass")), 401, "malformed basic credentials: missing colon"},
+			{"base64 corrompido", "Basic ???!@#", 401, "invalid base64 in basic auth"},
+			{"vazio", "Basic   ", 401, "empty basic token"},
+			{"outro esquema", "Bearer 123", 401, "expected Authorization: Basic <token>"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				headers := map[string]string{}
+				if tc.header != "" {
+					headers["Authorization"] = tc.header
+				}
+				res, body := do("GET", "/auth/basic", headers)
+				if res.StatusCode != tc.status || !strings.Contains(body, `"v":"`+tc.body+`"`) {
+					t.Errorf("recebido %d %s, esperado %d com %q", res.StatusCode, body, tc.status, tc.body)
+				}
+			})
+		}
+	})
+
+	t.Run("api key", func(t *testing.T) {
+		for _, tc := range []struct {
+			name    string
+			path    string
+			headers map[string]string
+			status  int
+			body    string
+		}{
+			{"padrao valido", "/auth/api-key", map[string]string{"X-API-Key": "militar-super-secret-key-2026"}, 200, "militar-super-secret-key-2026"},
+			{"padrao chave errada", "/auth/api-key", map[string]string{"X-API-Key": "chave-errada"}, 403, "forbidden: invalid key"},
+			{"padrao sem header", "/auth/api-key", map[string]string{}, 401, "missing API key header"},
+			{"padrao vazia", "/auth/api-key", map[string]string{"X-API-Key": "   "}, 401, "empty API key"},
+			{"custom valido", "/auth/api-key-custom", map[string]string{"X-Custom-Auth": "custom-key-999"}, 200, "custom-key-999"},
+			{"custom errado", "/auth/api-key-custom", map[string]string{"X-Custom-Auth": "errado"}, 403, "forbidden: invalid custom key"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				res, body := do("GET", tc.path, tc.headers)
+				if res.StatusCode != tc.status || !strings.Contains(body, `"v":"`+tc.body+`"`) {
+					t.Errorf("recebido %d %s, esperado %d com %q", res.StatusCode, body, tc.status, tc.body)
+				}
+			})
+		}
+	})
+
+	t.Run("cookie auth", func(t *testing.T) {
+		for _, tc := range []struct {
+			name    string
+			headers map[string]string
+			status  int
+			body    string
+		}{
+			{"sem cookie", map[string]string{}, 401, "missing Cookie header"},
+			{"cookie unico", map[string]string{"Cookie": "session_id=sessao_123"}, 200, "sessao_123"},
+			{"multiplos cookies", map[string]string{"Cookie": "theme=dark; session_id=sessao_abc; lang=pt"}, 200, "sessao_abc"},
+			{"cookie com aspas", map[string]string{"Cookie": `session_id="com_aspas_limpas"`}, 200, "com_aspas_limpas"},
+			{"cookie inexistente", map[string]string{"Cookie": "outra_coisa=123"}, 401, "cookie not found"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				res, body := do("GET", "/auth/cookie", tc.headers)
+				if res.StatusCode != tc.status || !strings.Contains(body, `"v":"`+tc.body+`"`) {
+					t.Errorf("recebido %d %s, esperado %d com %q", res.StatusCode, body, tc.status, tc.body)
+				}
+			})
+		}
+	})
+
+	t.Run("set cookie format", func(t *testing.T) {
+		res, _ := do("GET", "/auth/set-cookie", nil)
+		setCookie := res.Header.Get("Set-Cookie")
+		for _, expected := range []string{
+			"session_id=segredo123",
+			"Max-Age=3600",
+			"Path=/app",
+			"Domain=exemplo.com",
+			"Secure",
+			"HttpOnly",
+			"SameSite=Lax",
+		} {
+			if !strings.Contains(setCookie, expected) {
+				t.Errorf("Set-Cookie = %q, esperado conter %q", setCookie, expected)
+			}
+		}
+	})
+
+	t.Run("jwt bearer", func(t *testing.T) {
+		makeJWT := func(secret, payload string) string {
+			h := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
+			p := base64.RawURLEncoding.EncodeToString([]byte(payload))
+			mac := hmac.New(sha256.New, []byte(secret))
+			mac.Write([]byte(h + "." + p))
+			sig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+			return h + "." + p + "." + sig
+		}
+
+		secret := "chave-secreta-militar-32-bytes-ok!"
+		nowSec := time.Now().Unix()
+
+		// Valido
+		validToken := makeJWT(secret, fmt.Sprintf(`{"sub":"agente007","exp":%d}`, nowSec+3600))
+		res, body := do("GET", "/auth/jwt", map[string]string{"Authorization": "Bearer " + validToken})
+		if res.StatusCode != 200 || !strings.Contains(body, "agente007") {
+			t.Errorf("jwt valido falhou: %d %s", res.StatusCode, body)
+		}
+
+		// Assinatura adulterada
+		badSigToken := validToken[:len(validToken)-4] + "XXXX"
+		res, body = do("GET", "/auth/jwt", map[string]string{"Authorization": "Bearer " + badSigToken})
+		if res.StatusCode != 401 || !strings.Contains(body, "jwt: invalid signature") {
+			t.Errorf("jwt assinatura adulterada falhou: %d %s", res.StatusCode, body)
+		}
+
+		// Token vencido
+		expiredToken := makeJWT(secret, fmt.Sprintf(`{"sub":"agente007","exp":%d}`, nowSec-3600))
+		res, body = do("GET", "/auth/jwt", map[string]string{"Authorization": "Bearer " + expiredToken})
+		if res.StatusCode != 401 || !strings.Contains(body, "jwt: token expired") {
+			t.Errorf("jwt vencido falhou: %d %s", res.StatusCode, body)
+		}
+	})
+
+	t.Run("password hash e verify", func(t *testing.T) {
+		res, body := do("POST", "/auth/password", nil)
+		if res.StatusCode != 200 || !strings.Contains(body, "password verify ok") {
+			t.Errorf("password verify falhou: %d %s", res.StatusCode, body)
 		}
 	})
 

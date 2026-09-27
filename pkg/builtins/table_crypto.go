@@ -57,6 +57,26 @@ func init() {
 	})
 
 	Register(&Builtin{
+		Name:         "base64-encode",
+		Category:     "crypto",
+		Arity:        ExactArity(1),
+		Params:       []string{"str"},
+		Return:       "str",
+		GoCall:       "rt.Base64Encode",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "base64-decode",
+		Category:     "crypto",
+		Arity:        ExactArity(1),
+		Params:       []string{"str"},
+		Return:       "(result str str)",
+		GoCall:       "rt.Base64Decode",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
 		Name:         "random-token",
 		Category:     "crypto",
 		Arity:        ExactArity(0),

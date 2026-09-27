@@ -138,3 +138,36 @@ func TestRequestFileDataRawBody(t *testing.T) {
 		t.Errorf("esperava 'documento.png', obteve %q", nameRes.Value)
 	}
 }
+
+func TestStorageSaveImageOptLimitsAndResize(t *testing.T) {
+	tempDir := t.TempDir()
+
+	pngData := createTestPNG(200, 100)
+
+	// 1. Testa bloqueio por limite de bytes
+	maxBytes := int64(len(pngData) - 10)
+	failRes := runtime.StorageSaveImageOpt(tempDir, "foto.png", string(pngData), 0, 0, maxBytes, 4)
+	if failRes.OK {
+		t.Fatalf("esperava erro por exceder maxBytes (%d), mas obteve sucesso", maxBytes)
+	}
+
+	// 2. Testa sucesso com resize proporcional e compressão
+	okRes := runtime.StorageSaveImageOpt(tempDir, "foto.png", string(pngData), 100, 100, int64(len(pngData)+1000), 7)
+	if !okRes.OK {
+		t.Fatalf("StorageSaveImageOpt falhou: %s", okRes.Error)
+	}
+
+	savedFile := okRes.Value
+	savedBytesRes := runtime.StorageGet(tempDir, savedFile)
+	if !savedBytesRes.OK {
+		t.Fatalf("falha ao ler imagem salva: %s", savedBytesRes.Error)
+	}
+
+	dimRes := runtime.ImageDimensions(savedBytesRes.Value)
+	if !dimRes.OK {
+		t.Fatalf("ImageDimensions falhou: %s", dimRes.Error)
+	}
+	if dimRes.Value != "100x50" {
+		t.Errorf("esperava dimensões redimensionadas '100x50', obteve %q", dimRes.Value)
+	}
+}

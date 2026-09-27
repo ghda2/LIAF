@@ -227,11 +227,14 @@ Exemplo completo: `pkg/codegen/testdata/pedidos_api.liaf` (Bearer, filtro por qu
 
 Para upload, compressão e entrega de arquivos e imagens estilo MinIO:
 
-- **Upload e conversão automática:** `(storage-upload-image req "file" "uploads")` (efeito `fs`) aceita requisições `multipart/form-data` ou corpo binário direto (limite padrão de 32MB). Converte imagens (PNG, JPEG, GIF, BMP) para WebP com algoritmo estritamente sem perdas (lossless VP8L), mantendo 100% da fidelidade visual e reduzindo o consumo de disco. Salva no disco sanitizando o nome contra directory traversal.
+- **Upload e conversão automática:** `(storage-upload-image req "file" "uploads")` (efeito `fs`) aceita requisições `multipart/form-data` ou corpo binário direto. Converte imagens (PNG, JPEG, GIF, BMP) para WebP com algoritmo estritamente sem perdas (lossless VP8L), mantendo 100% da fidelidade visual e reduzindo o consumo de disco.
+- **Upload com redimensionamento e limites:** `(storage-upload-image-opt req "file" "uploads" max-w max-h max-bytes level)` permite definir largura máxima, altura máxima (mantendo o aspect ratio via interpolação bicúbica Catmull-Rom), limite máximo em bytes e nível de compressão WebP de 0 a 9.
 - **Serviço de imagem:** `(storage-serve-image "uploads" filename)` (efeito `fs`) retorna `Response` com `Content-Type: image/webp` e headers de cache HTTP (`Cache-Control: public, max-age=31536000, immutable`).
 - **Builtins de suporte:**
   - `(image-to-webp data)`: converte bytes de imagem em WebP lossless em memória.
   - `(image-to-webp-quality data level)`: define o nível de esforço de compressão sem perdas (0 a 9).
+  - `(image-resize data max-w max-h)`: redimensiona proporcionalmente mantendo o aspect ratio.
+  - `(image-process data max-w max-h level)`: redimensiona e comprime no nível desejado.
   - `(image-dimensions data)`: retorna as dimensões `"LARGURAxALTURA"` (ex: `"1920x1080"`).
   - `(raw-response status contentType body)`: constrói `Response` com Content-Type e dados binários arbitrários.
   - `(file-response path contentType)`: serve arquivo estático direto de disco.

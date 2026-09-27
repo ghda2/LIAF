@@ -6,6 +6,13 @@
         (return (json-response 200 (concat "{\"status\":\"ok\",\"file\":\"" filename "\"}"))))
       (err e
         (return (json-response 400 (concat "{\"error\":\"" e "\"}"))))))
+  ;; Upload otimizado: max 1920x1080, max 5MB (5242880 bytes), compressão nível 6
+  (route POST "/api/upload-optimized" ((req Request)) Response (effects fs)
+    (match (storage-upload-image-opt req "file" "uploads" 1920 1080 5242880 6)
+      (ok filename
+        (return (json-response 200 (concat "{\"status\":\"ok\",\"file\":\"" filename "\"}"))))
+      (err e
+        (return (json-response 400 (concat "{\"error\":\"" e "\"}"))))))
   (route GET "/uploads/{filename}" ((filename str)) Response (effects fs)
     (storage-serve-image "uploads" filename))
   (fn main () void (effects fs io)

@@ -23,9 +23,14 @@ func StorageInit(dir string) Result[bool, string] {
 	return Ok[bool, string](true)
 }
 
-// StorageSaveImage processa a imagem (converte para WebP sem perdas de qualidade),
-// salva no diretório de armazenamento com extensão .webp e retorna o nome final do arquivo salvo.
-func StorageSaveImage(dir, filename, data string) Result[string, string] {
+// StorageSaveImageOpt valida o tamanho máximo (maxBytes), redimensiona proporcionalmente
+// se maxWidth ou maxHeight forem maiores que 0, comprime em WebP com o nível de esforço
+// (level de 0 a 9) e salva no diretório de armazenamento seguro.
+func StorageSaveImageOpt(dir, filename, data string, maxWidth, maxHeight, maxBytes, level int64) Result[string, string] {
+	if maxBytes > 0 && int64(len(data)) > maxBytes {
+		return Err[string, string](fmt.Sprintf("file size (%d bytes) exceeds maximum allowed limit of %d bytes", len(data), maxBytes))
+	}
+
 	if dir == "" {
 		dir = "storage"
 	}
@@ -33,8 +38,8 @@ func StorageSaveImage(dir, filename, data string) Result[string, string] {
 		return Err[string, string]("failed to create storage dir: " + err.Error())
 	}
 
-	// Converte para WebP lossless
-	webpRes := ImageToWebP(data)
+	// Processa a imagem com redimensionamento proporcional e compressão WebP
+	webpRes := ImageProcess(data, maxWidth, maxHeight, level)
 	if !webpRes.OK {
 		return Err[string, string](webpRes.Error)
 	}
@@ -57,6 +62,12 @@ func StorageSaveImage(dir, filename, data string) Result[string, string] {
 	}
 
 	return Ok[string, string](finalFilename)
+}
+
+// StorageSaveImage processa a imagem (converte para WebP sem perdas de qualidade),
+// salva no diretório de armazenamento com extensão .webp e retorna o nome final do arquivo salvo.
+func StorageSaveImage(dir, filename, data string) Result[string, string] {
+	return StorageSaveImageOpt(dir, filename, data, 0, 0, 0, 4)
 }
 
 // StorageGet lê o conteúdo de um arquivo do diretório de armazenamento.

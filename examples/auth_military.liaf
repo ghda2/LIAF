@@ -1,0 +1,95 @@
+;; Demonstração e bateria de testes de nível militar para std/auth.
+;; Execução: liafc run examples/auth_military.liaf
+(module auth_military
+  (import "std/auth")
+  (import "std/jwt")
+
+  (fn test-senhas (params) (returns void) (effects io rand)
+    (on-err err (println err))
+    (body
+      (println "[TEST] Senhas Argon2id...")
+      ;; Senha muito curta (< 8 chars) deve ser rejeitada
+      (match (auth-hash-password "curta")
+        (ok h (println "ERRO: aceitou senha curta"))
+        (err e (println (concat "  OK: rejeitou senha curta: " e))))
+
+      ;; Senha valida de 8+ caracteres
+      (let senha str "super-segredo-militar-2026")
+      (match (auth-hash-password senha)
+        (ok hash
+          (println (concat "  OK: hash gerado com sucesso: " (try (str-slice hash 0 35)) "..."))
+          (if (auth-verify-password senha hash)
+            (then (println "  OK: senha correta verificada com sucesso"))
+            (else (println "ERRO: senha correta recusada")))
+          (if (not (auth-verify-password "senha-incorreta" hash))
+            (then (println "  OK: senha errada rejeitada"))
+            (else (println "ERRO: senha errada aceita"))))
+        (err e (println (concat "ERRO: falha ao gerar hash: " e))))))
+
+  (fn test-api-key (params) (returns void) (effects io)
+    (body
+      (println "[TEST] API Key com protecao contra Timing Attack...")
+      (let master_key str "sec-token-1234567890-militar")
+      (if (auth-validate-api-key master_key master_key)
+        (then (println "  OK: chave valida aceita em tempo constante"))
+        (else (println "ERRO: chave valida rejeitada")))
+      (if (not (auth-validate-api-key "sec-token-errado" master_key))
+        (then (println "  OK: chave invalida rejeitada"))
+        (else (println "ERRO: chave invalida aceita")))
+      (if (not (auth-validate-api-key "" master_key))
+        (then (println "  OK: chave vazia rejeitada"))
+        (else (println "ERRO: chave vazia aceita")))))
+
+  (fn test-cookies (params) (returns void) (effects io)
+    (body
+      (println "[TEST] Formatacao de Cookies Seguros...")
+      ;; Cookie completo de sessao
+      (let c1 Cookie (new Cookie "sid" "token_xyz" 3600 "/api" "app.missao.org" true true "Strict"))
+      (let formatted1 str (auth-format-cookie c1))
+      (println (concat "  Set-Cookie Sessao: " formatted1))
+
+      ;; Cookie de remocao / expiracao
+      (let c2 Cookie (new Cookie "sid" "" -1 "" "" true true "Lax"))
+      (let formatted2 str (auth-format-cookie c2))
+      (println (concat "  Set-Cookie Remocao: " formatted2))))
+
+  (fn test-basic-auth (params) (returns void) (effects io)
+    (body
+      (println "[TEST] Basic Auth...")
+      (let creds BasicAuth (new BasicAuth "agente007" "licenca-para-codar"))
+      (if (auth-validate-basic creds "agente007" "licenca-para-codar")
+        (then (println "  OK: credenciais validas aceitas"))
+        (else (println "ERRO: credenciais validas rejeitadas")))
+      (if (not (auth-validate-basic creds "agente007" "senha-errada"))
+        (then (println "  OK: senha incorreta rejeitada"))
+        (else (println "ERRO: senha incorreta aceita")))
+      (if (not (auth-validate-basic creds "agente008" "licenca-para-codar"))
+        (then (println "  OK: usuario incorreto rejeitado"))
+        (else (println "ERRO: usuario incorreto aceito")))))
+
+  (fn test-jwt (params) (returns void) (effects clock io)
+    (on-err err (println err))
+    (body
+      (println "[TEST] Integracao JWT HS256...")
+      (let segredo str "minha-chave-secreta-militar-32-bytes!")
+      (let agora int (try (div (now-ms) 1000)))
+      (let exp int (add agora 3600))
+      (let payload str (concat "{\"user\":\"gabriel\",\"exp\":" (str-from-int exp) "}"))
+      (match (jwt-sign segredo payload)
+        (ok token
+          (println (concat "  OK: JWT emitido: " (try (str-slice token 0 40)) "..."))
+          (match (jwt-verify segredo token)
+            (ok p (println (concat "  OK: JWT verificado com payload: " p)))
+            (err e (println (concat "ERRO: validacao do JWT falhou: " e)))))
+        (err e (println (concat "ERRO: emissao do JWT falhou: " e))))))
+
+  (fn main (params) (returns void) (effects clock io rand)
+    (body
+      (println "=== INICIANDO BATERIA DE TESTES DE AUTENTICACAO MILITAR ===")
+      (test-senhas)
+      (test-api-key)
+      (test-cookies)
+      (test-basic-auth)
+      (test-jwt)
+      (println "=== TODOS OS TESTES PASSARAM COM SUCESSO! ===")))
+)

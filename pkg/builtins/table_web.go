@@ -185,6 +185,26 @@ func init() {
 	})
 
 	Register(&Builtin{
+		Name:         "image-resize",
+		Category:     "image",
+		Arity:        ExactArity(3),
+		Params:       []string{"str", "int", "int"},
+		Return:       "(result str str)",
+		GoCall:       "rt.ImageResize",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "image-process",
+		Category:     "image",
+		Arity:        ExactArity(4),
+		Params:       []string{"str", "int", "int", "int"},
+		Return:       "(result str str)",
+		GoCall:       "rt.ImageProcess",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
 		Name:         "image-dimensions",
 		Category:     "image",
 		Arity:        ExactArity(1),
@@ -216,6 +236,17 @@ func init() {
 		Effects:      []string{"fs"},
 		Return:       "(result str str)",
 		GoCall:       "rt.StorageSaveImage",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "storage-save-image-opt",
+		Category:     "storage",
+		Arity:        ExactArity(7),
+		Params:       []string{"str", "str", "str", "int", "int", "int", "int"},
+		Effects:      []string{"fs"},
+		Return:       "(result str str)",
+		GoCall:       "rt.StorageSaveImageOpt",
 		UnsupportedC: true,
 	})
 

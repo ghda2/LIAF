@@ -25,9 +25,7 @@ Módulo Go: `liaf` (Go 1.26). Única dependência direta relevante: `modernc.org
 
 | Caminho | O que é |
 |---|---|
-| [examples/](../examples/) | Programas LIAF de exemplo e seus assets (`public/`, `tw_webdrop/`, `mini_crm/`) |
 | [docs/](../docs/) | Guias (primeiros passos, guia de IA, arquitetura, este mapa) e logs de sessão (`LOG_<data>.md`) |
-| [benchmarks/](../benchmarks/) | Avaliação de modelos de IA escrevendo LIAF; `manual/` é o desafio avulso |
 | [.agents/skills/liaf/](../.agents/skills/liaf/SKILL.md) | Skill para agentes de IA escreverem/compilarem LIAF |
 | `.docs/` | Acompanhamento interno — issues, status, logs (ignorado pelo git) |
 
@@ -167,37 +165,23 @@ Rodar tudo: `go test ./...`
 
 ---
 
-## 7. Exemplos — [examples/](../examples/)
+## 7. Programas de teste — [pkg/codegen/testdata/](../pkg/codegen/testdata/)
+
+Programas LIAF completos que os testes de `pkg/codegen` compilam e executam:
 
 | Tema | Arquivos |
 |---|---|
 | Núcleo | `loops`, `collections`, `math`, `result`, `concurrency`, `fs_json` |
-| HTTP / APIs | `api_server`, `user_api` (+ `user_api.py` para comparação), `task_api_v03`, `tw_api`, `web_engine`, `pedidos_api` (Bearer, query, CORS, cookie, WebSocket autenticado), `cobranca_pix` (cliente HTTP) |
-| Bancos | `db_sqlite`, `db_postgres`, `db_redis` |
-| WebSocket | `chat_ws`, `kanban_ws`, `workspace_ws` |
-| App completo | [mini_crm/](../examples/mini_crm/README.md) — `crm.liaf` + frontend em `public/` |
+| HTTP / APIs | `task_api_v03`, `pedidos_api` (Bearer, query, CORS, cookie, WebSocket autenticado), `cobranca_pix` (cliente HTTP) |
+| Bancos | `db_postgres`, `db_redis` |
+| WebSocket | `chat_ws` |
 
-Os exemplos servem `"./public"` **relativo ao diretório atual**, então rode-os de dentro da pasta
-que contém o `public/` certo (`liafc build --embed=public` resolve em relação ao `.liaf`):
-
-- [examples/public/](../examples/public/) — compartilhado pelos exemplos soltos: o site do `web_engine`
-  (layouts, includes, blog em Markdown), `chat.html` do `chat_ws` e `forms.html` do `user_api`.
-- [examples/tw_webdrop/](../examples/tw_webdrop/README.md) — frontend de produção em tw.webdrop.bio,
-  para `workspace_ws` e `tw_api`.
+Os servidores servem `"./public"` **relativo ao diretório atual**; os testes criam essa pasta vazia ao
+lado do binário.
 
 ---
 
-## 8. Ferramentas de avaliação com IA
-
-- **[benchmarks/](../benchmarks/README.md)** — `run_suite.py` pede a um modelo (OpenAI, Anthropic, Gemini,
-  Ollama) para resolver as tarefas de `tasks.json` / `tasks-http.json`, e registra tentativas, custo e
-  pass@1. `http_scenario.py` valida o cenário HTTP. Roadmap em `ROADMAP.md`.
-- **[benchmarks/manual/](../benchmarks/manual/COMO_USAR.md)** — desafio avulso (`DESAFIO.md`: CRUD em PostgreSQL) com uma spec
-  compacta (`SPEC_ENXUTA.md`) para colar no prompt, `testar_modelo.mjs` e scripts `.bat` de validação.
-
----
-
-## 9. Onde mexer para...
+## 8. Onde mexer para...
 
 | Tarefa | Arquivos |
 |---|---|
@@ -207,7 +191,7 @@ que contém o `public/` certo (`liafc build --embed=public` resolve em relação
 | Novo driver de banco | `pkg/dbdrv/<driver>.go` + registro em `dbdrv.go` |
 | Comportamento do servidor | `pkg/web` |
 | Novo subcomando da CLI | `cmd/liafc/main.go` (switch em `main`) |
-| Documentar para modelos | `docs/AI_GUIDE.md`, `benchmarks/manual/SPEC_ENXUTA.md`, `.agents/skills/liaf/SKILL.md` |
+| Documentar para modelos | `docs/AI_GUIDE.md`, `.agents/skills/liaf/SKILL.md` |
 
 ---
 

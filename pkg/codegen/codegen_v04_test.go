@@ -113,7 +113,7 @@ func TestFormatV04Examples(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			data, err := os.ReadFile(filepath.Join(root, "examples", name+".liaf"))
+			data, err := os.ReadFile(filepath.Join(root, "pkg", "codegen", "testdata", name+".liaf"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -257,7 +257,7 @@ func (c *testWSClient) nextEvent() map[string]string {
 	}
 }
 
-// TestExecuteV04ChatWS compila examples/chat_ws.liaf e conversa com ele por
+// TestExecuteV04ChatWS compila testdata/chat_ws.liaf e conversa com ele por
 // WebSocket de verdade: e a unica forma de provar que a declaracao
 // (ws-route ...) vira um socket bidirecional funcionando.
 func TestExecuteV04ChatWS(t *testing.T) {
@@ -459,7 +459,7 @@ func (m *miniRedis) serve(conn net.Conn) {
 	}
 }
 
-// TestExecuteV04RedisExample compila examples/db_redis.liaf e o roda contra o
+// TestExecuteV04RedisExample compila testdata/db_redis.liaf e o roda contra o
 // servidor acima, cobrindo o caminho inteiro: db-connect, redis-set,
 // redis-get, json-decode e o erro de chave ausente.
 func TestExecuteV04RedisExample(t *testing.T) {

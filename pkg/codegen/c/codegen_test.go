@@ -20,7 +20,7 @@ func TestCExecutables(t *testing.T) {
 	root, _ := filepath.Abs("../../..")
 	for _, tc := range []struct{ name, want string }{{"loops", "20\n"}, {"collections", "42\n100\nlist index out of bounds\n"}, {"result", "Expected positive number\n"}, {"concurrency", "Todos os processos foram concluidos!"}} {
 		t.Run(tc.name, func(t *testing.T) {
-			b, err := os.ReadFile(filepath.Join(root, "examples", tc.name+".liaf"))
+			b, err := os.ReadFile(filepath.Join(root, "pkg", "codegen", "testdata", tc.name+".liaf"))
 			if err != nil {
 				t.Fatal(err)
 			}

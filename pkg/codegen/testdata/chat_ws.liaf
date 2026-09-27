@@ -1,6 +1,6 @@
 ;; Chat em tempo real - LIAF v0.4 (issue #016)
 ;;
-;; Uso: chat_ws 8080   (rode de dentro de examples/: exige ./public, que traz public/chat.html)
+;; Uso: chat_ws 8080   (exige ./public ao lado do binario)
 ;; Abra http://localhost:8080/chat em duas abas e escolha a mesma sala.
 ;;
 ;; A rota (ws-route ...) declara os tres momentos da conexao. O parametro

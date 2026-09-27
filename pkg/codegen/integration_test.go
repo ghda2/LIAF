@@ -24,7 +24,7 @@ func TestExecutableExamples(t *testing.T) {
 		{"fs_json", "alice\nremovido\n"}, {"result", "Expected positive number\n"}, {"math", ""},
 	} {
 		t.Run(tc.file, func(t *testing.T) {
-			data, err := os.ReadFile(filepath.Join(root, "examples", tc.file+".liaf"))
+			data, err := os.ReadFile(filepath.Join(root, "pkg", "codegen", "testdata", tc.file+".liaf"))
 			if err != nil {
 				t.Fatal(err)
 			}

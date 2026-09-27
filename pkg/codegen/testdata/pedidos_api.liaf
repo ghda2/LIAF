@@ -1,6 +1,6 @@
 ;; API de pedidos multi-restaurante - headers, query string e headers de resposta
 ;;
-;; Uso: pedidos_api 8080   (rode de dentro de examples/: exige ./public)
+;; Uso: pedidos_api 8080   (exige ./public ao lado do binario)
 ;;
 ;;   curl -H "Authorization: Bearer tok-pizzaria" localhost:8080/api/pedidos?status=aberto
 ;;   curl -X POST localhost:8080/api/login -d '{"token":"tok-sushi"}' -i

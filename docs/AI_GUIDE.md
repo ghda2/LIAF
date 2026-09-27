@@ -172,7 +172,7 @@ Os três blocos devolvem `void`, então `try` dentro deles precisa de `(on-err .
 4. Rode testes de comportamento. Passar no checker não prova que o algoritmo está correto.
 5. `liafc build arquivo.liaf -o programa`. Use `--embed` para assets imutáveis dentro do executável.
 
-Exemplos executáveis: `examples/tw_chat/chat.liaf` (Chat em tempo real LIAF v0.5 com WebSocket, SQLite, REST e moderação Argon2), `examples/task_api_v03.liaf` (API completa), `chat_ws.liaf`, `db_postgres.liaf` e `db_redis.liaf` (banco de dados), `loops.liaf`, `collections.liaf`, `fs_json.liaf`, `result.liaf` e `api_server.liaf`.
+Programas completos em `pkg/codegen/testdata/`: `task_api_v03.liaf` (API completa), `chat_ws.liaf`, `db_postgres.liaf` e `db_redis.liaf` (banco de dados), `loops.liaf`, `collections.liaf`, `fs_json.liaf` e `result.liaf`.
 
 ## Aritmética e Funções Numéricas (#020, #022)
 
@@ -205,7 +205,7 @@ Declare `((req Request))` na rota para ler a requisição:
 - `Set-Cookie` repetido acumula; os demais headers substituem.
 - Numa `ws-route`, declare `((req Request) (conn WSConn))` para ler o handshake. O navegador não manda `Authorization` em WebSocket: leia o token com `(unwrap-or (request-query req "token") "")` em `on-open` e recuse com `(ws-close conn 4401 "motivo")`.
 
-Exemplo completo: `examples/pedidos_api.liaf` (Bearer, filtro por query, CORS, cookie, painel WebSocket por restaurante).
+Exemplo completo: `pkg/codegen/testdata/pedidos_api.liaf` (Bearer, filtro por query, CORS, cookie, painel WebSocket por restaurante).
 
 ## Criptografia
 

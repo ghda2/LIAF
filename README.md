@@ -10,9 +10,9 @@ Linguagem experimental com AST textual em S-expressions, tipos e efeitos explíc
 
 ```powershell
 go build -o liafc.exe ./cmd/liafc
-./liafc.exe check examples/loops.liaf --json
-./liafc.exe run examples/collections.liaf
-./liafc.exe build examples/web_engine.liaf -o site.exe --embed=public
+./liafc.exe check pkg/codegen/testdata/loops.liaf --json
+./liafc.exe run pkg/codegen/testdata/collections.liaf
+./liafc.exe build app.liaf -o app.exe --embed=public
 go test ./...
 ```
 
@@ -26,7 +26,7 @@ Recursos: loops, listas e mapas tipados, `Result` com `match` e `try`/`on-err`, 
 - [Arquitetura](docs/ARCHITECTURE.md) — pipeline do compilador e pacotes
 - [Mapa do código](docs/SOURCEMAP.md) — onde cada coisa mora no repositório
 
-Exemplo completo em v0.3: [`examples/task_api_v03.liaf`](examples/task_api_v03.liaf) — API REST com
+Exemplo completo em v0.3: [`pkg/codegen/testdata/task_api_v03.liaf`](pkg/codegen/testdata/task_api_v03.liaf) — API REST com
 rotas declarativas, `try`/`on-err` e escrita atômica de estado.
 
 O diretório `.docs/` contém o acompanhamento interno do projeto (issues, status, logs) e não é

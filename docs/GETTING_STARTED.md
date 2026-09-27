@@ -23,31 +23,31 @@ go build -o liafc.exe ./cmd/liafc
 
 ### Verificar sintaxe e tipos (Diagnostics)
 ```bash
-./liafc check examples/loops.liaf
+./liafc check pkg/codegen/testdata/loops.liaf
 ```
 
 ### Executar diretamente (JIT/Run)
 ```bash
-./liafc run examples/math.liaf
+./liafc run pkg/codegen/testdata/math.liaf
 ```
 
 ### Compilar para executável
 ```bash
-./liafc build examples/api_server.liaf -o server_app
+./liafc build app.liaf -o server_app
 ```
 
 ### Formatar na forma canônica
 ```bash
-./liafc fmt examples/math.liaf        # imprime a forma canônica
+./liafc fmt pkg/codegen/testdata/math.liaf        # imprime a forma canônica
 ./liafc fmt -w arquivo.liaf           # grava no arquivo
-./liafc fmt -l examples/*.liaf        # lista o que está fora do formato (útil em CI)
+./liafc fmt -l pkg/codegen/testdata/*.liaf        # lista o que está fora do formato (útil em CI)
 ```
 O formatador ainda não preserva comentários, então `-w` se recusa a gravar em
 arquivo comentado a menos que você passe `--drop-comments`.
 
 ### API REST completa em v0.3
 ```bash
-./liafc build examples/task_api_v03.liaf -o task_api
+./liafc build pkg/codegen/testdata/task_api_v03.liaf -o task_api
 mkdir public
 ./task_api 8080
 ```
@@ -55,11 +55,8 @@ Endpoints: `GET /health`, `GET /tasks`, `POST /tasks`, `GET|PUT|DELETE /tasks/{i
 O exemplo mostra as três adições da v0.3 — chamadas sem `call`, `try`/`on-err` no
 lugar de `match` aninhado, e rotas declarativas com parâmetros já tipados.
 
-### Iniciar Web Engine com SSG dinâmico
-```bash
-cd examples && ../liafc run web_engine.liaf   # serve ./public (examples/public/)
-```
-Acesse `http://localhost:8080` no navegador.
+### Servidores web
+Programas com `serve-hybrid "./public"` servem a pasta `public/` relativa ao diretório atual.
 
 Para escutar só na sua máquina (e evitar o aviso do firewall do Windows a cada build novo), defina `LIAF_HOST=127.0.0.1` antes de rodar. No PowerShell: `$env:LIAF_HOST="127.0.0.1"`.
 
@@ -73,5 +70,5 @@ Para escutar só na sua máquina (e evitar o aviso do firewall do Windows a cada
 - `pkg/codegen`: Emissão de código Go; backend C em `pkg/codegen/c`.
 - `pkg/runtime`: Biblioteca de apoio do código gerado (Result, listas, mapas, FS, JSON).
 - `pkg/web`: Web engine de ultra baixa latência com rotas dinâmicas e SSG.
-- `examples/`: Exemplos práticos da linguagem.
+- `pkg/codegen/testdata/`: Programas LIAF completos usados pelos testes de ponta a ponta.
 - `docs/`: Documentação técnica completa e especificações.

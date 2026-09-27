@@ -27,7 +27,7 @@ func generateExample(t *testing.T, name string) string {
 	}
 	// Pelo loader, como o liafc faz: exemplos podem usar (import ...),
 	// inclusive da biblioteca padrao embutida.
-	mod, diags := loader.Load(filepath.Join(root, "examples", name+".liaf"))
+	mod, diags := loader.Load(filepath.Join(root, "pkg", "codegen", "testdata", name+".liaf"))
 	if len(diags) > 0 {
 		t.Fatalf("load: %+v", diags)
 	}
@@ -98,7 +98,7 @@ func freePort(t *testing.T) string {
 	return fmt.Sprint(l.Addr().(*net.TCPAddr).Port)
 }
 
-// TestExecuteV03TaskAPI compila e executa examples/task_api_v03.liaf de verdade
+// TestExecuteV03TaskAPI compila e executa testdata/task_api_v03.liaf de verdade
 // e exercita o ciclo completo da API pela rede.
 func TestExecuteV03TaskAPI(t *testing.T) {
 	if testing.Short() {

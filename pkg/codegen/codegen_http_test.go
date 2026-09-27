@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-// TestExecutePedidosAPI compila examples/pedidos_api.liaf e confere pela rede
+// TestExecutePedidosAPI compila testdata/pedidos_api.liaf e confere pela rede
 // o que request-header, request-query e response-set-header prometem:
 // autenticacao por Bearer, isolamento entre restaurantes, filtro por query,
 // CORS com preflight e Set-Cookie.
@@ -306,7 +306,7 @@ func (c *testWSClient) nextFrame() (byte, string) {
 	}
 }
 
-// TestExecuteCobrancaPix compila examples/cobranca_pix.liaf e o roda contra
+// TestExecuteCobrancaPix compila testdata/cobranca_pix.liaf e o roda contra
 // um PSP falso: confere o que o http-fetch envia (metodo, token, chave de
 // idempotencia, JSON) e como o programa trata sucesso e erro do provedor.
 func TestExecuteCobrancaPix(t *testing.T) {

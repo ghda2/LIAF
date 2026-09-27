@@ -1075,9 +1075,9 @@ Exemplo — autenticação por Bearer, com a rota recebendo o `Request`:
     (return (ok (try (str-slice header 7 (str-len header)))))))
 ```
 
-Programa completo, com isolamento por restaurante, filtro por query, preflight de CORS e `Set-Cookie`: `examples/pedidos_api.liaf`.
+Programa completo, com isolamento por restaurante, filtro por query, preflight de CORS e `Set-Cookie`: `pkg/codegen/testdata/pedidos_api.liaf`.
 
-Numa `(ws-route ...)`, um parâmetro `Request` recebe o handshake, com os mesmos headers e query string (§19.7). Recusar a conexão é fechá-la em `on-open` com `(ws-close conn 4401 "motivo")`, antes de `ws-join`; `examples/pedidos_api.liaf` faz isso no painel de cada restaurante.
+Numa `(ws-route ...)`, um parâmetro `Request` recebe o handshake, com os mesmos headers e query string (§19.7). Recusar a conexão é fechá-la em `on-open` com `(ws-close conn 4401 "motivo")`, antes de `ws-join`; `pkg/codegen/testdata/pedidos_api.liaf` faz isso no painel de cada restaurante.
 
 ## 22. Criptografia
 
@@ -1145,7 +1145,7 @@ Exemplo — sessão com JWT:
 
 Nomes de campo aceitam palavras reservadas (`sub`, `return`, `if`...), exceto `true` e `false`: o nome do campo é só um rótulo e a chave no JSON, e é assim que os claims registrados do JWT (`sub`, `exp`) se decodificam com os nomes originais. `(field sessao sub)` lê o campo; `(sub a b)` continua sendo subtração.
 
-Como a linguagem ainda não tem middleware, o preflight de CORS exige uma `(route OPTIONS ...)` por caminho; `examples/pedidos_api.liaf` mostra o padrão.
+Como a linguagem ainda não tem middleware, o preflight de CORS exige uma `(route OPTIONS ...)` por caminho; `pkg/codegen/testdata/pedidos_api.liaf` mostra o padrão.
 
 **Colisões.** Todas as declarações dividem um único espaço de nomes, e funções e structs dividem o mesmo espaço entre si. Um nome declarado em dois arquivos é `E_DUPLICATE_DECL`, com os dois locais na mensagem; se um deles é da std, o nome pertence a ela e o seu precisa mudar. Por isso os módulos da std prefixam os nomes públicos com o próprio nome (`auth-`). Nome repetido no mesmo arquivo continua sendo `E_DUPLICATE_SYMBOL`, do checker.
 
@@ -1170,6 +1170,6 @@ Como a linguagem ainda não tem middleware, o preflight de CORS exige uma `(rout
 - Timeout de 30 segundos para a chamada inteira. Corpo de resposta limitado a 10 MiB e obrigatoriamente texto UTF-8 (a linguagem ainda não tem tipo de bytes); passar disso é erro, não truncamento.
 - As mensagens de erro trazem método e host, nunca a URL inteira: tokens na query string não vão parar em log.
 
-Exemplo completo, com token, chave de idempotência e tratamento do erro do provedor: `examples/cobranca_pix.liaf`.
+Exemplo completo, com token, chave de idempotência e tratamento do erro do provedor: `pkg/codegen/testdata/cobranca_pix.liaf`.
 
 **Cuidado:** chamar uma URL que veio do usuário deixa ele apontar o servidor para endereços internos (SSRF). Monte a URL a partir de uma base fixa.

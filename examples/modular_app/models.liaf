@@ -1,4 +1,0 @@
-(module models
-  (struct User (fields (name str) (age int)))
-  (struct Config (fields (app_name str) (version str)))
-)

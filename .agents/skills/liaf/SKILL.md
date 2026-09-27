@@ -75,7 +75,7 @@ diferentes.
 - Structs são imutáveis: não há `set-field`, construa uma nova com `(new Tipo ...)`.
 - Leitura de campo é `(field objeto campo)`.
 
-Exemplo completo e executável: `examples/task_api_v03.liaf`.
+Exemplo completo e executável: `pkg/codegen/testdata/task_api_v03.liaf`.
 
 ---
 
@@ -134,26 +134,26 @@ O LIAF Web Engine suporta montagem de templates diretamente na inicialização e
 ### Formatar na forma canônica
 ```bash
 liafc fmt arquivo.liaf        # imprime
-liafc fmt -l examples/*.liaf  # lista o que está fora do formato
+liafc fmt -l *.liaf  # lista o que está fora do formato
 ```
 O formatador ainda não preserva comentários, então `-w` recusa gravar em arquivo comentado sem
 `--drop-comments`.
 
 ### Compilar localmente (Windows)
 ```bash
-liafc build ./examples/web_engine.liaf -o server.exe
+liafc build ./app.liaf -o server.exe
 ```
 
 ### Cross-compilar para Linux (Produção x86_64)
 No PowerShell:
 ```powershell
-$env:GOOS="linux"; $env:GOARCH="amd64"; liafc build ./examples/web_engine.liaf -o liaf_server_linux; Remove-Item Env:\GOOS; Remove-Item Env:\GOARCH
+$env:GOOS="linux"; $env:GOARCH="amd64"; liafc build ./app.liaf -o liaf_server_linux; Remove-Item Env:\GOOS; Remove-Item Env:\GOARCH
 ```
 
 ### Deploy Remoto via SSH
 1. Enviar binário e pasta pública:
    ```bash
-   scp -B -C liaf_server_linux examples/public/ HOST:/opt/app/
+   scp -B -C -r liaf_server_linux public/ HOST:/opt/app/
    ```
 2. Configurar permissão e serviço systemd (`/etc/systemd/system/app.service`).
 3. Se houver proxy reverso (Caddy / Nginx), apontar para a porta configurada no script LIAF.

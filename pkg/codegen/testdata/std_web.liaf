@@ -1,0 +1,54 @@
+;; Exercita std/auth e std/cors pela rede, para TestExecuteStdWeb.
+;; Uso: std_web 8080   (exige ./public ao lado do binario)
+(module std_web
+  (import "std/auth")
+  (import "std/cors")
+
+  (fn origens (params) (returns (list str)) (effects)
+    (body (return (list "https://painel.exemplo.com"))))
+
+  (fn texto (params (status int) (v str)) (returns Response) (effects)
+    (body (return (json-response status (concat "{\"v\":\"" v "\"}")))))
+
+  (route GET "/token" (params (req Request)) (returns Response) (effects)
+    (body
+      (match (auth-bearer-token req)
+        (ok t (return (texto 200 t)))
+        (err e (return (texto 401 e))))))
+
+  (route GET "/cors" (params (req Request)) (returns Response) (effects)
+    (body
+      (let r Response (texto 200 "ok"))
+      (match (cors-origin req (origens))
+        (ok origem (return (cors-headers r origem)))
+        (err e (return (response-set-header r "X-Cors-Erro" e))))))
+
+  (route OPTIONS "/cors" (params (req Request)) (returns Response) (effects)
+    (body
+      (match (cors-origin req (origens))
+        (ok origem (return (cors-preflight origem "GET, OPTIONS" "Authorization")))
+        (err e (return (texto 403 e))))))
+
+  (route GET "/cors-cookie" (params (req Request)) (returns Response) (effects)
+    (body
+      (let r Response (texto 200 "ok"))
+      (match (cors-origin req (origens))
+        (ok origem (return (cors-headers-credentials r origem)))
+        (err e (return r)))))
+
+  (route OPTIONS "/cors-cookie" (params (req Request)) (returns Response) (effects)
+    (body
+      (match (cors-origin req (origens))
+        (ok origem (return (cors-preflight-credentials origem "POST" "Content-Type")))
+        (err e (return (texto 403 e))))))
+
+  (fn main (params) (returns void) (effects fs io net)
+    (body
+      (let port str "8080")
+      (match (list-get (args) 0)
+        (ok p (set port p))
+        (err ignored (set port "8080")))
+      (match (serve-hybrid "./public" port)
+        (ok stopped (println "Servidor parado"))
+        (err message (println message)))))
+)

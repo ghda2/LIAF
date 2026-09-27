@@ -1,4 +1,4 @@
-;; issue: std
+;; issue: #027
 ;; status: done
 ;; out: ana
 ;; out: 4102444800
@@ -9,7 +9,8 @@
   (fn main (params) (returns void) (effects io clock)
     (on-err e (println e))
     (body
-      (let token str (jwt-sign "s" "{\"sub\":\"ana\",\"exp\":4102444800}"))
-      (let c Claims (try (json-decode (try (jwt-verify "s" token)) Claims)))
+      (let segredo str "segredo-de-teste-com-32-bytes-ok")
+      (let token str (try (jwt-sign segredo "{\"sub\":\"ana\",\"exp\":4102444800}")))
+      (let c Claims (try (json-decode (try (jwt-verify segredo token)) Claims)))
       (println (field c sub))
       (println (field c exp)))))

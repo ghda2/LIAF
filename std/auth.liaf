@@ -7,14 +7,20 @@
 ;; espaco unico: o prefixo evita colidir com as funcoes do programa.
 (module auth
   ;; Le "Authorization: Bearer <token>". Ausente, com outro esquema (Basic)
-  ;; ou com o token vazio, devolve (err ...) com o motivo.
+  ;; ou com o token vazio, devolve (err ...) com o motivo. O nome do esquema
+  ;; nao diferencia maiusculas (RFC 7235): "bearer" e "BEARER" tambem valem.
   (fn auth-bearer-token (params (req Request)) (returns (result str str)) (effects)
     (body
       (let header str "")
       (match (request-header req "Authorization")
         (ok h (set header h))
         (err e (return (err "missing Authorization header"))))
-      (if (not (str-starts-with header "Bearer "))
+      ;; O HTTP apaga os espacos do fim do header: "Bearer " chega "Bearer".
+      (if (str-eq (str-lower header) "bearer")
+        (then (return (err "empty bearer token"))))
+      (if (lt (str-len header) 7)
+        (then (return (err "expected Authorization: Bearer <token>"))))
+      (if (not (str-eq (str-lower (try (str-slice header 0 7))) "bearer "))
         (then (return (err "expected Authorization: Bearer <token>"))))
       (let token str (str-trim (try (str-slice header 7 (str-len header)))))
       (if (str-eq token "")

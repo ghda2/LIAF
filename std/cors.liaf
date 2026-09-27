@@ -11,6 +11,7 @@
 ;;
 ;; O preflight (OPTIONS) precisa de uma rota por caminho, porque a LIAF ainda
 ;; nao tem middleware: (route OPTIONS "/api/x" ...) chamando cors-preflight.
+;; Com cookie, use cors-headers-credentials e cors-preflight-credentials.
 (module cors
   ;; A origem da requisicao, se estiver entre as permitidas.
   (fn cors-origin (params (req Request) (permitidas (list str))) (returns (result str str)) (effects)
@@ -38,4 +39,17 @@
       (let r2 Response (response-set-header r "Access-Control-Allow-Methods" metodos))
       (let r3 Response (response-set-header r2 "Access-Control-Allow-Headers" cabecalhos))
       (return (response-set-header r3 "Access-Control-Max-Age" "600"))))
+
+  ;; Variantes para quando o navegador manda cookie (fetch com
+  ;; credentials: "include"). Sem Access-Control-Allow-Credentials ele
+  ;; descarta a resposta, e o Set-Cookie nunca chega. Use so se a API
+  ;; autentica por cookie: com credenciais, uma origem da lista age em nome
+  ;; do usuario logado.
+  (fn cors-headers-credentials (params (res Response) (origem str)) (returns Response) (effects)
+    (body
+      (return (response-set-header (cors-headers res origem) "Access-Control-Allow-Credentials" "true"))))
+
+  (fn cors-preflight-credentials (params (origem str) (metodos str) (cabecalhos str)) (returns Response) (effects)
+    (body
+      (return (response-set-header (cors-preflight origem metodos cabecalhos) "Access-Control-Allow-Credentials" "true"))))
 )

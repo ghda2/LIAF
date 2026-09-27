@@ -1,4 +1,4 @@
-;; issue: parser
+;; issue: #027
 ;; status: done
 ;; out: {"sub":"ana","add":2,"return":"x","send":true}
 ;; out: ana 2 x

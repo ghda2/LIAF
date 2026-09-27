@@ -1,7 +1,7 @@
 ;; std/jwt - JSON Web Token com HS256 (HMAC-SHA256).
 ;;
 ;;   (import "std/jwt")
-;;   (let token str (jwt-sign segredo (try (json-encode (new Sessao "ana" expira)))))
+;;   (let token str (try (jwt-sign segredo (try (json-encode (new Sessao "ana" expira))))))
 ;;   (let payload str (try (jwt-verify segredo token)))
 ;;   (let sessao Sessao (try (json-decode payload Sessao)))
 ;;
@@ -12,18 +12,31 @@
 ;;
 ;; So HS256. O cabecalho e fixo na assinatura e conferido na verificacao, o
 ;; que fecha o ataque classico de trocar alg para "none".
+;;
+;; O segredo precisa ter pelo menos 32 bytes (RFC 7518, 3.2: a chave do HS256
+;; nao pode ser menor que o hash). Sign e verify recusam segredo curto, entao
+;; uma variavel de ambiente que faltou vira erro, e nao um token assinado com
+;; "" que qualquer um consegue forjar.
 (module jwt
   (struct JwtHeader (fields (alg str) (typ str)))
   (struct JwtExp (fields (exp int)))
 
-  (fn jwt-sign (params (segredo str) (payload str)) (returns str) (effects)
+  (fn jwt-segredo-valido (params (segredo str)) (returns (result str str)) (effects)
     (body
+      (if (lt (str-byte-len segredo) 32)
+        (then (return (err "jwt: secret must have at least 32 bytes"))))
+      (return (ok segredo))))
+
+  (fn jwt-sign (params (segredo str) (payload str)) (returns (result str str)) (effects)
+    (body
+      (try (jwt-segredo-valido segredo))
       (let dados str (concat (base64url-encode "{\"alg\":\"HS256\",\"typ\":\"JWT\"}") "." (base64url-encode payload)))
-      (return (concat dados "." (hmac-sha256 segredo dados "base64url")))))
+      (return (ok (concat dados "." (hmac-sha256 segredo dados "base64url"))))))
 
   ;; Devolve o payload (JSON) de um token valido e dentro da validade.
   (fn jwt-verify (params (segredo str) (token str)) (returns (result str str)) (effects clock)
     (body
+      (try (jwt-segredo-valido segredo))
       (let partes (list str) (str-split token "."))
       (if (neq (list-len partes) 3)
         (then (return (err "jwt: malformed token"))))

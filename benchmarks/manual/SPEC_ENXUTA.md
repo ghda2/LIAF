@@ -116,3 +116,22 @@ Suporte nativo com efeito `db` e tipo de conexão `DBConnection`:
 - `fs`: Para leitura/escrita em arquivos.
 - `db`: Para operações em bancos de dados (`db-exec`, `db-query`, `db-transaction`, `redis-get`, etc.).
 - `(effects)`: Declare vazio se a função for pura. **Não declare efeitos que a função não usa!**
+
+## 8. Operadores e Aritmética
+- **Aritmética básica:** `(add a b ...)`, `(sub a b)`, `(mul a b ...)`, `(div a b)`, `(mod a b)`
+- **Unários e Arredondamento:** `(neg x)`, `(abs x)`, `(min a b)`, `(max a b)`, `(pow a b)`, `(sqrt x)`, `(floor x)`, `(ceil x)`, `(round x)`
+- **Lógicos e Comparações:** `(and a b ...)`, `(or a b ...)`, `(not b)`, `(eq a b)`, `(neq a b)`, `(lt a b)`, `(gt a b)`, `(lte a b)`, `(gte a b)`
+- `add`, `mul`, `and`, `or` são variádicos (mínimo 2 argumentos).
+- Literais: hexadecimais como `0xff` e notação científica como `1e3` e `2.5e-3` são nativamente suportados.
+- **Conversões de tipo (#021):** `(int-from-float f)`, `(str-from-float f)`, `(float-from-str s)`, `(str-from-bool b)`, `(bool-from-str s)`, `(str-from-int n)`, `(float-from-int n)`, `(int-from-str s)`. Falíveis retornam `(result T str)`.
+- **Semântica numérica segura (#022):**
+  - `div` e `mod` com operandos inteiros retornam `(result int str)`. Se o divisor for zero, produzem erro tratável (`match`/`try`). `div` de `float` segue IEEE 754 e retorna `float`.
+  - Operações aritméticas em `int` abortam com exit code 1 em overflow/underflow, prevenindo corrupção silenciosa de dados.
+
+## 9. Strings e UTF-8 (#023)
+- **Tamanho e fatiamento em runes:** `(str-len s)`, `(str-byte-len s)`, `(str-slice s start end)`, `(str-get s i)`
+- **Busca e teste:** `(str-contains s sub)`, `(str-starts-with s prefix)`, `(str-ends-with s suffix)`, `(str-index s sub)`
+- **Transformações:** `(str-trim s)`, `(str-upper s)`, `(str-lower s)`, `(str-replace s old new)`
+- **Listas e junção:** `(str-split s sep)` retorna `(list str)`, `(str-join lista sep)` retorna `str`
+- **Comparações:** `(lt s1 s2)`, `(gt s1 s2)`, `(lte s1 s2)`, `(gte s1 s2)` operam lexicograficamente.
+

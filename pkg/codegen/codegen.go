@@ -56,6 +56,32 @@ func (g *Generator) Generate() string {
 	g.sb.WriteString("\treturn sb.String()\n")
 	g.sb.WriteString("}\n\n")
 
+	g.sb.WriteString("func _liaf_fmt(pattern string, args ...interface{}) string {\n")
+	g.sb.WriteString("\tvar sb strings.Builder\n")
+	g.sb.WriteString("\targIdx := 0\n")
+	g.sb.WriteString("\tfor i := 0; i < len(pattern); {\n")
+	g.sb.WriteString("\t\tif i+1 < len(pattern) && pattern[i] == '{' && pattern[i+1] == '{' {\n")
+	g.sb.WriteString("\t\t\tsb.WriteByte('{')\n")
+	g.sb.WriteString("\t\t\ti += 2\n")
+	g.sb.WriteString("\t\t} else if i+1 < len(pattern) && pattern[i] == '}' && pattern[i+1] == '}' {\n")
+	g.sb.WriteString("\t\t\tsb.WriteByte('}')\n")
+	g.sb.WriteString("\t\t\ti += 2\n")
+	g.sb.WriteString("\t\t} else if i+1 < len(pattern) && pattern[i] == '{' && pattern[i+1] == '}' {\n")
+	g.sb.WriteString("\t\t\tif argIdx < len(args) {\n")
+	g.sb.WriteString("\t\t\t\tsb.WriteString(fmt.Sprint(args[argIdx]))\n")
+	g.sb.WriteString("\t\t\t\targIdx++\n")
+	g.sb.WriteString("\t\t\t} else {\n")
+	g.sb.WriteString("\t\t\t\tsb.WriteString(\"{}\")\n")
+	g.sb.WriteString("\t\t\t}\n")
+	g.sb.WriteString("\t\t\ti += 2\n")
+	g.sb.WriteString("\t\t} else {\n")
+	g.sb.WriteString("\t\t\tsb.WriteByte(pattern[i])\n")
+	g.sb.WriteString("\t\t\ti++\n")
+	g.sb.WriteString("\t\t}\n")
+	g.sb.WriteString("\t}\n")
+	g.sb.WriteString("\treturn sb.String()\n")
+	g.sb.WriteString("}\n\n")
+
 	g.sb.WriteString("func _liaf_str_from_int(v int64) string {\n")
 	g.sb.WriteString("\treturn strconv.FormatInt(v, 10)\n")
 	g.sb.WriteString("}\n\n")
@@ -345,6 +371,28 @@ func (g *Generator) genStmt(stmt ast.Stmt) {
 		g.sb.WriteString("}\n")
 	case *ast.MatchStmt:
 		g.serial++
+		if s.IsOption {
+			id := fmt.Sprintf("_liaf_opt_%d", g.serial)
+			g.sb.WriteString(fmt.Sprintf("if %s := %s; %s.Some {\n", id, g.genExpr(s.Value), id))
+			g.indent++
+			g.writeIndent()
+			g.sb.WriteString(fmt.Sprintf("%s := %s.Value; _ = %s\n", sanitizeIdent(s.OKName), id, sanitizeIdent(s.OKName)))
+			for _, st := range s.OK {
+				g.genStmt(st)
+			}
+			g.indent--
+			g.writeIndent()
+			g.sb.WriteString("} else {\n")
+			g.indent++
+			g.writeIndent()
+			for _, st := range s.Err {
+				g.genStmt(st)
+			}
+			g.indent--
+			g.writeIndent()
+			g.sb.WriteString("}\n")
+			return
+		}
 		id := fmt.Sprintf("_liaf_result_%d", g.serial)
 		g.sb.WriteString(fmt.Sprintf("if %s := %s; %s.OK {\n", id, g.genExpr(s.Value), id))
 		g.indent++
@@ -485,105 +533,114 @@ func (g *Generator) genExpr(expr ast.Expr) string {
 		return fmt.Sprintf("<-%s", g.genExpr(e.Channel))
 	case *ast.TryExpr:
 		return fmt.Sprintf("(%s).Value", g.genExpr(e.Expr))
+	case *ast.IfExpr:
+		retType := g.MapType(g.TypeOf(e))
+		if retType == "" {
+			retType = "interface{}"
+		}
+		return fmt.Sprintf("func() %s { if %s { return %s }; return %s }()", retType, g.genExpr(e.Condition), g.genExpr(e.Then), g.genExpr(e.Else))
+	case *ast.MatchExpr:
+		retType := g.MapType(g.TypeOf(e))
+		if retType == "" {
+			retType = "interface{}"
+		}
+		g.serial++
+		if e.IsOption {
+			id := fmt.Sprintf("_liaf_opt_%d", g.serial)
+			okVar := sanitizeIdent(e.OKName)
+			errVar := sanitizeIdent(e.ErrName)
+			if okVar == "" || okVar == "_u_" {
+				okVar = "_"
+			}
+			var okInit string
+			if okVar != "_" {
+				okInit = fmt.Sprintf("%s := %s.Value; _ = %s\n", okVar, id, okVar)
+			}
+			var errInit string
+			if errVar != "" && errVar != "_" && errVar != "_u_" {
+				errInit = fmt.Sprintf("%s := struct{}{}; _ = %s\n", errVar, errVar)
+			}
+			return fmt.Sprintf("func() %s {\n%s := %s\nif %s.Some {\n%sreturn %s\n}\n%sreturn %s\n}()",
+				retType, id, g.genExpr(e.Value), id, okInit, g.genExpr(e.OK), errInit, g.genExpr(e.Err))
+		}
+		id := fmt.Sprintf("_liaf_result_%d", g.serial)
+		okVar := sanitizeIdent(e.OKName)
+		errVar := sanitizeIdent(e.ErrName)
+		if okVar == "" || okVar == "_u_" {
+			okVar = "_"
+		}
+		if errVar == "" || errVar == "_u_" {
+			errVar = "_"
+		}
+		var okInit string
+		if okVar != "_" {
+			okInit = fmt.Sprintf("%s := %s.Value; _ = %s\n", okVar, id, okVar)
+		}
+		var errInit string
+		if errVar != "_" {
+			errInit = fmt.Sprintf("%s := %s.Error; _ = %s\n", errVar, id, errVar)
+		}
+		return fmt.Sprintf("func() %s {\n%s := %s\nif %s.OK {\n%sreturn %s\n}\n%sreturn %s\n}()",
+			retType, id, g.genExpr(e.Value), id, okInit, g.genExpr(e.OK), errInit, g.genExpr(e.Err))
 	default:
 		return ""
 	}
+}
+
+func (g *Generator) GenExpr(e ast.Expr) string   { return g.genExpr(e) }
+func (g *Generator) MapType(t ast.Type) string    { return mapType(t) }
+func (g *Generator) TypeOf(e ast.Expr) ast.Type   { return g.info.Types[e] }
+func (g *Generator) FieldIdent(f string) string   { return fieldIdent(f) }
+func (g *Generator) TypeName(e ast.Expr) string {
+	if t, ok := ast.TypeFromExpr(e); ok {
+		return mapType(t)
+	}
+	return "interface{}"
 }
 
 func (g *Generator) genCall(c *ast.CallExpr) string {
 	if value, ok := g.libraryCall(c); ok {
 		return value
 	}
-	switch c.Func {
-	case "make-chan", "make_chan":
-		elemType := "interface{}"
-		if len(c.Args) > 0 {
-			if id, ok := c.Args[0].(*ast.IdentExpr); ok {
-				elemType = mapTypeName(id.Name)
-			}
-		}
-		return fmt.Sprintf("make(chan %s)", elemType)
-
-	case "println":
-		var args []string
-		for _, a := range c.Args {
-			args = append(args, g.genExpr(a))
-		}
-		return fmt.Sprintf("fmt.Println(%s)", strings.Join(args, ", "))
-
-	case "print":
-		var args []string
-		for _, a := range c.Args {
-			args = append(args, g.genExpr(a))
-		}
-		return fmt.Sprintf("fmt.Print(%s)", strings.Join(args, ", "))
-
-	case "concat":
-		var args []string
-		for _, a := range c.Args {
-			args = append(args, g.genExpr(a))
-		}
-		return fmt.Sprintf("_liaf_concat(%s)", strings.Join(args, ", "))
-
-	case "not":
-		if len(c.Args) > 0 {
-			return fmt.Sprintf("!(%s)", g.genExpr(c.Args[0]))
-		}
-		return "false"
-
-	case "str-from-int", "str_from_int":
-		if len(c.Args) > 0 {
-			return fmt.Sprintf("_liaf_str_from_int(int64(%s))", g.genExpr(c.Args[0]))
-		}
-		return `""`
-
-	case "float-from-int", "float_from_int":
-		if len(c.Args) > 0 {
-			return fmt.Sprintf("_liaf_float_from_int(int64(%s))", g.genExpr(c.Args[0]))
-		}
-		return "0.0"
-
-	case "int-from-str", "int_from_str":
-		if len(c.Args) > 0 {
-			return fmt.Sprintf("_liaf_int_from_str(%s)", g.genExpr(c.Args[0]))
-		}
-		return "0"
-
-	case "sleep-ms", "sleep_ms":
-		if len(c.Args) > 0 {
-			return fmt.Sprintf("_liaf_sleep_ms(int64(%s))", g.genExpr(c.Args[0]))
-		}
-		return ""
-
-	case "serve-site", "serve_site":
-		var args []string
-		for _, a := range c.Args {
-			args = append(args, g.genExpr(a))
-		}
-		return fmt.Sprintf("web.ServeSite(%s)", strings.Join(args, ", "))
-
-	default:
-		var args []string
-		for _, a := range c.Args {
-			args = append(args, g.genExpr(a))
-		}
-		return fmt.Sprintf("%s(%s)", sanitizeIdent(c.Func), strings.Join(args, ", "))
+	var args []string
+	for _, a := range c.Args {
+		args = append(args, g.genExpr(a))
 	}
+	return fmt.Sprintf("%s(%s)", sanitizeIdent(c.Func), strings.Join(args, ", "))
 }
 
 func (g *Generator) genBinaryOp(b *ast.BinaryOpExpr) string {
 	left := g.genExpr(b.Left)
 	right := g.genExpr(b.Right)
 
+	isFloat := false
+	if t := g.TypeOf(b.Left); t != nil && t.String() == "float" {
+		isFloat = true
+	} else if t := g.TypeOf(b.Right); t != nil && t.String() == "float" {
+		isFloat = true
+	}
+
 	switch b.Op {
 	case "add":
-		return fmt.Sprintf("(%s + %s)", left, right)
+		if isFloat {
+			return fmt.Sprintf("(%s + %s)", left, right)
+		}
+		return fmt.Sprintf("rt.AddInt(%s, %s)", left, right)
 	case "sub":
-		return fmt.Sprintf("(%s - %s)", left, right)
+		if isFloat {
+			return fmt.Sprintf("(%s - %s)", left, right)
+		}
+		return fmt.Sprintf("rt.SubInt(%s, %s)", left, right)
 	case "mul":
-		return fmt.Sprintf("(%s * %s)", left, right)
+		if isFloat {
+			return fmt.Sprintf("(%s * %s)", left, right)
+		}
+		return fmt.Sprintf("rt.MulInt(%s, %s)", left, right)
 	case "div":
-		return fmt.Sprintf("(%s / %s)", left, right)
+		if isFloat {
+			return fmt.Sprintf("(%s / %s)", left, right)
+		}
+		return fmt.Sprintf("rt.DivInt(%s, %s)", left, right)
 	case "eq":
 		return fmt.Sprintf("(%s == %s)", left, right)
 	case "neq":
@@ -625,6 +682,7 @@ var opaqueGoTypes = map[string]string{
 	"Response":     "web.Response",
 	"DBConnection": "*rt.DBConn",
 	"WSConn":       "*web.WSConn",
+	"HttpReply":    "*rt.HttpReply",
 }
 
 func mapType(t ast.Type) string {
@@ -658,6 +716,11 @@ func mapType(t ast.Type) string {
 			return "map[string]interface{}"
 		case "result":
 			return fmt.Sprintf("rt.Result[%s,%s]", mapType(ty.Args[0]), mapType(ty.Args[1]))
+		case "option":
+			if len(ty.Args) > 0 {
+				return fmt.Sprintf("rt.Option[%s]", mapType(ty.Args[0]))
+			}
+			return "rt.Option[interface{}]"
 		default:
 			return sanitizeIdent(ty.Constructor)
 		}

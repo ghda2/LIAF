@@ -6,8 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"liaf/pkg/checker"
-	"liaf/pkg/lexer"
-	"liaf/pkg/parser"
+	"liaf/pkg/loader"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -94,17 +93,21 @@ func parseConformanceCase(path string) (conformanceCase, error) {
 
 // runConformanceCase devolve nil quando o caso se comporta como esperado.
 func runConformanceCase(t *testing.T, root string, c conformanceCase) error {
-	p := parser.New(lexer.New(c.source), c.path)
-	mod := p.ParseModule()
-	if len(p.Diagnostics) > 0 {
-		d := p.Diagnostics[0]
-		return fmt.Errorf("parse: [%s] %d:%d %s", d.Code, d.Line, d.Col, d.Message)
+	// Pelo loader, como o liafc: um caso pode importar a biblioteca padrao.
+	dir := t.TempDir()
+	casePath := filepath.Join(dir, "case.liaf")
+	if err := os.WriteFile(casePath, []byte(c.source), 0600); err != nil {
+		return err
+	}
+	mod, diags := loader.Load(casePath)
+	if len(diags) > 0 {
+		d := diags[0]
+		return fmt.Errorf("load: [%s] %d:%d %s", d.Code, d.Line, d.Col, d.Message)
 	}
 	if _, diags := checker.Check(mod, c.path); len(diags) > 0 {
 		return fmt.Errorf("check: %s", diags[0].String())
 	}
 
-	dir := t.TempDir()
 	src := filepath.Join(dir, "main.go")
 	if err := os.WriteFile(src, []byte(New(mod).Generate()), 0600); err != nil {
 		return err

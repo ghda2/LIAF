@@ -1,0 +1,9 @@
+(module math
+  (fn dobrar (params (n int)) (returns int) (effects)
+    (body
+      (return (add n n))))
+
+  (fn triplicar (params (n int)) (returns int) (effects)
+    (body
+      (return (mul n 3))))
+)

@@ -1,5 +1,5 @@
 ;; issue: #024
-;; status: pending
+;; status: done
 ;; out: 1
 ;; out: 3
 ;; out: true

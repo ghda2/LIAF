@@ -1,5 +1,5 @@
 ;; issue: #023
-;; status: pending
+;; status: done
 ;; out: true
 ;; out: false
 (println (lt "abacate" "banana"))

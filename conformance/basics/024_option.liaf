@@ -1,5 +1,5 @@
 ;; issue: #024
-;; status: pending
+;; status: done
 ;; out: 1
 ;; out: vazio
 (let a (option int) (some 1))

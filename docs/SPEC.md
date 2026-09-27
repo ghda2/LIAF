@@ -255,7 +255,11 @@ Exemplo canônico:
       (do (call println (call sum 20 22))))))
 ```
 
-Chamadas sempre usam o nó `call`. Assim, `(add a b)` é inequivocamente um operador do núcleo, enquanto `(call add a b)` seria uma chamada a uma função chamada `add`, caso esse identificador não seja reservado.
+Operadores do núcleo usam sintaxe prefixada. `add`, `mul`, `and` e `or` são variádicos (mínimo 2 argumentos, associatividade à esquerda): `(add 1 2 3)`, `(mul 2 3 4)`, `(and true true false)`. `sub` e `div` são estritamente binários.
+
+Funções matemáticas do núcleo: `(mod a b)`, `(neg x)`, `(abs x)`, `(min a b)`, `(max a b)`, `(pow a b)`, `(sqrt x)`, `(floor x)`, `(ceil x)`, `(round x)`.
+
+Literais numéricos suportam base 10, hexadecimal (`0xff`) e notação científica (`1e3`, `2.5e-3` como float).
 
 ---
 
@@ -286,8 +290,14 @@ Tipos compostos usam a mesma estrutura da linguagem:
 Não existe coerção implícita. Conversões devem ser expressas por funções do núcleo:
 
 ```liaf
-(call str-from-int count)
-(call float-from-int count)
+(str-from-int count)
+(float-from-int count)
+(int-from-float f)
+(str-from-float f)
+(float-from-str "2.5")    ;; retorna (result float str)
+(str-from-bool flag)
+(bool-from-str "true")     ;; retorna (result bool str)
+(int-from-str "123")       ;; retorna (result int str)
 ```
 
 ### 6.3 Funções
@@ -806,14 +816,14 @@ O bloco `(on-err ...)` é opcional, aparece no máximo uma vez e vem imediatamen
 (route MÉTODO "/caminho" (params ...) (returns T) (effects ...) [(on-err var ...)] (body ...))
 ```
 
-`MÉTODO` é `GET`, `POST`, `PUT` ou `DELETE`. Rotas se registram sozinhas na inicialização do binário; não é preciso chamar `http-get` e afins.
+`MÉTODO` é `GET`, `POST`, `PUT`, `DELETE` ou `OPTIONS` (este último para o preflight de CORS; ver §21). Rotas se registram sozinhas na inicialização do binário; não é preciso chamar `http-get` e afins.
 
 Regras de parâmetro:
 
 - Cada `{nome}` no caminho precisa de uma entrada de mesmo nome em `(params ...)`, do tipo `int` ou `str`. Violações emitem `E_ROUTE_PARAM`.
 - Um parâmetro de path chega já convertido, extraído da posição que ocupa no padrão — `/users/{id}/tasks` lê o segundo segmento, não o último.
 - Um parâmetro de tipo struct recebe o corpo da requisição já desserializado. Corpo JSON inválido produz `400` antes de o corpo da rota executar.
-- Um parâmetro de tipo `Request` recebe a requisição bruta, como na v0.2.
+- Um parâmetro de tipo `Request` recebe a requisição bruta, como na v0.2. Headers e query string são lidos dela com `request-header` e `request-query` (§21).
 
 Se `(returns Response)`, a resposta da rota é usada como está. Se `(returns void)`, a resposta é `200`. Para qualquer outro tipo, o valor é serializado em JSON com status `201` em `POST` e `200` nos demais métodos.
 
@@ -869,9 +879,11 @@ Os dois protocolos são implementados sobre TCP dentro do próprio compilador: o
 (redis-set conn chave valor ttl)         -> (result void str)
 ```
 
-Drivers: `"postgres"`, `"mysql"` e `"redis"`. O nome do driver é um literal, conferido em tempo de compilação — `"postgresql"` e `"pg"` são `E_UNKNOWN_DRIVER`.
+Drivers: `"postgres"`, `"mysql"`, `"redis"` e `"sqlite"`. O nome do driver é um literal, conferido em tempo de compilação — `"postgresql"` e `"pg"` são `E_UNKNOWN_DRIVER`.
 
-DSN na forma URL (`postgres://usuario:senha@host:5432/banco?sslmode=require`). O PostgreSQL também aceita a forma de palavras-chave (`host=... user=... dbname=...`). O parâmetro `pool_max=N` limita as conexões simultâneas do pool; o padrão é 16.
+DSN na forma URL (`postgres://usuario:senha@host:5432/banco?sslmode=require`). O PostgreSQL também aceita a forma de palavras-chave (`host=... user=... dbname=...`). O parâmetro `pool_max=N` limita as conexões simultâneas do pool; o padrão é 16. No SQLite, o DSN é o caminho do arquivo; o runtime liga `busy_timeout=5000`, `journal_mode=WAL` e `synchronous=NORMAL` em toda conexão, a menos que o DSN defina a mesma PRAGMA (`app.db?_pragma=journal_mode(DELETE)`).
+
+**Pool compartilhado.** Chamadas de `db-connect` com o mesmo driver e o mesmo DSN dividem um único pool, e cada uma devolve um handle próprio. Como a LIAF não tem variável global, o jeito natural de escrever uma rota é chamar `db-connect` dentro dela; o compartilhamento faz isso custar uma busca em mapa, e não uma conexão nova por requisição. `db-close` fecha só o handle recebido e é idempotente: outros handlers que usam o mesmo pool continuam funcionando, e o pool só fecha suas conexões quando o último handle é fechado. Não chamar `db-close` mantém o pool aberto até o fim do processo, o que é o esperado num servidor.
 
 `db-exec` devolve o número de linhas afetadas. `redis-get` trata chave ausente como erro: `(result str str)` não tem um terceiro caso para representar ausência.
 
@@ -918,6 +930,7 @@ Um `return` dentro do bloco conta como retorno da função: ao contrário de um 
 Regras de parâmetro (`E_WS_PARAM` quando violadas):
 
 - Exatamente um parâmetro do tipo `WSConn`, que recebe a conexão aberta.
+- No máximo um parâmetro do tipo `Request`, que recebe a requisição do handshake e chega aos três blocos. É por ele que se autentica: a API de WebSocket do navegador não permite definir `Authorization`, então o token costuma vir na query string (`/ws/painel?token=...`), lido com `request-query` (§21).
 - Todos os demais parâmetros correspondem a um `{nome}` no caminho e são `int` ou `str`. Não há corpo JSON num handshake de WebSocket, então um parâmetro que não venha do caminho não teria de onde ser preenchido.
 
 `(effects ...)` tem de incluir `net`: manter a conexão aberta já é tráfego de rede. Por isso `net` conta como usado numa `ws-route` mesmo que nenhum builtin `ws-*` seja chamado.
@@ -964,3 +977,199 @@ Limites do transporte: mensagem de até 1 MiB (o mesmo teto do corpo HTTP), ping
 | `E_SQL_PARAM_COUNT` | número de marcadores diferente do número de argumentos, ou `$1` e `?` misturados |
 | `E_UNKNOWN_DRIVER` | driver que não é `postgres`, `mysql` nem `redis`, ou nome não literal |
 | `E_WS_PARAM` | `ws-route` sem exatamente um `WSConn`, ou com parâmetro que não vem do caminho |
+
+---
+
+## 20. Núcleo básico da linguagem (v0.4.1 — issues #019 a #024)
+
+Consolidação da biblioteca padrão e garantias semânticas fundamentais para geração por IA.
+
+### 20.1 Tabela unificada de builtins (#019)
+Todos os built-ins da linguagem são declarados e validados por uma fonte canônica única em `pkg/builtins/table.go`, garantindo paridade estrita entre verificação estática (checker), backend Go e backend nativo C.
+
+### 20.2 Aritmética e funções matemáticas (#020)
+- **Operadores variádicos:** `add`, `sub`, `mul` aceitam 2 ou mais argumentos: `(add 1 2 3 4)` -> `10`.
+- **Operações inteiras e de ponto flutuante:**
+  - `(mod a b)`: resto inteiro.
+  - `(neg x)`: negação numérica unária (`-x`).
+  - `(abs x)`: valor absoluto de inteiros e floats.
+  - `(min a b ...)` e `(max a b ...)`: mínimo e máximo variádico para números.
+  - `(pow base exp)`: exponenciação (`float`).
+  - `(sqrt x)`: raiz quadrada (`float`).
+  - `(floor x)`, `(ceil x)`, `(round x)`: arredondamento de `float` retornando `int`.
+- **Literais numéricos estendidos:** Suporte léxico a hexadecimais (`0x1F`, `0XFF`) e notação científica (`1e3`, `2.5e-2`).
+
+### 20.3 Conversões de tipo explícitas (#021)
+- `(int-from-float f)`: trunca `float` para `int`.
+- `(str-from-float f)`: formata `float` como `str`.
+- `(float-from-str s)`: analisa string para ponto flutuante, retornando `(result float str)`.
+- `(str-from-bool b)`: converte `bool` para `"true"` ou `"false"`.
+- `(bool-from-str s)`: analisa `"true"` ou `"false"` retornando `(result bool str)`.
+
+### 20.4 Semântica numérica segura (#022)
+- **Divisão inteira segura:** `(div a b)` e `(mod a b)` com operandos inteiros retornam `(result int str)`. Se o divisor for zero, retornam `(err "div: divisao por zero")` ou `(err "mod: divisao por zero")`.
+- **Proteção estrita contra overflow:** Operações aritméticas em `int` (`add`, `sub`, `mul`, `neg`, `abs`) que resultarem em estouro de representação (overflow ou underflow em 64 bits) abortam imediatamente o processo com código de saída `1`, impedindo corrupção silenciosa de memória ou cálculos financeiros errôneos.
+
+### 20.5 Strings e UTF-8 nativo (#023)
+- **Unidade de contagem e indexação em caracteres Unicode (runes):**
+  - `(str-len s)`: quantidade de caracteres Unicode (runes).
+  - `(str-byte-len s)`: tamanho bruto em bytes UTF-8.
+  - `(str-get s i)`: retorna o caractere na posição `i` como string de 1 rune.
+  - `(str-slice s inicio fim)`: subfatia baseada em contagem de runes.
+  - `(str-index s substr)`: primeiro índice por runes onde `substr` ocorre (`-1` se ausente).
+- **Operações e busca:**
+  - `(str-contains s substr)`: booleano de presença.
+  - `(str-starts-with s prefix)` e `(str-ends-with s suffix)`.
+  - `(str-split s sep)`: fatia string em `(list str)`.
+  - `(str-join lista sep)`: agrupa `(list str)` com delimitador.
+  - `(str-trim s)`: remove espaços em branco das extremidades.
+  - `(str-upper s)` e `(str-lower s)`: transformação de caixa.
+  - `(str-replace s antigo novo)`: substitui todas as ocorrências.
+- **Comparações de string:** Operadores `lt`, `gt`, `lte`, `gte` comparam strings em ordem lexicográfica.
+
+### 20.6 Coleções completas e tipo Option (#024)
+- **Literais de lista:** `(list 1 2 3)` infere `(list int)`. Lista vazia tipada com `(list-new T)`.
+- **Manipulação de listas:**
+  - `(list-remove lista indice)`: remove elemento pelo índice.
+  - `(list-pop lista)`: desempilha o último elemento retornando `(result T str)`.
+  - `(list-sort lista)`: ordena elementos in-place (para tipos ordenáveis).
+  - `(list-contains lista elemento)`: checa pertinência booleana.
+- **Manipulação de mapas:**
+  - `(map-delete mapa chave)`: remove chave.
+  - `(map-keys mapa)`: retorna `(list K)` com chaves ordenadas deterministicamente.
+- **Tipo `(option T)`:**
+  - Construtor com valor: `(some valor)`.
+  - Construtor sem valor: `(none Tipo)`.
+  - Desconstrução exaustiva por casamento de padrão:
+    ```
+    (match opt
+      (some v (println v))
+      (none (println "vazio")))
+    ```
+
+## 21. Headers e query string
+
+Três builtins sem efeito, para autenticação, filtros e controle da resposta:
+
+```
+(request-header req "Authorization")          -> (result str str)
+(request-query req "status")                  -> (result str str)
+(response-set-header res "Cache-Control" "no-store") -> Response
+```
+
+- `request-header` não diferencia maiúsculas no nome, como o HTTP. Com o header repetido, devolve o primeiro valor.
+- `request-query` lê a query string (`/api/pedidos?status=aberto`), que não faz parte de `request-path`. O nome diferencia maiúsculas, como a URL.
+- As duas seguem a convenção de `env-get` e `map-get`: ausência é `(err ...)`. Um header presente e vazio devolve `(ok "")`; para quem autentica, "vazio" e "ausente" são casos diferentes.
+- `response-set-header` devolve uma **nova** `Response`; a original não muda, então a mesma resposta base pode ser usada em vários ramos. Chamadas se aninham: `(response-set-header (response-set-header r "A" "1") "B" "2")`.
+- Repetir um header substitui o valor anterior, exceto `Set-Cookie`, que acumula (cada cookie é um header). Definir `Content-Type` troca o `application/json` de `json-response`.
+- Nome fora do token da RFC 9110 (espaço, dois-pontos, vazio) ou valor com quebra de linha ou NUL faz a rota responder `500`, sem o corpo e sem os outros headers. Isso impede injeção de header com um valor vindo do usuário.
+
+Exemplo — autenticação por Bearer, com a rota recebendo o `Request`:
+
+```liaf
+(fn autenticar (params (req Request)) (returns (result str str)) (effects)
+  (body
+    (let header str (try (request-header req "Authorization")))
+    (if (not (str-starts-with header "Bearer "))
+      (then (return (err "esperado Authorization: Bearer <token>"))))
+    (return (ok (try (str-slice header 7 (str-len header)))))))
+```
+
+Programa completo, com isolamento por restaurante, filtro por query, preflight de CORS e `Set-Cookie`: `examples/pedidos_api.liaf`.
+
+Numa `(ws-route ...)`, um parâmetro `Request` recebe o handshake, com os mesmos headers e query string (§19.7). Recusar a conexão é fechá-la em `on-open` com `(ws-close conn 4401 "motivo")`, antes de `ws-join`; `examples/pedidos_api.liaf` faz isso no painel de cada restaurante.
+
+## 22. Criptografia
+
+Primitivas para senha, token de sessão, assinatura de webhook e JWT. Nenhuma aceita parâmetro de segurança vindo do programa (tamanho de token, custo do hash, algoritmo): o caminho fácil é também o seguro.
+
+```
+(sha256 texto "hex")                   -> str
+(hmac-sha256 chave texto "base64url")  -> str
+(secure-eq a b)                        -> bool
+(base64url-encode texto)               -> str
+(base64url-decode texto)               -> (result str str)
+(random-token)                         -> str        ;; efeito rand
+(password-hash senha)                  -> str        ;; efeito rand
+(password-verify senha hash)           -> bool
+```
+
+- A codificação de `sha256` e `hmac-sha256` é um literal, `"hex"` ou `"base64url"`, conferido na compilação (`E_UNKNOWN_ENCODING`), como o driver de `db-connect`. Webhooks costumam assinar em hex; JWT usa base64url.
+- **Compare assinaturas com `secure-eq`, nunca com `eq`/`str-eq`.** A comparação comum para no primeiro caractere diferente, e o tempo de resposta revela quanto da assinatura já está certo.
+- `base64url` usa o alfabeto de URL, sem `=`; o decode aceita a entrada com ou sem padding. O resultado do decode precisa ser texto UTF-8, porque a linguagem ainda não tem tipo de bytes.
+- `random-token` sorteia 32 bytes do gerador criptográfico e devolve 43 caracteres base64url: serve como token de sessão, de convite ou de recuperação de senha.
+- `password-hash` usa argon2id com os parâmetros da OWASP (19 MiB, 2 passadas) e sal aleatório, no formato PHC: `$argon2id$v=19$m=19456,t=2,p=1$<sal>$<hash>`. Como os parâmetros ficam no próprio texto, um padrão mais forte no futuro não invalida senhas já gravadas.
+- `password-verify` devolve `false` tanto para senha errada quanto para hash malformado ou com parâmetros absurdos.
+- Os hashes de senha simultâneos são limitados ao número de CPUs: uma rajada de logins espera na fila em vez de esgotar a memória.
+
+Exemplo — assinatura HS256 de um JWT:
+
+```liaf
+(let cabecalho str (base64url-encode "{\"alg\":\"HS256\",\"typ\":\"JWT\"}"))
+(let corpo str (base64url-encode payload-json))
+(let assinatura str (hmac-sha256 segredo (concat cabecalho "." corpo) "base64url"))
+```
+
+Os vetores conhecidos (SHA-256 da FIPS 180-2, HMAC da RFC 4231 e o JWT de exemplo do jwt.io) estão em `conformance/basics/027_crypto_*.liaf`.
+
+## 23. Módulos e biblioteca padrão
+
+`(import "caminho")` traz as declarações de outro arquivo para o módulo, como se estivessem escritas nele. O loader resolve os imports antes do checker, detecta ciclos (`E_CIRCULAR_IMPORT`) e carrega uma única vez um arquivo importado por dois caminhos.
+
+- `"./util.liaf"` ou `"./util"`: arquivo relativo a quem importa. Um diretório importa todos os `.liaf` dele, em ordem alfabética.
+- `"std/<nome>"`: módulo da **biblioteca padrão**, embutido no `liafc`. Não lê o disco nem a rede, e a versão é sempre a do compilador. Uma pasta local chamada `std` se importa com `"./std/..."`.
+- Um módulo da std só importa outros da std (`E_STD_RELATIVE_IMPORT`).
+- Módulo inexistente é `E_IMPORT_NOT_FOUND`, com a lista dos disponíveis na mensagem.
+
+Módulos disponíveis:
+
+| Módulo | Oferece |
+|---|---|
+| `std/auth` | `(auth-bearer-token req) -> (result str str)`: o token de `Authorization: Bearer ...`; erro se o header faltar, usar outro esquema ou vier vazio |
+| `std/jwt` | `(jwt-sign segredo payload-json) -> str` e `(jwt-verify segredo token) -> (result str str)`, com efeito `clock`. Só HS256. O verify confere a assinatura antes de interpretar qualquer parte, recusa `alg` diferente de HS256 (inclusive `none`), exige o claim `exp` e recusa token vencido; devolve o payload JSON para o programa decodificar no próprio struct |
+| `std/cors` | `(cors-origin req permitidas) -> (result str str)`: a origem, se estiver na lista; `(cors-headers res origem) -> Response`: `Access-Control-Allow-Origin` + `Vary: Origin`; `(cors-preflight origem metodos cabecalhos) -> Response`: 204 para o `OPTIONS`. Nunca usa `*` |
+
+Exemplo — sessão com JWT:
+
+```liaf
+(import "std/jwt")
+(struct Sessao (fields (sub str) (exp int)))
+
+;; login
+(let expira int (add (try (div (now-ms) 1000)) 3600))
+(let token str (jwt-sign segredo (try (json-encode (new Sessao usuario expira)))))
+
+;; em cada requisição
+(let sessao Sessao (try (json-decode (try (jwt-verify segredo token)) Sessao)))
+```
+
+Nomes de campo aceitam palavras reservadas (`sub`, `return`, `if`...), exceto `true` e `false`: o nome do campo é só um rótulo e a chave no JSON, e é assim que os claims registrados do JWT (`sub`, `exp`) se decodificam com os nomes originais. `(field sessao sub)` lê o campo; `(sub a b)` continua sendo subtração.
+
+Como a linguagem ainda não tem middleware, o preflight de CORS exige uma `(route OPTIONS ...)` por caminho; `examples/pedidos_api.liaf` mostra o padrão.
+
+**Colisões.** Todas as declarações dividem um único espaço de nomes, e funções e structs dividem o mesmo espaço entre si. Um nome declarado em dois arquivos é `E_DUPLICATE_DECL`, com os dois locais na mensagem; se um deles é da std, o nome pertence a ela e o seu precisa mudar. Por isso os módulos da std prefixam os nomes públicos com o próprio nome (`auth-`). Nome repetido no mesmo arquivo continua sendo `E_DUPLICATE_SYMBOL`, do checker.
+
+**Rotas repetidas** são `E_DUPLICATE_ROUTE`, mesmo no mesmo arquivo: método e caminho iguais, sem diferenciar maiúsculas no método. Uma `ws-route` ocupa o `GET` do seu caminho. Sem essa checagem, o servidor do binário falharia ao subir.
+
+## 24. Cliente HTTP
+
+```
+(http-fetch metodo url cabecalhos corpo)  -> (result HttpReply str)   ;; efeito net
+(reply-status r)                          -> int
+(reply-body r)                            -> str
+(reply-header r "Nome")                   -> (result str str)
+```
+
+`http-get`, `http-post` e afins já são a forma v0.2 de registrar rotas; por isso o cliente se chama `http-fetch`. `HttpReply` é um tipo opaco, como `Request`.
+
+- **Como o `fetch` do JavaScript:** `(err ...)` só quando não houve resposta — DNS, conexão, TLS, timeout, URL inválida. Um `404` ou `422` é resposta e chega como `(ok ...)`; o programa confere `reply-status`, e muitas APIs mandam o motivo do erro no corpo.
+- `metodo` é `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD` ou `OPTIONS`. Um literal fora da lista é `E_UNKNOWN_METHOD` na compilação; um método vindo de variável é conferido na execução.
+- `cabecalhos` é uma lista de `"Nome: valor"`, como no `curl -H`: `(list (concat "Authorization: Bearer " token))`; `(list)` para nenhum. Nome inválido ou quebra de linha no valor é erro, o que impede injeção de header.
+- Corpo não vazio sem `Content-Type` declarado vai como `application/json`.
+- A URL precisa ser `http://` ou `https://` com host. Redirecionamentos são seguidos (até 10); o `Authorization` não é repassado para outro domínio.
+- Timeout de 30 segundos para a chamada inteira. Corpo de resposta limitado a 10 MiB e obrigatoriamente texto UTF-8 (a linguagem ainda não tem tipo de bytes); passar disso é erro, não truncamento.
+- As mensagens de erro trazem método e host, nunca a URL inteira: tokens na query string não vão parar em log.
+
+Exemplo completo, com token, chave de idempotência e tratamento do erro do provedor: `examples/cobranca_pix.liaf`.
+
+**Cuidado:** chamar uma URL que veio do usuário deixa ele apontar o servidor para endereços internos (SSRF). Monte a URL a partir de uma base fixa.

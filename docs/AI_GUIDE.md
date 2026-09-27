@@ -1,11 +1,75 @@
-# Guia para agentes — LIAF v0.4
+# Guia para agentes — LIAF v0.5
 
 Use S-expressions. As tags `[fn ... /fn ...]` pertencem à v0.1 e não são aceitas pelo compilador atual.
 
 ```liaf
 (module exemplo
-  (fn main (params) (returns void) (effects io)
-    (body (do (println "Olá")))))
+  (fn main () void (effects io)
+    (println "Olá")))
+```
+
+## O que muda na v0.5 (Sintaxe Compacta, Expressões e Redução de Tokens)
+
+A v0.5 foi projetada primariamente para **modelos de linguagem (LLMs)**: reduz em até 35% o consumo de tokens BPE, elimina palavras-chave gramaticais redundantes e introduz combinadores funcionais para evitar mutabilidade imperativa com `set`.
+
+**1. `struct` compacta sem a tag `fields`.**
+```liaf
+;; Forma canônica v0.5
+(struct User (id int) (name str) (email str))
+
+;; Forma v0.4 (ainda aceita para retrocompatibilidade)
+(struct User (fields (id int) (name str) (email str)))
+```
+
+**2. `fn` e `route` compactas sem `params`, `returns` e `body`.**
+A assinatura segue a ordem fixa canônica: `[nome] [params] [retorno] [efeitos] [expressões...]`.
+```liaf
+;; Função sem parâmetros
+(fn get-db () (result DBConnection str) (effects db)
+  (let db DBConnection (try (db-connect "sqlite" "chat.db")))
+  (ok db))
+
+;; Função com parâmetros tipados
+(fn somar ((a int) (b int)) int
+  (add a b))
+
+;; Rota HTTP declarativa compacta
+(route GET "/api/users/{id}" ((id int)) Response (effects db)
+  (let db DBConnection (try (get-db)))
+  (let user User (try (db-query db "SELECT id, name, email FROM users WHERE id = ?" User id)))
+  (json-response 200 (try (json-encode user))))
+```
+
+**3. Retorno implícito.**
+Em funções e rotas com retorno diferente de `void`, a **última expressão do corpo é o retorno implícito** (como em Rust e Clojure). Não use `(return ...)` no final de um bloco quando uma expressão direta for suficiente.
+
+**4. `match` como expressão de valor (Elimina `set` e mutabilidade).**
+`match` pode ser avaliado diretamente como valor atribuível a um `let`, sem precisar declarar variáveis mutáveis com `(let x str "")` e alterá-las com `set`. Além disso, o caractere `_` é aceito como identificador wildcard para ignorar erros ou valores não utilizados:
+```liaf
+(let token str
+  (match (request-header req "X-Admin-Token")
+    (ok t t)
+    (err _
+      (match (request-header req "Authorization")
+        (ok auth auth)
+        (err _ "")))))
+```
+
+**5. Combinador `unwrap-or`.**
+Desempacota `(result T E)` ou `(option T)` diretamente com valor de fallback em 1 linha, eliminando blocos inteiros de `match` com mutação:
+```liaf
+;; Result com valor padrão
+(let nome str (unwrap-or (request-query req "name") "Anônimo"))
+
+;; Option com valor padrão
+(let porta int (unwrap-or opt-port 8080))
+```
+
+**6. Interpolação de Strings (`fmt`).**
+Substitui pirâmides aninhadas de `(concat ...)` por interpolação limpa com `{}`. Use `{{` e `}}` para emitir chaves literais:
+```liaf
+(println (fmt "Usuário {} ({}) conectado na porta {}" nome estado porta))
+(println (fmt "{{\"online\":{}}}" count))
 ```
 
 ## O que muda na v0.3
@@ -98,6 +162,7 @@ Os três blocos devolvem `void`, então `try` dentro deles precisa de `(on-err .
 - **`fs-write-file`, `fs-rename`, `fs-write-atomic` e `fs-remove` retornam `(result void str)`.** O sucesso não carrega valor: `ok` já significa que a operação terminou. Não teste o conteúdo.
 - **`json-encode` e `json-decode` são puras.** Não declare `io` por causa delas — serializam em memória. `json-decode` aceita tipos compostos: `(json-decode texto (list Task))`.
 - **`(list T)` serializa como array JSON nativo** `[...]`. Devolva a lista direto; não monte colchetes com `concat`.
+- **Campos com nomes de palavras reservadas:** Nomes de campos de struct podem coincidir com operadores ou palavras reservadas (ex: `sub`, `return`, `add`), sendo acessados normalmente com `(field s sub)` (essencial para decodificar claims padrão de JWT como `sub`).
 
 ## Ciclo de trabalho
 
@@ -107,11 +172,68 @@ Os três blocos devolvem `void`, então `try` dentro deles precisa de `(on-err .
 4. Rode testes de comportamento. Passar no checker não prova que o algoritmo está correto.
 5. `liafc build arquivo.liaf -o programa`. Use `--embed` para assets imutáveis dentro do executável.
 
-Exemplos executáveis: `examples/task_api_v03.liaf` (API completa em v0.3), `chat_ws.liaf` (WebSocket com salas e frontend em `public/chat.html`), `db_postgres.liaf` e `db_redis.liaf` (banco de dados), `loops.liaf`, `collections.liaf`, `fs_json.liaf`, `result.liaf` e `api_server.liaf`.
+Exemplos executáveis: `examples/tw_chat/chat.liaf` (Chat em tempo real LIAF v0.5 com WebSocket, SQLite, REST e moderação Argon2), `examples/task_api_v03.liaf` (API completa), `chat_ws.liaf`, `db_postgres.liaf` e `db_redis.liaf` (banco de dados), `loops.liaf`, `collections.liaf`, `fs_json.liaf`, `result.liaf` e `api_server.liaf`.
+
+## Aritmética e Funções Numéricas (#020, #022)
+
+- `add`, `mul`, `and` e `or` são variádicos (mínimo 2 operandos): `(add 1 2 3)`, `(mul 2 3 4)`, `(and true true false)`, `(or false false true)`. `sub` e `div` permanecem estritamente binários.
+- Funções matemáticas básicas: `(mod a b)`, `(neg x)`, `(abs x)`, `(min a b)`, `(max a b)`, `(pow a b)`, `(sqrt x)`, `(floor x)`, `(ceil x)`, `(round x)`.
+- Literais: notação científica (`1e3`, `2.5e-3`) é avaliada como `float`; hexadecimal (`0xff`) como `int`.
+- Conversões de tipo (#021): `int-from-float`, `str-from-float`, `float-from-str`, `str-from-bool`, `bool-from-str`, `str-from-int`, `float-from-int`, `int-from-str`. Conversões falíveis retornam `(result T str)`.
+- Semântica numérica segura (#022):
+  - `div` e `mod` com operandos `int` retornam `(result int str)`. Se o divisor for zero, produzem `(err "div: divisao por zero")` ou `(err "mod: divisao por zero")`. Trate com `match` ou `try`.
+  - `div` de `float` segue o padrão IEEE 754 e retorna `float` (`+Inf`, `-Inf`, `NaN`).
+  - Operações aritméticas inteiras (`add`, `sub`, `mul`, `neg`, `abs`) abortam imediatamente com código de saída `1` caso ocorra overflow/underflow, impedindo corrupção silenciosa de dados.
+
+## Strings e UTF-8 (#023)
+
+- `str-len(s)` retorna a quantidade de caracteres Unicode (runes UTF-8). Ex: `(str-len "ação")` retorna `4`.
+- `str-byte-len(s)` retorna o tamanho em bytes para protocolos e buffers binários.
+- `str-slice(s, start, end)` fatia a string em índices de runes e retorna `(result str str)`.
+- `str-get(s, i)` retorna o caractere na posição `i` (índice de rune) como `(result str str)`.
+- Busca e verificação: `(str-contains s sub)`, `(str-starts-with s prefix)`, `(str-ends-with s suffix)` retornam `bool`. `(str-index s sub)` retorna o índice da rune ou `-1`.
+- Manipulação: `(str-trim s)`, `(str-upper s)`, `(str-lower s)` (com suporte a acentos/UTF-8), `(str-replace s old new)`.
+- Listas: `(str-split s sep)` retorna `(list str)`; `(str-join l sep)` junta uma `(list str)` em `str`.
+- Comparações: `lt`, `gt`, `lte`, `gte` aceitam strings e realizam comparação lexicográfica.
+
+## Headers e query string
+
+Declare `((req Request))` na rota para ler a requisição:
+
+- `(request-header req "Authorization")` e `(request-query req "status")` retornam `(result str str)`: use `(unwrap-or ... padrao)` para extrair diretamente com valor padrão em 1 linha, ou trate com `try`/`match`.
+- `(response-set-header res "Nome" "valor")` retorna uma nova `Response`. Não existe `set-header` que altere a resposta no lugar.
+- `Set-Cookie` repetido acumula; os demais headers substituem.
+- Numa `ws-route`, declare `((req Request) (conn WSConn))` para ler o handshake. O navegador não manda `Authorization` em WebSocket: leia o token com `(unwrap-or (request-query req "token") "")` em `on-open` e recuse com `(ws-close conn 4401 "motivo")`.
+
+Exemplo completo: `examples/pedidos_api.liaf` (Bearer, filtro por query, CORS, cookie, painel WebSocket por restaurante).
+
+## Criptografia
+
+- Senha: grave `(password-hash senha)` (efeito `rand`) e confira com `(password-verify senha hash)`. Nunca grave a senha nem um `sha256` dela.
+- Token de sessão: `(random-token)` (efeito `rand`).
+- Assinatura: `(hmac-sha256 chave texto "hex")` ou `"base64url"`; a codificação é literal. Compare com `(secure-eq recebida calculada)`, não com `str-eq`.
+- `(base64url-decode s)` retorna `(result str str)`.
+
+## Módulos e biblioteca padrão
+
+- `(import "std/auth")` usa a biblioteca padrão embutida; `(import "./arquivo.liaf")` usa um arquivo seu.
+- Não declare funções com o prefixo de um módulo da std que você importou (`auth-...`): é `E_DUPLICATE_DECL`.
+- `std/auth`: `(auth-bearer-token req)` retorna o token Bearer como `(result str str)`.
+- `std/jwt`: `(jwt-sign segredo payload-json)` e `(jwt-verify segredo token)` (efeito `clock`). O payload precisa de `exp` em segundos; o verify retorna o payload JSON para `json-decode`.
+- `std/cors`: `(cors-origin req (list "https://site"))`, `(cors-headers res origem)`, `(cors-preflight origem "GET, POST" "Authorization")`. Uma `(route OPTIONS ...)` por caminho.
+
+## Cliente HTTP
+
+- `(http-fetch "POST" url (list "Authorization: Bearer x") corpo)` (efeito `net`) retorna `(result HttpReply str)`.
+- `err` só quando não houve resposta. Confira `(reply-status r)`: um 422 chega como `ok`. Leia `(reply-body r)` e `(reply-header r "Nome")`.
+- Headers são `(list "Nome: valor")`; `(list)` para nenhum. Corpo sem `Content-Type` vai como JSON.
+- `http-get`/`http-post` NÃO são cliente: registram rotas (forma antiga).
 
 ## Web e deploy
 
 Para sites, `serve-site` recebe pasta, domínio, porta e auto-TLS. `serve-hybrid` oferece rotas dinâmicas junto aos arquivos estáticos e retorna um resultado tratável.
+
+Por padrão o servidor escuta em todas as interfaces. `LIAF_HOST=127.0.0.1` restringe ao loopback: use atrás de um proxy reverso (Caddy/Nginx) na mesma máquina e em testes locais. No Windows, escutar só no loopback evita o aviso do firewall. As portas 80/443 do auto-TLS não são afetadas.
 
 Publicação: `liafc publish pagina.md --url https://HOST/_liaf/publish --path blog/pagina.md`. Defina `LIAF_DEPLOY_TOKEN` no cliente e no servidor. Reload também exige POST autenticado. Não coloque credenciais em código ou documentação.
 

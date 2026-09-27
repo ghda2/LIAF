@@ -8,5 +8,5 @@
 (println (add 2 3))
 (println (sub 2 3))
 (println (mul 2 3))
-(println (div 7 2))
-(println (div -7 2))
+(match (div 7 2) (ok v (println v)) (err e (println e)))
+(match (div -7 2) (ok v (println v)) (err e (println e)))

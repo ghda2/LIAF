@@ -131,7 +131,7 @@ func (c *Checker) wsRoute(w *ast.WSRouteDecl) {
 		}
 	}
 
-	connections := 0
+	connections, requests := 0, 0
 	declared := map[string]ast.Type{}
 	for _, p := range w.Params {
 		c.validType(p.Type, false)
@@ -141,11 +141,18 @@ func (c *Checker) wsRoute(w *ast.WSRouteDecl) {
 			connections++
 			continue
 		}
+		// O Request e o do handshake: da acesso a headers e a query string,
+		// que e por onde o navegador consegue mandar um token (a API de
+		// WebSocket do navegador nao deixa definir Authorization).
+		if name(p.Type) == "Request" {
+			requests++
+			continue
+		}
 		if !pathParams[p.Name] {
 			// Nao ha corpo JSON num handshake de WebSocket, entao um
 			// parametro que nao vem do path nao teria de onde ser preenchido.
 			c.error(w, "E_WS_PARAM", fmt.Sprintf(
-				"parameter %s does not match any {name} in the path; a ws-route only takes path parameters and one %s", p.Name, wsConnType))
+				"parameter %s does not match any {name} in the path; a ws-route only takes path parameters, one %s and optionally one Request", p.Name, wsConnType))
 			continue
 		}
 		if n := name(p.Type); n != "int" && n != "str" {
@@ -159,6 +166,9 @@ func (c *Checker) wsRoute(w *ast.WSRouteDecl) {
 	}
 	if connections != 1 {
 		c.error(w, "E_WS_PARAM", fmt.Sprintf("a ws-route requires exactly one parameter of type %s, found %d", wsConnType, connections))
+	}
+	if requests > 1 {
+		c.error(w, "E_WS_PARAM", fmt.Sprintf("a ws-route accepts at most one parameter of type Request, found %d", requests))
 	}
 
 	if w.OnErrVar != "" {

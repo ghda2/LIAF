@@ -1,0 +1,127 @@
+;; API de pedidos multi-restaurante - headers, query string e headers de resposta
+;;
+;; Uso: pedidos_api 8080   (rode de dentro de examples/: exige ./public)
+;;
+;;   curl -H "Authorization: Bearer tok-pizzaria" localhost:8080/api/pedidos?status=aberto
+;;   curl -X POST localhost:8080/api/login -d '{"token":"tok-sushi"}' -i
+;;   curl -X POST -H "Authorization: Bearer tok-sushi" localhost:8080/api/avisos -d 'novo pedido'
+;;   painel: new WebSocket("ws://localhost:8080/ws/painel?token=tok-sushi")
+;;
+;; O token identifica o restaurante (tenant): cada um so enxerga os proprios
+;; pedidos e so recebe os proprios avisos no painel. Os tokens e os pedidos
+;; ficam fixos no codigo para o exemplo nao depender de banco; num sistema
+;; real viriam de uma tabela.
+(module pedidos-api
+  (import "std/auth")
+  (import "std/cors")
+  (struct Pedido (fields (id int) (cliente str) (status str)))
+  (struct ListaPedidos (fields (restaurante str) (filtro str) (pedidos (list Pedido))))
+  (struct LoginInput (fields (token str)))
+
+  (fn restaurante-do-token (params (token str)) (returns (result str str)) (effects)
+    (body
+      (let tokens (map str str) (make-map str str))
+      (map-set tokens "tok-pizzaria" "pizzaria")
+      (map-set tokens "tok-sushi" "sushi")
+      (return (map-get tokens token))))
+
+  ;; Authorization: Bearer <token>  ->  restaurante
+  (fn autenticar (params (req Request)) (returns (result str str)) (effects)
+    (body
+      (let token str (try (auth-bearer-token req)))
+      (return (restaurante-do-token token))))
+
+  (fn pedidos-de (params (restaurante str)) (returns (list Pedido)) (effects)
+    (body
+      (if (str-eq restaurante "pizzaria")
+        (then (return (list (new Pedido 1 "Ana" "aberto") (new Pedido 2 "Bruno" "entregue") (new Pedido 3 "Caio" "aberto")))))
+      (return (list (new Pedido 10 "Duda" "aberto")))))
+
+  (fn origens-permitidas (params) (returns (list str)) (effects)
+    (body (return (list "https://painel.exemplo.com"))))
+
+  ;; Cabecalhos comuns a toda resposta da API. CORS so para origem da lista.
+  (fn com-cabecalhos (params (req Request) (res Response)) (returns Response) (effects)
+    (body
+      (let r Response (response-set-header res "Cache-Control" "no-store"))
+      (match (cors-origin req (origens-permitidas))
+        (ok origem (return (cors-headers r origem)))
+        (err fora (return r)))))
+
+  (fn erro (params (req Request) (status int) (mensagem str)) (returns Response) (effects)
+    (body
+      (return (com-cabecalhos req (json-response status (concat "{\"error\":\"" mensagem "\"}"))))))
+
+  (route GET "/api/pedidos" (params (req Request)) (returns Response) (effects)
+    (on-err mensagem (return (erro req 500 mensagem)))
+    (body
+      (let restaurante str "")
+      (match (autenticar req)
+        (ok r (set restaurante r))
+        (err e (return (response-set-header (erro req 401 e) "WWW-Authenticate" "Bearer"))))
+      (let filtro str "todos")
+      (match (request-query req "status")
+        (ok s (set filtro s))
+        (err ausente (set filtro "todos")))
+      (let escolhidos (list Pedido) (make-list Pedido))
+      (for-each p (pedidos-de restaurante)
+        (if (or (str-eq filtro "todos") (str-eq (field p status) filtro))
+          (then (list-push escolhidos p))))
+      (let corpo str (try (json-encode (new ListaPedidos restaurante filtro escolhidos))))
+      (return (com-cabecalhos req (json-response 200 corpo)))))
+
+  ;; Preflight de CORS: o navegador pergunta antes de mandar o Authorization.
+  (route OPTIONS "/api/pedidos" (params (req Request)) (returns Response) (effects)
+    (body
+      (match (cors-origin req (origens-permitidas))
+        (ok origem (return (cors-preflight origem "GET, OPTIONS" "Authorization")))
+        (err e (return (json-response 403 "{\"error\":\"origem nao permitida\"}"))))))
+
+  (route POST "/api/login" (params (req Request) (input LoginInput)) (returns Response) (effects)
+    (body
+      (match (restaurante-do-token (field input token))
+        (ok r
+          (let cookie str (concat "sessao=" (field input token) "; HttpOnly; Secure; SameSite=Strict; Path=/"))
+          (return (response-set-header (com-cabecalhos req (json-response 200 (concat "{\"restaurante\":\"" r "\"}"))) "Set-Cookie" cookie)))
+        (err e (return (erro req 401 "token invalido"))))))
+
+  ;; Envia um aviso ao painel do restaurante autenticado, e so ao dele.
+  (route POST "/api/avisos" (params (req Request)) (returns Response) (effects net)
+    (on-err mensagem (return (erro req 500 mensagem)))
+    (body
+      (let restaurante str "")
+      (match (autenticar req)
+        (ok r (set restaurante r))
+        (err e (return (erro req 401 e))))
+      (let entregues int (try (ws-broadcast (concat "painel:" restaurante) (request-body req))))
+      (return (com-cabecalhos req (json-response 200 (concat "{\"entregues\":" (str-from-int entregues) "}"))))))
+
+  ;; Painel em tempo real. A API de WebSocket do navegador nao deixa mandar
+  ;; Authorization, entao o token vem na query string do handshake. Token
+  ;; invalido fecha a conexao com 4401 antes de entrar em qualquer topico.
+  (ws-route "/ws/painel" (params (req Request) (conn WSConn)) (effects io net)
+    (on-err motivo (println (concat "painel: " motivo)))
+    (on-open
+      (let token str "")
+      (match (request-query req "token")
+        (ok t (set token t))
+        (err e (set token "")))
+      (match (restaurante-do-token token)
+        (ok r
+          (ws-join conn (concat "painel:" r))
+          (try (ws-send conn (concat "conectado:" r))))
+        (err e (try (ws-close conn 4401 "token invalido")))))
+    (on-message texto
+      (try (ws-send conn "somente leitura"))))
+
+  (fn main (params) (returns void) (effects fs io net)
+    (body
+      (let port str "8080")
+      (match (list-get (args) 0)
+        (ok p (set port p))
+        (err ignored (set port "8080")))
+      (println (concat "API de pedidos na porta " port))
+      (match (serve-hybrid "./public" port)
+        (ok stopped (println "Servidor parado"))
+        (err message (println message)))))
+)

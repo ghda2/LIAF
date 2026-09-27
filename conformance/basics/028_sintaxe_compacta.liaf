@@ -1,0 +1,23 @@
+;; issue: #028
+;; status: done
+;; out: User: 1 Ada
+;; out: Dobro: 42
+;; out: Soma: 15
+
+(module sintaxe_compacta
+  (struct User (id int) (name str))
+
+  (fn double ((x int)) int
+    (mul x 2))
+
+  (fn add3 ((a int) (b int) (c int)) int
+    (add a b c))
+
+  (fn show-user ((u User)) str
+    (fmt "User: {} {}" (field u id) (field u name)))
+
+  (fn main () void (effects io)
+    (let u User (new User 1 "Ada"))
+    (println (show-user u))
+    (println (fmt "Dobro: {}" (double 21)))
+    (println (fmt "Soma: {}" (add3 3 5 7)))))

@@ -40,7 +40,7 @@ func TestCodegenMathExample(t *testing.T) {
 	if !strings.Contains(code, "func sum(a int64, b int64) int64 {") {
 		t.Errorf("assinatura de sum incorreta:\n%s", code)
 	}
-	if !strings.Contains(code, "return (a + b)") {
+	if !strings.Contains(code, "return rt.AddInt(a, b)") {
 		t.Errorf("corpo de sum incorreto:\n%s", code)
 	}
 	if !strings.Contains(code, "fmt.Println(sum(20, 22))") {

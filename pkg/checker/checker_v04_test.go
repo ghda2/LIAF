@@ -279,6 +279,23 @@ func TestCheckV04WSRouteMinimalForm(t *testing.T) {
 	}
 }
 
+// O Request do handshake chega aos tres blocos, e o de on-open e onde se
+// autentica: o navegador so consegue mandar o token pela query string.
+func TestCheckWSRouteAcceptsHandshakeRequest(t *testing.T) {
+	codes := diagCodes(t, wsModule(`
+(ws-route "/ws/pedidos/{loja}" (params (loja str) (req Request) (conn WSConn)) (effects net)
+  (on-err motivo (try (ws-close conn 4401 motivo)))
+  (on-open
+    (let token str (try (request-query req "token")))
+    (ws-join conn (concat loja token)))
+  (on-message text
+    (let origem str (try (request-header req "Origin")))
+    (try (ws-send conn (concat origem text)))))`))
+	if len(codes) > 0 {
+		t.Fatalf("ws-route com Request foi recusada: %v", codes)
+	}
+}
+
 func TestCheckV04WSRouteParamRules(t *testing.T) {
 	for _, tc := range []struct{ name, route string }{
 		{
@@ -302,6 +319,11 @@ func TestCheckV04WSRouteParamRules(t *testing.T) {
 		{
 			name:  "path param composto",
 			route: `(ws-route "/ws/{room}" (params (room (list int)) (conn WSConn)) (effects net) (on-message t (try (ws-send conn t))))`,
+		},
+		{
+			// So existe um handshake por conexao.
+			name:  "dois Request",
+			route: `(ws-route "/ws/x" (params (conn WSConn) (a Request) (b Request)) (effects net) (on-message t (try (ws-send conn t))))`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

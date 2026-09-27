@@ -24,6 +24,7 @@ Recursos: loops, listas e mapas tipados, `Result` com `match` e `try`/`on-err`, 
 - [Guia de agentes](docs/AI_GUIDE.md) — o que um modelo precisa saber para escrever LIAF correta
 - [Especificação da linguagem](docs/SPEC.md) — núcleo v0.2; a seção 18 cobre as adições da v0.3
 - [Arquitetura](docs/ARCHITECTURE.md) — pipeline do compilador e pacotes
+- [Mapa do código](docs/SOURCEMAP.md) — onde cada coisa mora no repositório
 
 Exemplo completo em v0.3: [`examples/task_api_v03.liaf`](examples/task_api_v03.liaf) — API REST com
 rotas declarativas, `try`/`on-err` e escrita atômica de estado.

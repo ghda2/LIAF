@@ -1,4 +1,4 @@
 ;; issue: #021
-;; status: pending
+;; status: done
 ;; out: int-from-str: "12x" nao e um inteiro valido
 (match (int-from-str "12x") (ok v (println v)) (err e (println e)))

@@ -18,7 +18,7 @@ func openSQLite(dsn string) (Conn, error) {
 	if strings.HasPrefix(path, "sqlite://") {
 		path = strings.TrimPrefix(path, "sqlite://")
 	}
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite", withDefaultPragmas(path))
 	if err != nil {
 		return nil, fmt.Errorf("sqlite open failed: %w", err)
 	}
@@ -27,6 +27,39 @@ func openSQLite(dsn string) (Conn, error) {
 		return nil, fmt.Errorf("sqlite ping failed: %w", err)
 	}
 	return &sqliteConn{db: db}, nil
+}
+
+// PRAGMA vale por conexao, e o database/sql pode abrir outras alem da
+// primeira. Passadas no DSN, o driver as reaplica em toda conexao nova; um
+// db.Exec("PRAGMA ...") so configuraria aquela que executou o comando.
+//
+// Sem busy_timeout, duas escritas simultaneas falham na hora com
+// SQLITE_BUSY em vez de esperar a vez. WAL deixa leitores e o escritor
+// trabalharem ao mesmo tempo, e synchronous=NORMAL e o par seguro de WAL.
+var sqliteDefaultPragmas = []struct{ name, value string }{
+	{"busy_timeout", "5000"},
+	{"journal_mode", "WAL"},
+	{"synchronous", "NORMAL"},
+	{"mmap_size", "30000000000"},
+	{"cache_size", "-64000"},
+	{"temp_store", "MEMORY"},
+}
+
+// withDefaultPragmas acrescenta os padroes que o autor nao definiu no DSN.
+func withDefaultPragmas(dsn string) string {
+	lower := strings.ToLower(dsn)
+	sep := "?"
+	if strings.Contains(dsn, "?") {
+		sep = "&"
+	}
+	for _, p := range sqliteDefaultPragmas {
+		if strings.Contains(lower, "_pragma="+p.name) {
+			continue
+		}
+		dsn += sep + "_pragma=" + p.name + "(" + p.value + ")"
+		sep = "&"
+	}
+	return dsn
 }
 
 func (c *sqliteConn) Exec(query string, args []Value) (int64, error) {

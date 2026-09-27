@@ -1,0 +1,11 @@
+;; issue: crypto
+;; status: done
+;; out: YcOnw6NvIOKckw
+;; out: ação ✓
+;; out: base64url-decode: invalid input
+;; out: base64url-decode: decoded data is not UTF-8 text
+(let enc str (base64url-encode "ação ✓"))
+(println enc)
+(match (base64url-decode enc) (ok v (println v)) (err e (println e)))
+(match (base64url-decode "não é base64") (ok v (println v)) (err e (println e)))
+(match (base64url-decode "_w") (ok v (println v)) (err e (println e)))

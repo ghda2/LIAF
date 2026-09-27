@@ -1,0 +1,46 @@
+;; issue: std
+;; status: done
+;; out: ok {"sub":"ana","exp":4102444800}
+;; out: err jwt: invalid signature
+;; out: err jwt: invalid signature
+;; out: err jwt: invalid signature
+;; out: err jwt: token expired
+;; out: err jwt: missing exp claim
+;; out: err jwt: malformed token
+;; out: err jwt: unsupported alg
+(module caso
+  (import "std/jwt")
+
+  (fn mostrar (params (r (result str str))) (returns void) (effects io)
+    (body
+      (match r
+        (ok p (println (concat "ok " p)))
+        (err e (println (concat "err " e))))))
+
+  (fn parte (params (l (list str)) (i int)) (returns str) (effects)
+    (body
+      (match (list-get l i)
+        (ok v (return v))
+        (err e (return "")))))
+
+  (fn main (params) (returns void) (effects io clock)
+    (body
+      (let segredo str "segredo-de-teste")
+      (let valido str (jwt-sign segredo "{\"sub\":\"ana\",\"exp\":4102444800}"))
+      (mostrar (jwt-verify segredo valido))
+      ;; segredo errado
+      (mostrar (jwt-verify "outro-segredo" valido))
+      ;; payload trocado mantendo a assinatura original
+      (let partes (list str) (str-split valido "."))
+      (let forjado str (concat (parte partes 0) "." (base64url-encode "{\"sub\":\"admin\",\"exp\":4102444800}") "." (parte partes 2)))
+      (mostrar (jwt-verify segredo forjado))
+      ;; alg none: sem assinatura
+      (let sem-alg str (concat (base64url-encode "{\"alg\":\"none\",\"typ\":\"JWT\"}") "." (base64url-encode "{\"sub\":\"admin\",\"exp\":4102444800}") "."))
+      (mostrar (jwt-verify segredo sem-alg))
+      (mostrar (jwt-verify segredo (jwt-sign segredo "{\"sub\":\"ana\",\"exp\":1}")))
+      (mostrar (jwt-verify segredo (jwt-sign segredo "{\"sub\":\"ana\"}")))
+      (mostrar (jwt-verify segredo "a.b"))
+      ;; cabecalho com outro alg, assinado com o segredo certo
+      (let h str (base64url-encode "{\"alg\":\"HS512\",\"typ\":\"JWT\"}"))
+      (let c str (base64url-encode "{\"sub\":\"ana\",\"exp\":4102444800}"))
+      (mostrar (jwt-verify segredo (concat h "." c "." (hmac-sha256 segredo (concat h "." c) "base64url")))))))

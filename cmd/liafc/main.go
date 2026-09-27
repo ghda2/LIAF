@@ -13,7 +13,7 @@ import (
 	"liaf/pkg/checker"
 	"liaf/pkg/codegen"
 	"liaf/pkg/diagnostic"
-	"liaf/pkg/lexer"
+	"liaf/pkg/loader"
 	"liaf/pkg/parser"
 )
 
@@ -63,40 +63,20 @@ func printUsage() {
 }
 
 func parseAndCheck(filePath string) (*parser.Parser, []diagnostic.Diagnostic, string) {
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Erro ao ler arquivo %s: %v\n", filePath, err)
-		os.Exit(1)
+	mod, loadErrors := loader.Load(filePath)
+	if len(loadErrors) > 0 || mod == nil {
+		return nil, loadErrors, ""
 	}
 
-	l := lexer.New(string(content))
-	p := parser.New(l, filePath)
-	mod := p.ParseModule()
-
-	var allErrors []diagnostic.Diagnostic
-	for _, diag := range p.Diagnostics {
-		allErrors = append(allErrors, diagnostic.Diagnostic{
-			Code:    diag.Code,
-			File:    diag.File,
-			Line:    diag.Line,
-			Col:     diag.Col,
-			Message: diag.Message,
-		})
-	}
-
-	if mod == nil || len(allErrors) > 0 {
-		return p, allErrors, ""
-	}
 	_, semanticErrors := checker.Check(mod, filePath)
-	allErrors = append(allErrors, semanticErrors...)
-	if len(allErrors) > 0 {
-		return p, allErrors, ""
+	if len(semanticErrors) > 0 {
+		return nil, semanticErrors, ""
 	}
 
 	gen := codegen.New(mod)
 	generatedCode := gen.Generate()
 
-	return p, allErrors, generatedCode
+	return nil, nil, generatedCode
 }
 
 func runCheck(args []string) {

@@ -344,14 +344,8 @@ func (c *WSConn) SendJSON(value any) error {
 	return c.writeFrame(wsOpText, data)
 }
 
-func (c *WSConn) writeFrame(opcode byte, payload []byte) error {
-	c.writeMu.Lock()
-	defer c.writeMu.Unlock()
-	if c.isClosed() {
-		return errors.New("connection is closed")
-	}
-
-	header := []byte{0x80 | opcode} // FIN ligado: nunca fragmentamos na saida
+func makeWSFrame(opcode byte, payload []byte) []byte {
+	header := []byte{0x80 | opcode}
 	size := len(payload)
 	switch {
 	case size < 126:
@@ -361,13 +355,27 @@ func (c *WSConn) writeFrame(opcode byte, payload []byte) error {
 	default:
 		header = binary.BigEndian.AppendUint64(append(header, 127), uint64(size))
 	}
-	// Frames do servidor nunca sao mascarados (RFC 6455, secao 5.1).
+	frame := make([]byte, len(header)+len(payload))
+	copy(frame, header)
+	copy(frame[len(header):], payload)
+	return frame
+}
 
+func (c *WSConn) writeRawFrame(frame []byte) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	if c.isClosed() {
+		return errors.New("connection is closed")
+	}
 	_ = c.conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
-	if _, err := c.conn.Write(append(header, payload...)); err != nil {
+	if _, err := c.conn.Write(frame); err != nil {
 		return err
 	}
 	return nil
+}
+
+func (c *WSConn) writeFrame(opcode byte, payload []byte) error {
+	return c.writeRawFrame(makeWSFrame(opcode, payload))
 }
 
 // CloseWith envia o frame de fechamento e encerra a conexao.
@@ -485,9 +493,15 @@ func (h *wsHub) broadcast(topic, message string) int {
 	}
 	h.mu.RUnlock()
 
+	if len(members) == 0 {
+		return 0
+	}
+
+	frame := makeWSFrame(wsOpText, []byte(message))
+
 	delivered := 0
 	for _, c := range members {
-		if err := c.Send(message); err != nil {
+		if err := c.writeRawFrame(frame); err != nil {
 			// Um envio que falha significa conexao morta; fechar aqui tira
 			// o cliente do topico e acorda o laco de leitura dele.
 			_ = c.Close()

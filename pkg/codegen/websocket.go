@@ -49,6 +49,10 @@ func (g *Generator) genWSRoute(w *ast.WSRouteDecl) {
 			callArgs = append(callArgs, "_liaf_conn")
 			continue
 		}
+		if mapType(p.Type) == "web.Request" {
+			callArgs = append(callArgs, "_liaf_req")
+			continue
+		}
 		if !partsEmitted {
 			partsEmitted = true
 			g.writeIndent()

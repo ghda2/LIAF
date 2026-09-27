@@ -42,6 +42,7 @@ type MatchStmt struct {
 	Value           Expr
 	OKName, ErrName string
 	OK, Err         []Stmt
+	IsOption        bool
 	Line, Col       int
 }
 
@@ -343,6 +344,30 @@ type RecvExpr struct {
 
 func (e *RecvExpr) Pos() (int, int) { return e.Line, e.Col }
 func (e *RecvExpr) exprNode()       {}
+
+// IfExpr representa (if cond (then expr) [(else expr)])
+type IfExpr struct {
+	Condition Expr
+	Then      Expr
+	Else      Expr // pode ser nil se ausente
+	Line      int
+	Col       int
+}
+
+func (e *IfExpr) Pos() (int, int) { return e.Line, e.Col }
+func (e *IfExpr) exprNode()       {}
+
+// MatchExpr representa (match expr (ok/some var expr) (err/none [var] expr))
+type MatchExpr struct {
+	Value           Expr
+	OKName, ErrName string
+	OK, Err         Expr
+	IsOption        bool
+	Line, Col       int
+}
+
+func (e *MatchExpr) Pos() (int, int) { return e.Line, e.Col }
+func (e *MatchExpr) exprNode()       {}
 
 // Tipos
 type PrimitiveType struct {

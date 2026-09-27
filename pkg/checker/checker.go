@@ -4,6 +4,7 @@ package checker
 import (
 	"fmt"
 	"liaf/pkg/ast"
+	"liaf/pkg/builtins"
 	"liaf/pkg/diagnostic"
 	"sort"
 	"strings"
@@ -20,7 +21,8 @@ type Info struct {
 // knownEffects e a lista unica de efeitos declaraveis. `db` entrou com a
 // issue #015: e distinto de `net` porque uma assinatura que diz `db` promete
 // mais do que trafego de rede — promete estado externo compartilhado.
-const knownEffects = "|io|net|fs|clock|spawn|db|"
+// `rand` e `env` entraram com a issue #026 (#026).
+const knownEffects = "|io|net|fs|clock|spawn|db|rand|env|"
 
 func validEffect(e string) bool { return strings.Contains(knownEffects, "|"+e+"|") }
 
@@ -28,7 +30,7 @@ func validEffect(e string) bool { return strings.Contains(knownEffects, "|"+e+"|
 // uma (struct ...) correspondente. Sao opacos de proposito: o programa recebe
 // o valor de um builtin, passa adiante e nunca le campo nenhum.
 var opaqueTypes = map[string]bool{
-	"Request": true, "Response": true, "DBConnection": true, "WSConn": true,
+	"Request": true, "Response": true, "DBConnection": true, "WSConn": true, "HttpReply": true,
 }
 type binding struct {
 	typ     ast.Type
@@ -235,7 +237,7 @@ func (c *Checker) validType(t ast.Type, allowVoid bool) {
 			c.error(t, "E_UNKNOWN_TYPE", v.Name)
 		}
 	case *ast.AppliedType:
-		arity := map[string]int{"chan": 1, "list": 1, "map": 2, "result": 2}[v.Constructor]
+		arity := map[string]int{"chan": 1, "list": 1, "map": 2, "result": 2, "option": 1}[v.Constructor]
 		if arity == 0 || len(v.Args) != arity {
 			c.error(t, "E_INVALID_TYPE", v.String())
 			return
@@ -299,6 +301,9 @@ func (c *Checker) pop() {
 	c.scopes = c.scopes[:len(c.scopes)-1]
 }
 func (c *Checker) define(id string, t ast.Type, n ast.Node, pending bool) {
+	if id == "_" {
+		return
+	}
 	s := c.scopes[len(c.scopes)-1]
 	if s[id] != nil {
 		c.error(n, "E_DUPLICATE_SYMBOL", id)
@@ -346,8 +351,18 @@ func (c *Checker) statements(body []ast.Stmt) {
 	for _, st := range body {
 		switch s := st.(type) {
 		case *ast.LetStmt:
-			c.validType(s.Type, false)
-			c.require(s, c.expr(s.Value, s.Type), s.Type)
+			if s.Type == nil {
+				inferred := c.expr(s.Value, nil)
+				if inferred == nil || name(inferred) == "void" {
+					c.error(s, "E_TYPE_INFERENCE_FAILED", fmt.Sprintf("Não foi possível inferir o tipo da variável %q", s.Name))
+					s.Type = primitive("void")
+				} else {
+					s.Type = inferred
+				}
+			} else {
+				c.validType(s.Type, false)
+				c.require(s, c.expr(s.Value, s.Type), s.Type)
+			}
 			c.define(s.Name, s.Type, s, IsResult(s.Type))
 		case *ast.SetStmt:
 			b := c.lookup(s.Name)
@@ -416,7 +431,36 @@ func (c *Checker) statements(body []ast.Stmt) {
 				c.error(s, "E_LOOP_CONTROL", s.Kind+" outside loop")
 			}
 		case *ast.MatchStmt:
-			a := parts(c.expr(s.Value, nil), "result", 2)
+			valType := c.expr(s.Value, nil)
+			if s.IsOption {
+				a := parts(valType, "option", 1)
+				if a == nil {
+					c.error(s, "E_TYPE_MISMATCH", "match requires option")
+					continue
+				}
+				c.consume(s.Value)
+				before := c.pending()
+				c.push()
+				c.define(s.OKName, a[0], s, false)
+				c.statements(s.OK)
+				c.pop()
+				afterOK := c.pending()
+				restore(before)
+				c.push()
+				if s.ErrName != "" {
+					c.define(s.ErrName, primitive("void"), s, false)
+				}
+				c.statements(s.Err)
+				c.pop()
+				if returns(s.OK) {
+				} else if returns(s.Err) {
+					restore(afterOK)
+				} else {
+					merge(afterOK, c.pending())
+				}
+				continue
+			}
+			a := parts(valType, "result", 2)
 			if a == nil {
 				c.error(s, "E_TYPE_MISMATCH", "match requires result")
 				continue
@@ -517,11 +561,17 @@ func (c *Checker) expr(e ast.Expr, want ast.Type) (t ast.Type) {
 			return primitive("bool")
 		default:
 			if name(l) != "int" && name(l) != "float" && l != nil {
-				c.error(e, "E_TYPE_MISMATCH", "Numeric operands required")
+				isStrComp := name(l) == "str" && (v.Op == "gt" || v.Op == "lt" || v.Op == "gte" || v.Op == "lte")
+				if !isStrComp {
+					c.error(e, "E_TYPE_MISMATCH", "Numeric operands required")
+				}
 			}
 		}
 		if v.Op == "gt" || v.Op == "lt" || v.Op == "gte" || v.Op == "lte" {
 			return primitive("bool")
+		}
+		if v.Op == "div" && name(l) == "int" {
+			return applied("result", primitive("int"), primitive("str"))
 		}
 		return l
 	case *ast.CallExpr:
@@ -539,6 +589,92 @@ func (c *Checker) expr(e ast.Expr, want ast.Type) (t ast.Type) {
 			}
 		}
 		return a[0]
+	case *ast.IfExpr:
+		c.require(v, c.expr(v.Condition, nil), primitive("bool"))
+		if v.Else == nil {
+			c.error(v, "E_IF_EXPR_MISSING_ELSE", "if used as expression requires else branch")
+			if v.Then != nil {
+				return c.expr(v.Then, want)
+			}
+			return primitive("void")
+		}
+		thenType := c.expr(v.Then, want)
+		elseType := c.expr(v.Else, want)
+		if thenType != nil && elseType != nil && name(thenType) != name(elseType) {
+			c.error(v, "E_IF_EXPR_BRANCH_TYPE", fmt.Sprintf("if branches have different types: then is %s, else is %s", name(thenType), name(elseType)))
+			return thenType
+		}
+		return thenType
+	case *ast.MatchExpr:
+		valType := c.expr(v.Value, nil)
+		if v.IsOption {
+			a := parts(valType, "option", 1)
+			if a == nil {
+				c.error(v, "E_TYPE_MISMATCH", "match requires option")
+				return primitive("void")
+			}
+			c.consume(v.Value)
+			c.push()
+			if v.OKName != "" && v.OKName != "_" {
+				c.define(v.OKName, a[0], v, false)
+			}
+			okType := c.expr(v.OK, want)
+			c.pop()
+
+			c.push()
+			if v.ErrName != "" && v.ErrName != "_" {
+				c.define(v.ErrName, primitive("void"), v, false)
+			}
+			errType := c.expr(v.Err, want)
+			c.pop()
+
+			if want != nil {
+				c.require(v.OK, okType, want)
+				c.require(v.Err, errType, want)
+				return want
+			}
+			if okType != nil && errType != nil && name(okType) != name(errType) {
+				c.error(v, "E_TYPE_MISMATCH", fmt.Sprintf("match branches have different types: %s and %s", name(okType), name(errType)))
+				return okType
+			}
+			if okType != nil {
+				return okType
+			}
+			return primitive("void")
+		}
+		a := parts(valType, "result", 2)
+		if a == nil {
+			c.error(v, "E_TYPE_MISMATCH", "match requires result")
+			return primitive("void")
+		}
+		c.consume(v.Value)
+		c.push()
+		if v.OKName != "" && v.OKName != "_" {
+			c.define(v.OKName, a[0], v, false)
+		}
+		okType := c.expr(v.OK, want)
+		c.pop()
+
+		c.push()
+		if v.ErrName != "" && v.ErrName != "_" {
+			c.define(v.ErrName, a[1], v, false)
+		}
+		errType := c.expr(v.Err, want)
+		c.pop()
+
+		if want != nil {
+			c.require(v.OK, okType, want)
+			c.require(v.Err, errType, want)
+			return want
+		}
+		if okType != nil && errType != nil && name(okType) != name(errType) {
+			c.error(v, "E_TYPE_MISMATCH", fmt.Sprintf("match branches have different types: %s and %s", name(okType), name(errType)))
+			return okType
+		}
+		if okType != nil {
+			return okType
+		}
+		return primitive("void")
 	}
 	return nil
 }
@@ -561,266 +697,37 @@ func (c *Checker) typeArg(e ast.Expr) ast.Type {
 }
 func (c *Checker) call(v *ast.CallExpr, want ast.Type) ast.Type {
 	n := strings.ReplaceAll(v.Func, "_", "-")
-	if n == "make-list" || n == "make-chan" || n == "make-map" {
-		count := 1
-		if n == "make-map" {
-			count = 2
+	b := builtins.Lookup(n)
+	if b != nil {
+		for _, eff := range b.Effects {
+			c.effect(v, eff)
 		}
-		if !c.arity(v, count) {
+		if b.SpecialCheck != nil {
+			return b.SpecialCheck(c, v, want)
+		}
+		args := make([]ast.Type, len(v.Args))
+		for i, a := range v.Args {
+			args[i] = c.expr(a, nil)
+		}
+		if b.Arity.Max != -1 {
+			if !c.arity(v, b.Arity.Min) {
+				return nil
+			}
+		} else if len(v.Args) < b.Arity.Min {
+			c.error(v, "E_WRONG_ARITY", fmt.Sprintf("%s expects at least %d arguments", v.Func, b.Arity.Min))
 			return nil
 		}
-		a := []ast.Type{}
-		for _, e := range v.Args {
-			a = append(a, c.typeArg(e))
-		}
-		t := applied(strings.TrimPrefix(n, "make-"), a...)
-		c.validType(t, false)
-		return t
-	}
-	if n == "ok" || n == "err" {
-		if !c.arity(v, 1) {
-			return nil
-		}
-		a := parts(want, "result", 2)
-		if a == nil {
-			c.error(v, "E_RESULT_CONTEXT", "ok/err require an explicit result type")
-			c.expr(v.Args[0], nil)
-			return nil
-		}
-		i := 0
-		if n == "err" {
-			i = 1
-		}
-		c.require(v, c.expr(v.Args[0], a[i]), a[i])
-		return want
-	}
-	if n == "json-decode" {
-		if !c.arity(v, 2) {
-			return nil
-		}
-		c.require(v, c.expr(v.Args[0], nil), primitive("str"))
-		return applied("result", c.typeArg(v.Args[1]), primitive("str"))
-	}
-	if n == "new" {
-		if len(v.Args) == 0 {
-			c.arity(v, 1)
-			return nil
-		}
-		t := c.typeArg(v.Args[0])
-		s := c.Info.Structs[name(t)]
-		if s == nil {
-			c.error(v, "E_INVALID_TYPE", "new requires struct")
-			return nil
-		}
-		if !c.arity(v, len(s.Fields)+1) {
-			return nil
-		}
-		for i, f := range s.Fields {
-			c.require(v, c.expr(v.Args[i+1], f.Type), f.Type)
-		}
-		return t
-	}
-	if n == "field" {
-		if !c.arity(v, 2) {
-			return nil
-		}
-		t := c.expr(v.Args[0], nil)
-		id, ok := v.Args[1].(*ast.IdentExpr)
-		if !ok {
-			c.error(v, "E_UNKNOWN_FIELD", "Expected field name")
-			return nil
-		}
-		if s := c.Info.Structs[name(t)]; s != nil {
-			for _, f := range s.Fields {
-				if f.Name == id.Name {
-					return f.Type
-				}
+		for i, paramSpec := range b.Params {
+			if i < len(args) {
+				c.require(v, args[i], builtins.ParseType(paramSpec))
 			}
 		}
-		c.error(v, "E_UNKNOWN_FIELD", id.Name)
-		return nil
+		return builtins.ParseType(b.Return)
 	}
-	if n == "http-get" || n == "http-post" || n == "http-put" || n == "http-delete" {
-		c.effect(v, "net")
-		if !c.arity(v, 2) {
-			return nil
-		}
-		c.require(v, c.expr(v.Args[0], nil), primitive("str"))
-		id, ok := v.Args[1].(*ast.IdentExpr)
-		var f *ast.FuncDecl
-		if ok {
-			f = c.Info.Functions[id.Name]
-		}
-		if f == nil || len(f.Params) != 1 || name(f.Params[0].Type) != "Request" || name(f.ReturnType) != "Response" {
-			c.error(v, "E_HANDLER_SIGNATURE", "Handler requires (Request) -> Response")
-		} else {
-			for _, eff := range f.Effects {
-				c.effect(v, eff)
-			}
-		}
-		return primitive("void")
-	}
-	// Os builtins de banco e de WebSocket resolvem os proprios argumentos:
-	// db-query recebe um nome de tipo, que nao pode passar pela avaliacao de
-	// expressao abaixo sem virar E_UNDEFINED_SYMBOL.
-	if t, ok := c.dbCall(v, n); ok {
-		return t
-	}
-	if t, ok := c.wsCall(v, n); ok {
-		return t
-	}
+
 	args := make([]ast.Type, len(v.Args))
 	for i, a := range v.Args {
 		args[i] = c.expr(a, nil)
-	}
-	check := func(types ...string) bool {
-		if !c.arity(v, len(types)) {
-			return false
-		}
-		for i, t := range types {
-			c.require(v, args[i], primitive(t))
-		}
-		return true
-	}
-	result := func(t string) ast.Type { return applied("result", primitive(t), primitive("str")) }
-	switch n {
-	case "println", "print", "concat":
-		if n != "concat" {
-			c.effect(v, "io")
-		}
-		for _, a := range args {
-			if a != nil && !scalar(a) {
-				c.error(v, "E_TYPE_MISMATCH", "Use explicit serialization for composite values")
-			}
-		}
-		if n == "concat" {
-			return primitive("str")
-		}
-		return primitive("void")
-	case "not":
-		check("bool")
-		return primitive("bool")
-	case "str-from-int":
-		check("int")
-		return primitive("str")
-	case "float-from-int":
-		check("int")
-		return primitive("float")
-	case "int-from-str":
-		check("str")
-		return result("int")
-	case "sleep-ms":
-		c.effect(v, "clock")
-		check("int")
-		return primitive("void")
-	case "serve-site":
-		c.effect(v, "net")
-		c.effect(v, "fs")
-		check("str", "str", "str", "bool")
-		return primitive("void")
-	case "serve-hybrid":
-		c.effect(v, "net")
-		c.effect(v, "fs")
-		check("str", "str")
-		return result("bool")
-	case "json-response":
-		check("int", "str")
-		return &ast.NamedType{Name: "Response"}
-	case "request-body", "request-path", "request-method":
-		check("Request")
-		return primitive("str")
-	case "fs-read-file":
-		c.effect(v, "fs")
-		check("str")
-		return result("str")
-	case "fs-write-file":
-		c.effect(v, "fs")
-		check("str", "str")
-		return result("void")
-	case "fs-rename":
-		c.effect(v, "fs")
-		check("str", "str")
-		return result("void")
-	case "fs-write-atomic":
-		c.effect(v, "fs")
-		check("str", "str")
-		return result("void")
-	case "fs-remove":
-		c.effect(v, "fs")
-		check("str")
-		return result("void")
-	case "fs-exists":
-		c.effect(v, "fs")
-		check("str")
-		return primitive("bool")
-	case "json-encode":
-		c.arity(v, 1)
-		return result("str")
-	case "str-len":
-		check("str")
-		return primitive("int")
-	case "str-slice":
-		check("str", "int", "int")
-		return result("str")
-	case "str-eq":
-		check("str", "str")
-		return primitive("bool")
-	case "args":
-		c.effect(v, "io")
-		check()
-		return applied("list", primitive("str"))
-	}
-	if strings.HasPrefix(n, "list-") || strings.HasPrefix(n, "map-") {
-		kind := "list"
-		arity := 1
-		if strings.HasPrefix(n, "map-") {
-			kind = "map"
-			arity = 2
-		}
-		if len(args) == 0 {
-			c.arity(v, 1)
-			return nil
-		}
-		a := parts(args[0], kind, arity)
-		if a == nil {
-			c.error(v, "E_TYPE_MISMATCH", "Expected "+kind)
-			return nil
-		}
-		switch n {
-		case "list-len", "map-len":
-			c.arity(v, 1)
-			return primitive("int")
-		case "list-push":
-			if c.arity(v, 2) {
-				c.require(v, args[1], a[0])
-			}
-			return primitive("void")
-		case "list-get":
-			if c.arity(v, 2) {
-				c.require(v, args[1], primitive("int"))
-			}
-			return applied("result", a[0], primitive("str"))
-		case "list-set":
-			if c.arity(v, 3) {
-				c.require(v, args[1], primitive("int"))
-				c.require(v, args[2], a[0])
-			}
-			return result("bool")
-		case "map-get", "map-has":
-			if c.arity(v, 2) {
-				c.require(v, args[1], a[0])
-			}
-			if n == "map-has" {
-				return primitive("bool")
-			}
-			return applied("result", a[1], primitive("str"))
-		case "map-set":
-			if c.arity(v, 3) {
-				c.require(v, args[1], a[0])
-				c.require(v, args[2], a[1])
-			}
-			return primitive("void")
-		}
 	}
 	if f := c.Info.Functions[v.Func]; f != nil {
 		if c.arity(v, len(f.Params)) {

@@ -1,0 +1,41 @@
+;; std/cors - CORS com lista de origens permitidas.
+;;
+;;   (import "std/cors")
+;;   (match (cors-origin req (list "https://painel.exemplo.com"))
+;;     (ok origem (return (cors-headers resposta origem)))
+;;     (err e (return resposta)))
+;;
+;; A origem so e ecoada de volta se estiver na lista. Nunca ha "*": com
+;; Authorization ou cookie, "*" e recusado pelo navegador, e sem eles e um
+;; convite para qualquer site ler a API.
+;;
+;; O preflight (OPTIONS) precisa de uma rota por caminho, porque a LIAF ainda
+;; nao tem middleware: (route OPTIONS "/api/x" ...) chamando cors-preflight.
+(module cors
+  ;; A origem da requisicao, se estiver entre as permitidas.
+  (fn cors-origin (params (req Request) (permitidas (list str))) (returns (result str str)) (effects)
+    (body
+      (let origem str "")
+      (match (request-header req "Origin")
+        (ok o (set origem o))
+        (err e (return (err "cors: request without Origin header"))))
+      (if (list-contains permitidas origem)
+        (then (return (ok origem))))
+      (return (err (concat "cors: origin not allowed: " origem)))))
+
+  ;; Acrescenta os headers de CORS a uma resposta. Vary: Origin impede que um
+  ;; cache entregue a resposta de uma origem para outra.
+  (fn cors-headers (params (res Response) (origem str)) (returns Response) (effects)
+    (body
+      (let r Response (response-set-header res "Access-Control-Allow-Origin" origem))
+      (return (response-set-header r "Vary" "Origin"))))
+
+  ;; Resposta 204 ao preflight. metodos e cabecalhos sao listas separadas por
+  ;; virgula, como no HTTP: "GET, POST" e "Authorization, Content-Type".
+  (fn cors-preflight (params (origem str) (metodos str) (cabecalhos str)) (returns Response) (effects)
+    (body
+      (let r Response (cors-headers (json-response 204 "") origem))
+      (let r2 Response (response-set-header r "Access-Control-Allow-Methods" metodos))
+      (let r3 Response (response-set-header r2 "Access-Control-Allow-Headers" cabecalhos))
+      (return (response-set-header r3 "Access-Control-Max-Age" "600"))))
+)

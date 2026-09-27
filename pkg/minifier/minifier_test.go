@@ -74,3 +74,21 @@ func TestMinifyJS(t *testing.T) {
 		t.Errorf("Esperava remocao de comentarios JS")
 	}
 }
+
+func TestMinifyFileJSDisabled(t *testing.T) {
+	rawJS := []byte("  const x = 1; \n  // comment\n")
+	output := Minify("app.js", rawJS)
+	if string(output) != string(rawJS) {
+		t.Errorf("Esperava que o JS fosse preservado sem minificação, recebido: %s", string(output))
+	}
+}
+
+func TestMinifyDisabledByEnv(t *testing.T) {
+	t.Setenv("LIAF_MINIFY", "false")
+	html := []byte("<div>   <span>texto</span>   </div>")
+	output := Minify("index.html", html)
+	if string(output) != string(html) {
+		t.Errorf("Esperava que HTML não fosse minificado quando LIAF_MINIFY=false")
+	}
+}
+

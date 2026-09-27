@@ -116,7 +116,7 @@
             (set active-count (add active-count 1)))))
       (let avg int 0)
       (if (gt total 0)
-        (then (set avg (div (add pipe-val won-val) total))))
+        (then (match (div (add pipe-val won-val) total) (ok v (set avg v)) (err _ (set avg 0)))))
       (return (new StatsSummary pipe-val won-val total won-count active-count avg))))
 
   ;; --- Rotas REST API: Leads ---

@@ -1,0 +1,134 @@
+;; LIAF Real-Time Chat Brasil (Nome + Estado ao Vivo + Moderação com Argon2)
+;; Demonstração de WebSockets + SQLite + REST + Crypto em LIAF nativo v0.5
+(module chat-brasil
+  (struct ChatMessage (id int) (name str) (uf str) (text str) (created_at str))
+  (struct MessagesResponse (messages (list ChatMessage)))
+  (struct WsEvent (kind str) (name str) (uf str) (text str) (time str))
+  (struct ChatInput (name str) (uf str) (text str))
+
+  (struct AdminUser (id int) (username str) (password_hash str) (token str))
+  (struct AdminLoginInput (username str) (password str))
+  (struct AdminLoginResponse (ok bool) (token str))
+
+  (fn get-db () (result DBConnection str) (effects db)
+    (let db DBConnection (try (db-connect "sqlite" "chat.db")))
+    (ok db))
+
+  (fn init-db () (result bool str) (effects db rand)
+    (let db DBConnection (try (get-db)))
+    (try (db-exec db "CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, uf TEXT NOT NULL, text TEXT NOT NULL, created_at TEXT NOT NULL)"))
+    (try (db-exec db "CREATE TABLE IF NOT EXISTS admins (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, token TEXT NOT NULL)"))
+    (let count (list ChatMessage) (try (db-query db "SELECT id, name, uf, text, created_at FROM messages LIMIT 1" ChatMessage)))
+    (if (eq (list-len count) 0)
+      (then
+        (try (db-exec db "INSERT INTO messages (name, uf, text, created_at) VALUES (?, ?, ?, ?)" "LIAF Bot" "BR" "Bem-vindos ao chat em tempo real rodando em LIAF puro!" "agora"))
+        (try (db-exec db "INSERT INTO messages (name, uf, text, created_at) VALUES (?, ?, ?, ?)" "Gabriel" "MG" "Olá pessoal de todos os estados!" "agora"))))
+    (let existing-admin (list AdminUser) (try (db-query db "SELECT id, username, password_hash, token FROM admins WHERE username = 'admin' LIMIT 1" AdminUser)))
+    (if (eq (list-len existing-admin) 0)
+      (then
+        (let h str (password-hash "admin123"))
+        (try (db-exec db "INSERT INTO admins (username, password_hash, token) VALUES (?, ?, ?)" "admin" h ""))))
+    (ok true))
+
+  (fn is-admin ((req Request) (db DBConnection)) bool (effects db)
+    (on-err e (return false))
+    (let token str
+      (match (request-header req "X-Admin-Token")
+        (ok t t)
+        (err _
+          (match (request-header req "Authorization")
+            (ok auth
+              (if (str-starts-with auth "Bearer ")
+                (then (unwrap-or (str-slice auth 7 (str-len auth)) ""))
+                (else auth)))
+            (err _ "")))))
+    (if (str-eq token "")
+      (then (return false)))
+    (let rows (list AdminUser) (try (db-query db "SELECT id, username, password_hash, token FROM admins WHERE token = ? LIMIT 1" AdminUser token)))
+    (gt (list-len rows) 0))
+
+  (fn event-json ((kind str) (name str) (uf str) (text str) (time str)) str
+    (on-err fail (return "{\"kind\":\"error\",\"name\":\"\",\"uf\":\"\",\"text\":\"fail\",\"time\":\"\"}"))
+    (try (json-encode (new WsEvent kind name uf text time))))
+
+  ;; --- Rotas REST Públicas ---
+
+  (route GET "/api/messages" () Response (effects db)
+    (on-err message (return (json-response 500 "{\"error\":\"db failure\"}")))
+    (let db DBConnection (try (get-db)))
+    (let msgs (list ChatMessage) (try (db-query db "SELECT id, name, uf, text, created_at FROM messages ORDER BY id DESC LIMIT 50" ChatMessage)))
+    (let payload str (try (json-encode (new MessagesResponse msgs))))
+    (json-response 200 payload))
+
+  (route GET "/api/online" () Response (effects net)
+    (let count int (ws-topic-size "chat_geral"))
+    (json-response 200 (fmt "{{\"online\":{}}}" count)))
+
+  ;; --- Rotas REST de Moderação (Admin) ---
+
+  (route POST "/api/admin/login" ((input AdminLoginInput)) Response (effects db rand)
+    (on-err m (return (json-response 500 "{\"error\":\"server error\"}")))
+    (let db DBConnection (try (get-db)))
+    (let admins (list AdminUser) (try (db-query db "SELECT id, username, password_hash, token FROM admins WHERE username = ? LIMIT 1" AdminUser (field input username))))
+    (if (eq (list-len admins) 0)
+      (then (return (json-response 401 "{\"error\":\"Usuário ou senha incorretos\"}"))))
+    (let adm AdminUser (try (list-get admins 0)))
+    (let valid bool (password-verify (field input password) (field adm password_hash)))
+    (if (not valid)
+      (then (return (json-response 401 "{\"error\":\"Usuário ou senha incorretos\"}"))))
+    (let new-token str (random-token))
+    (try (db-exec db "UPDATE admins SET token = ? WHERE id = ?" new-token (field adm id)))
+    (let payload str (try (json-encode (new AdminLoginResponse true new-token))))
+    (json-response 200 payload))
+
+  (route DELETE "/api/messages/{id}" ((id int) (req Request)) Response (effects clock db net)
+    (on-err m (return (json-response 500 "{\"error\":\"server error\"}")))
+    (let db DBConnection (try (get-db)))
+    (if (not (is-admin req db))
+      (then (return (json-response 401 "{\"error\":\"Acesso restrito a moderadores\"}"))))
+    (try (db-exec db "DELETE FROM messages WHERE id = ?" id))
+    (try (ws-broadcast "chat_geral" (event-json "delete" "admin" "BR" (str-from-int id) (str-from-int (now-ms)))))
+    (json-response 200 "{\"ok\":true}"))
+
+  (route POST "/api/admin/clear" ((req Request)) Response (effects clock db net)
+    (on-err m (return (json-response 500 "{\"error\":\"server error\"}")))
+    (let db DBConnection (try (get-db)))
+    (if (not (is-admin req db))
+      (then (return (json-response 401 "{\"error\":\"Acesso restrito a moderadores\"}"))))
+    (try (db-exec db "DELETE FROM messages"))
+    (try (ws-broadcast "chat_geral" (event-json "clear" "admin" "BR" "Histórico apagado pelo moderador" (str-from-int (now-ms)))))
+    (json-response 200 "{\"ok\":true}"))
+
+  ;; --- WebSocket em Tempo Real ---
+
+  (ws-route "/ws/chat" ((req Request) (conn WSConn)) (effects clock db io net)
+    (on-err message (println (fmt "ws-chat err: {}" message)))
+    (on-open
+      (let nome str (unwrap-or (request-query req "name") "Anônimo"))
+      (let estado str (unwrap-or (request-query req "uf") "BR"))
+      (ws-join conn "chat_geral")
+      (println (fmt "Usuário conectado: {} ({})" nome estado))
+      (try (ws-broadcast "chat_geral" (event-json "join" nome estado (fmt "{} conectou-se de {}" nome estado) (str-from-int (now-ms))))))
+
+    (on-message text
+      (let input ChatInput (try (json-decode text ChatInput)))
+      (if (and (not (str-eq (field input name) "")) (not (str-eq (field input text) "")))
+        (then
+          (let time-str str (str-from-int (now-ms)))
+          (let db DBConnection (try (get-db)))
+          (try (db-exec db "INSERT INTO messages (name, uf, text, created_at) VALUES (?, ?, ?, ?)" (field input name) (field input uf) (field input text) time-str))
+          (try (ws-broadcast "chat_geral" (event-json "msg" (field input name) (field input uf) (field input text) time-str))))))
+
+    (on-close
+      (try (ws-broadcast "chat_geral" (event-json "leave" "Alguém" "BR" "Um usuário desconectou-se" (str-from-int (now-ms)))))))
+
+  (fn main () void (effects db env fs io net rand)
+    (match (init-db)
+      (ok _ (println "Banco SQLite de chat inicializado com admin"))
+      (err err (println (fmt "Falha ao inicializar SQLite: {}" err))))
+    (let port str (unwrap-or (env-get "PORT") (unwrap-or (list-get (args) 0) "7070")))
+    (println (fmt "Chat Brasil rodando na porta {}" port))
+    (match (serve-hybrid "./public" port)
+      (ok _ (println "Servidor parado"))
+      (err message (println message))))
+)

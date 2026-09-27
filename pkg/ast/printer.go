@@ -304,12 +304,25 @@ func (p *printer) printStmt(stmt Stmt, suffix string) {
 		p.sb.WriteString("(match " + formatExpr(s.Value) + "\n")
 		p.indent++
 		p.writeIndent()
-		p.sb.WriteString("(ok " + s.OKName)
-		p.printBlock(s.OK, "")
-		p.sb.WriteString("\n")
-		p.writeIndent()
-		p.sb.WriteString("(err " + s.ErrName)
-		p.printBlock(s.Err, ")"+suffix)
+		if s.IsOption {
+			p.sb.WriteString("(some " + s.OKName)
+			p.printBlock(s.OK, "")
+			p.sb.WriteString("\n")
+			p.writeIndent()
+			if s.ErrName != "" {
+				p.sb.WriteString("(none " + s.ErrName)
+			} else {
+				p.sb.WriteString("(none")
+			}
+			p.printBlock(s.Err, ")"+suffix)
+		} else {
+			p.sb.WriteString("(ok " + s.OKName)
+			p.printBlock(s.OK, "")
+			p.sb.WriteString("\n")
+			p.writeIndent()
+			p.sb.WriteString("(err " + s.ErrName)
+			p.printBlock(s.Err, ")"+suffix)
+		}
 		p.indent--
 	case *LetStmt:
 		p.sb.WriteString(fmt.Sprintf("(let %s %s %s)%s", s.Name, s.Type.String(), formatExpr(s.Value), suffix))
@@ -453,6 +466,21 @@ func formatExpr(expr Expr) string {
 		return fmt.Sprintf("(%s %s %s)", e.Op, formatExpr(e.Left), formatExpr(e.Right))
 	case *RecvExpr:
 		return fmt.Sprintf("(recv %s)", formatExpr(e.Channel))
+	case *IfExpr:
+		if e.Else != nil {
+			return fmt.Sprintf("(if %s (then %s) (else %s))", formatExpr(e.Condition), formatExpr(e.Then), formatExpr(e.Else))
+		}
+		return fmt.Sprintf("(if %s (then %s))", formatExpr(e.Condition), formatExpr(e.Then))
+	case *MatchExpr:
+		if e.IsOption {
+			nonePart := "(none"
+			if e.ErrName != "" && e.ErrName != "_" {
+				nonePart += " " + e.ErrName
+			}
+			nonePart += " " + formatExpr(e.Err) + ")"
+			return fmt.Sprintf("(match %s (some %s %s) %s)", formatExpr(e.Value), e.OKName, formatExpr(e.OK), nonePart)
+		}
+		return fmt.Sprintf("(match %s (ok %s %s) (err %s %s))", formatExpr(e.Value), e.OKName, formatExpr(e.OK), e.ErrName, formatExpr(e.Err))
 	default:
 		return ""
 	}

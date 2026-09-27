@@ -1,17 +1,87 @@
 package web
 
 import (
+	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 )
 
-type Request struct{ Method, Path, Body string }
+type Request struct {
+	Method, Path, Body string
+	Header             http.Header
+	Query              url.Values
+}
+
 type Response struct {
 	Status      int
 	Body        string
 	ContentType string
+	// Headers fica em ordem de chamada porque Set-Cookie pode repetir; um
+	// map guardaria so o ultimo cookie.
+	Headers []ResponseHeader
 }
+
+type ResponseHeader struct{ Name, Value string }
+
+// WithHeader devolve uma copia da resposta com o header acrescentado. A
+// Response da LIAF e um valor, nao um objeto mutavel: a mesma resposta base
+// pode ser reaproveitada por varios ramos sem que um contamine o outro.
+func (r Response) WithHeader(name, value string) Response {
+	headers := make([]ResponseHeader, len(r.Headers), len(r.Headers)+1)
+	copy(headers, r.Headers)
+	r.Headers = append(headers, ResponseHeader{name, value})
+	return r
+}
+
+func newRequest(req *http.Request, body string) Request {
+	return Request{Method: req.Method, Path: req.URL.Path, Body: body, Header: req.Header, Query: req.URL.Query()}
+}
+
+// writeHeaders aplica os headers da rota depois do Content-Type padrao, para
+// que a rota possa troca-lo (text/csv, por exemplo). Set-Cookie acumula; os
+// demais substituem, e o ultimo valor vence. Um nome invalido ou um valor com
+// quebra de linha e erro de programa, e falha alto em vez de sumir: o
+// net/http descartaria o nome e trocaria a quebra por espaco em silencio.
+func writeHeaders(w http.ResponseWriter, res Response) error {
+	h := w.Header()
+	h.Set("Content-Type", res.ContentType)
+	for _, hd := range res.Headers {
+		if !ValidHeaderName(hd.Name) {
+			return fmt.Errorf("invalid response header name %q", hd.Name)
+		}
+		if strings.ContainsAny(hd.Value, "\r\n\x00") {
+			return fmt.Errorf("response header %s has a line break or NUL in its value", hd.Name)
+		}
+		if http.CanonicalHeaderKey(hd.Name) == "Set-Cookie" {
+			h.Add(hd.Name, hd.Value)
+		} else {
+			h.Set(hd.Name, hd.Value)
+		}
+	}
+	return nil
+}
+
+// ValidHeaderName segue o token da RFC 9110, secao 5.6.2. Exportada porque o
+// cliente HTTP do runtime valida os headers de saida com a mesma regra.
+func ValidHeaderName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		c := name[i]
+		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' {
+			continue
+		}
+		if !strings.ContainsRune("!#$%&'*+-.^_`|~", rune(c)) {
+			return false
+		}
+	}
+	return true
+}
+
 type Handler func(Request) Response
 type Router struct{ mux *http.ServeMux }
 
@@ -23,16 +93,23 @@ func (r *Router) Handle(method, path string, handler Handler) {
 			http.Error(w, "Request body too large or unreadable", http.StatusRequestEntityTooLarge)
 			return
 		}
-		res := handler(Request{Method: req.Method, Path: req.URL.Path, Body: string(body)})
+		res := handler(newRequest(req, string(body)))
 		if res.Status < 100 || res.Status > 599 {
 			http.Error(w, "Invalid response status", http.StatusInternalServerError)
 			return
 		}
-		w.Header().Set("Content-Type", res.ContentType)
+		if err := writeHeaders(w, res); err != nil {
+			for name := range w.Header() {
+				w.Header().Del(name)
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		w.WriteHeader(res.Status)
 		_, _ = io.WriteString(w, res.Body)
 	})
 }
+
 // HandleRaw registra um handler que recebe a requisicao crua. O WebSocket
 // precisa disso: o upgrade toma posse da conexao TCP, e Handle acima ja teria
 // lido o corpo e se comprometido a escrever uma Response.
@@ -89,7 +166,7 @@ func RegisterWS(path string, h WSHandler) {
 			return
 		}
 		defer conn.Close()
-		h(conn, Request{Method: req.Method, Path: req.URL.Path})
+		h(conn, newRequest(req, ""))
 	}))
 }
 func ServeHybrid(dir, port string) error {
@@ -97,5 +174,5 @@ func ServeHybrid(dir, port string) error {
 	if err != nil {
 		return err
 	}
-	return http.ListenAndServe(":"+port, defaultRouter.Handler(s))
+	return http.ListenAndServe(ListenAddr(port), defaultRouter.Handler(s))
 }

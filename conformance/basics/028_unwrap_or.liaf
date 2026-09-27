@@ -1,0 +1,18 @@
+;; issue: #028
+;; status: done
+;; out: Alice
+;; out: Anonimo
+;; out: 100
+;; out: -1
+
+(let res-ok (result str str) (ok "Alice"))
+(let res-err (result str str) (err "not found"))
+
+(println (unwrap-or res-ok "Anonimo"))
+(println (unwrap-or res-err "Anonimo"))
+
+(let opt-some (option int) (some 100))
+(let opt-none (option int) (none int))
+
+(println (unwrap-or opt-some -1))
+(println (unwrap-or opt-none -1))

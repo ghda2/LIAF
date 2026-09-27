@@ -31,6 +31,7 @@ Regras:
    efeito que o corpo não usa é erro (`E_UNUSED_EFFECT`). Função pura é `(effects)`, nunca
    `(effects none)`.
 3. **Operações falíveis devolvem `(result T E)` e não podem ser ignoradas.**
+4. **Modularização e Imports:** Divida arquivos usando `(import "./caminho.liaf")` ou compile uma pasta inteira com `liafc build ./pasta`. Todos os módulos são resolvidos e compilados para um binário único.
 
 ### Tratamento de erro: `try` e `on-err`
 
@@ -152,7 +153,7 @@ $env:GOOS="linux"; $env:GOARCH="amd64"; liafc build ./examples/web_engine.liaf -
 ### Deploy Remoto via SSH
 1. Enviar binário e pasta pública:
    ```bash
-   scp -B -C liaf_server_linux public/ HOST:/opt/app/
+   scp -B -C liaf_server_linux examples/public/ HOST:/opt/app/
    ```
 2. Configurar permissão e serviço systemd (`/etc/systemd/system/app.service`).
 3. Se houver proxy reverso (Caddy / Nginx), apontar para a porta configurada no script LIAF.

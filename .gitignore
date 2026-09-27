@@ -22,8 +22,6 @@
 /server_*
 *.db
 
-# Pipelines internos e automações locais
-/pipeline
 
 # Cache, builds e dados temporários
 .liaf_cache/
@@ -37,3 +35,4 @@ __pycache__/
 Thumbs.db
 .DS_Store
 
+/examples/tw_chat/server_tw_linux

@@ -1,0 +1,36 @@
+;; Cria uma cobranca Pix na API de um provedor de pagamento (PSP).
+;;
+;; Uso: PSP_URL=https://api.psp.exemplo PSP_TOKEN=... cobranca_pix 1500
+;;      (valor em centavos)
+;;
+;; Mostra o cliente HTTP: token Bearer, chave de idempotencia (o PSP nao cria
+;; a mesma cobranca duas vezes se a rede cair e a chamada se repetir), corpo
+;; JSON e o tratamento de resposta de erro. http-fetch so devolve (err ...)
+;; quando nao houve resposta; um 422 do PSP chega como resposta, com o motivo
+;; no corpo, e e o programa que decide o que fazer com o status.
+(module cobranca-pix
+  (struct Cobranca (fields (valor int) (descricao str)))
+  (struct Criada (fields (txid str) (copia_e_cola str)))
+
+  (fn criar-cobranca (params (base str) (token str) (c Cobranca)) (returns (result Criada str)) (effects net rand)
+    (body
+      (let corpo str (try (json-encode c)))
+      (let cabecalhos (list str)
+        (list (concat "Authorization: Bearer " token) (concat "Idempotency-Key: " (random-token))))
+      (let r HttpReply (try (http-fetch "POST" (concat base "/v1/cobrancas") cabecalhos corpo)))
+      (if (neq (reply-status r) 201)
+        (then (return (err (concat "PSP respondeu " (str-from-int (reply-status r)) ": " (reply-body r))))))
+      (return (json-decode (reply-body r) Criada))))
+
+  (fn main (params) (returns void) (effects io env net rand)
+    (on-err e
+      (println (concat "erro: " e))
+      (exit 1))
+    (body
+      (let base str (try (env-get "PSP_URL")))
+      (let token str (try (env-get "PSP_TOKEN")))
+      (let valor int (try (int-from-str (try (list-get (args) 0)))))
+      (let criada Criada (try (criar-cobranca base token (new Cobranca valor "Pedido LIAF"))))
+      (println (concat "txid: " (field criada txid)))
+      (println (concat "pix: " (field criada copia_e_cola)))))
+)

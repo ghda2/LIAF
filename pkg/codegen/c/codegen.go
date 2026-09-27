@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"fmt"
 	"liaf/pkg/ast"
+	"liaf/pkg/builtins"
 	"liaf/pkg/checker"
 	"strconv"
 	"strings"
@@ -140,6 +141,14 @@ func (g *generator) stmt(st ast.Stmt) {
 		g.emit("}\n}")
 	case *ast.MatchStmt:
 		v := g.expr(s.Value)
+		if s.IsOption {
+			g.emit("if(((Option*)%s.p)->some){V %s=((Option*)%s.p)->value;", v, ident(s.OKName))
+			g.body(s.OK)
+			g.emit("}else{")
+			g.body(s.Err)
+			g.emit("}")
+			return
+		}
 		g.emit("if(((Result*)%s.p)->ok){V %s=((Result*)%s.p)->value;", v, ident(s.OKName), v)
 		g.body(s.OK)
 		g.emit("}else{V %s=((Result*)%s.p)->value;", ident(s.ErrName), v)
@@ -210,111 +219,124 @@ func (g *generator) expr(e ast.Expr) string {
 		}
 		op := map[string]string{"add": "+", "sub": "-", "mul": "*", "gt": ">", "lt": "<", "gte": ">=", "lte": "<="}[v.Op]
 		field, wrap := "i", "vi"
-		if t := g.info.Types[v.Left]; t != nil && t.String() == "float" {
-			field, wrap = "f", "vf"
+		if t := g.info.Types[v.Left]; t != nil {
+			if t.String() == "float" {
+				field, wrap = "f", "vf"
+			} else if t.String() == "str" {
+				field, wrap = "s", "vb"
+			}
 		}
 		if v.Op == "gt" || v.Op == "lt" || v.Op == "gte" || v.Op == "lte" {
 			wrap = "vb"
+			if field == "s" {
+				return g.value(fmt.Sprintf("vb(strcmp(%s.s, %s.s) %s 0)", left, right, op))
+			}
 		}
 		if field == "i" && wrap == "vi" {
+			switch v.Op {
+			case "add":
+				return g.value(fmt.Sprintf("vadd(%s, %s)", left, right))
+			case "sub":
+				return g.value(fmt.Sprintf("vsub(%s, %s)", left, right))
+			case "mul":
+				return g.value(fmt.Sprintf("vmul(%s, %s)", left, right))
+			}
 			return g.value(fmt.Sprintf("vi((int64_t)((uint64_t)%s.i %s (uint64_t)%s.i))", left, op, right))
 		}
 		return g.value(fmt.Sprintf("%s(%s.%s %s %s.%s)", wrap, left, field, op, right, field))
+	case *ast.IfExpr:
+		cond := g.expr(v.Condition)
+		out := g.value("vnone()")
+		g.emit("if(%s.i){", cond)
+		thenVal := g.expr(v.Then)
+		g.emit("%s=%s;}else{", out, thenVal)
+		if v.Else != nil {
+			elseVal := g.expr(v.Else)
+			g.emit("%s=%s;}", out, elseVal)
+		} else {
+			g.emit("}")
+		}
+		return out
+	case *ast.MatchExpr:
+		val := g.expr(v.Value)
+		out := g.value("vnone()")
+		if v.IsOption {
+			g.emit("if(%s.tag == LIAF_OPTION && ((Option*)%s.p)->some){", val, val)
+			if v.OKName != "" && v.OKName != "_" {
+				g.emit("V %s = ((Option*)%s.p)->value;", ident(v.OKName), val)
+			}
+			okVal := g.expr(v.OK)
+			g.emit("%s = %s;}else{", out, okVal)
+			if v.ErrName != "" && v.ErrName != "_" {
+				g.emit("V %s = vnone();", ident(v.ErrName))
+			}
+			errVal := g.expr(v.Err)
+			g.emit("%s = %s;}", out, errVal)
+			return out
+		}
+		g.emit("if(%s.tag == LIAF_RESULT && ((Result*)%s.p)->ok){", val, val)
+		if v.OKName != "" && v.OKName != "_" {
+			g.emit("V %s = ((Result*)%s.p)->value;", ident(v.OKName), val)
+		}
+		okVal := g.expr(v.OK)
+		g.emit("%s = %s;}else{", out, okVal)
+		if v.ErrName != "" && v.ErrName != "_" {
+			g.emit("V %s = vs(\"\");", ident(v.ErrName))
+		}
+		errVal := g.expr(v.Err)
+		g.emit("%s = %s;}", out, errVal)
+		return out
 	}
 	g.err = fmt.Errorf("C backend: unsupported expression %T", e)
 	return g.value("vnone()")
 }
+func (g *generator) Expr(e ast.Expr) string              { return g.expr(e) }
+func (g *generator) Value(code string) string             { return g.value(code) }
+func (g *generator) Quote(s string) string                { return quote(s) }
+func (g *generator) Array(items []string) string          { return array(items) }
+func (g *generator) FindStruct(name string) *ast.StructDecl { return g.info.Structs[name] }
+func (g *generator) SetError(err error)                   { g.err = err }
+
 func (g *generator) call(c *ast.CallExpr) string {
 	n := strings.ReplaceAll(c.Func, "_", "-")
-	switch n {
-	case "make-list":
-		return g.value("vlist()")
-	case "make-map":
-		return g.value("vmap()")
-	case "make-chan":
-		return g.value("vchan()")
-	case "field":
-		v := g.expr(c.Args[0])
-		return g.value("vfield(" + v + "," + quote(c.Args[1].(*ast.IdentExpr).Name) + ")")
-	case "new":
-		s := g.info.Structs[c.Args[0].(*ast.IdentExpr).Name]
-		names, args := []string{}, []string{}
-		for i, a := range c.Args[1:] {
-			args = append(args, g.expr(a))
-			names = append(names, quote(s.Fields[i].Name))
+	b := builtins.Lookup(n)
+	if b != nil {
+		if b.UnsupportedC {
+			reason := b.UnsupportedCReason
+			if reason == "" {
+				reason = fmt.Sprintf("unsupported operation %s", c.Func)
+			}
+			g.err = fmt.Errorf("C backend: %s", reason)
+			return g.value("vnone()")
 		}
-		nms := "NULL"
-		if len(names) > 0 {
-			nms = "(const char*[]){" + strings.Join(names, ",") + "}"
+		var args []string
+		if !b.UnevaluatedArgs {
+			args = make([]string, len(c.Args))
+			for i, a := range c.Args {
+				args[i] = g.expr(a)
+			}
 		}
-		return g.value(fmt.Sprintf("vobject(%d,%s,%s)", len(args), nms, array(args)))
-	case "json-decode":
-		g.err = fmt.Errorf("C backend: json-decode is not implemented yet")
-		return g.value("vnone()")
-	}
-	args := []string{}
-	for _, a := range c.Args {
-		args = append(args, g.expr(a))
-	}
-	join := strings.Join(args, ",")
-	call := func(fn string) string { return g.value(fn + "(" + join + ")") }
-	switch n {
-	case "print", "println":
-		nl := 0
-		if n == "println" {
-			nl = 1
+		if b.CEmit != nil {
+			if res, ok := b.CEmit(g, c, args); ok {
+				return res
+			}
 		}
-		return g.value(fmt.Sprintf("vprint(%d,%s,%d)", len(args), array(args), nl))
-	case "concat":
-		return g.value(fmt.Sprintf("vconcat(%d,%s)", len(args), array(args)))
-	case "str-from-int":
-		return call("vintstr")
-	case "float-from-int":
-		return g.value("vf((double)" + args[0] + ".i)")
-	case "int-from-str":
-		return call("vintparse")
-	case "sleep-ms":
-		return call("vsleep")
-	case "list-push":
-		return call("vpush")
-	case "list-get":
-		return call("vget")
-	case "list-set":
-		return call("vset")
-	case "list-len":
-		return g.value("vi(((List*)" + args[0] + ".p)->n)")
-	case "map-len":
-		return g.value("vi(((Map*)" + args[0] + ".p)->n)")
-	case "map-set":
-		return call("vmset")
-	case "map-get":
-		return g.value("vmget(" + join + ",0)")
-	case "map-has":
-		return g.value("vmget(" + join + ",1)")
-	case "ok":
-		return g.value("vr(1," + join + ")")
-	case "err":
-		return g.value("vr(0," + join + ")")
-	case "fs-read-file":
-		return call("vread")
-	case "fs-write-file":
-		return call("vwrite")
-	case "fs-remove":
-		return call("vremove")
-	case "fs-exists":
-		return call("vexists")
-	case "str-len":
-		return g.value("vi(" + args[0] + ".len)")
-	case "str-eq":
-		return g.value("vb(eq(" + join + "))")
-	case "not":
-		return g.value("vb(!" + args[0] + ".b)")
-	case "str-slice":
-		return call("vslice")
-	case "args":
-		return g.value("program_args")
+		if b.CTemplate != "" {
+			anyArgs := make([]any, len(args))
+			for i, v := range args {
+				anyArgs[i] = v
+			}
+			return g.value(fmt.Sprintf(b.CTemplate, anyArgs...))
+		}
+		if b.CCall != "" {
+			return g.value(b.CCall + "(" + strings.Join(args, ",") + ")")
+		}
 	}
 	if g.info.Functions[c.Func] != nil {
+		args := make([]string, len(c.Args))
+		for i, a := range c.Args {
+			args[i] = g.expr(a)
+		}
 		return g.value(ident(c.Func) + "(" + array(args) + ")")
 	}
 	g.err = fmt.Errorf("C backend: unsupported operation %s", c.Func)

@@ -1,5 +1,5 @@
 ;; issue: #023
-;; status: pending
+;; status: done
 ;; out: 3
 ;; out: a-b-c
 (let partes (list str) (str-split "a,b,c" ","))

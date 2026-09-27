@@ -1,0 +1,13 @@
+(module main
+  (import "./models.liaf")
+  (import "./math.liaf")
+
+  (fn main (params) (returns void) (effects io)
+    (body
+      (let cfg Config (new Config "LIAF Modular App" "1.0"))
+      (let user User (new User "Gabriel" 25))
+      (println (concat "Iniciando: " (field cfg app_name)))
+      (println (concat "Usuario: " (field user name)))
+      (println (concat "Idade dobrada: " (str-from-int (dobrar (field user age)))))
+      (println (concat "Idade triplicada: " (str-from-int (triplicar (field user age)))))))
+)

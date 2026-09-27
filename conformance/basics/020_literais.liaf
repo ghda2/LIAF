@@ -1,5 +1,5 @@
 ;; issue: #020
-;; status: pending
+;; status: done
 ;; out: 1000
 ;; out: 255
 ;; out: 0.001

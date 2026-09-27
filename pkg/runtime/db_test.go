@@ -2,9 +2,11 @@ package runtime
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"liaf/pkg/dbdrv"
 )
@@ -53,9 +55,9 @@ func (s *stubConn) seen() []string {
 
 // stubPool monta um DBConn ja abastecido, sem tocar a rede.
 func stubPool(conn dbdrv.Conn) *DBConn {
-	c := &DBConn{driver: "stub", dsn: "stub://", sem: make(chan struct{}, 4)}
-	c.idle = append(c.idle, conn)
-	return c
+	p := &dbPool{driver: "stub", dsn: "stub://", sem: make(chan struct{}, 4), refs: 1}
+	p.idle = append(p.idle, conn)
+	return newHandle(p)
 }
 
 type user struct {
@@ -182,11 +184,11 @@ func TestDBTransactionPinsOneConnection(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		DBExec(tx.Value, "INSERT ...")
 	}
-	if len(pool.idle) != 0 {
+	if len(pool.pool.idle) != 0 {
 		t.Error("a conexao da transacao voltou para o pool antes do commit")
 	}
 	DBCommit(tx.Value)
-	if len(pool.idle) != 1 {
+	if len(pool.pool.idle) != 1 {
 		t.Error("a conexao nao voltou ao pool depois do commit")
 	}
 }
@@ -207,7 +209,7 @@ func TestPoolDiscardsBrokenConnections(t *testing.T) {
 	DBQuery[user](pool, "SELECT ...")
 	// Uma conexao cuja falha foi de transporte nao pode voltar para o pool:
 	// o proximo uso herdaria o socket morto.
-	if len(pool.idle) != 0 {
+	if len(pool.pool.idle) != 0 {
 		t.Error("conexao quebrada voltou ao pool")
 	}
 	if !broken.closed {
@@ -221,7 +223,7 @@ func TestPoolKeepsConnectionAfterSQLError(t *testing.T) {
 	failing := &stubConn{queryErr: errors.New(`relation "users" does not exist`)}
 	pool := stubPool(failing)
 	DBQuery[user](pool, "SELECT ...")
-	if len(pool.idle) != 1 {
+	if len(pool.pool.idle) != 1 {
 		t.Error("conexao saudavel foi descartada apos erro do banco")
 	}
 }
@@ -274,5 +276,101 @@ func TestDSNPoolSize(t *testing.T) {
 		if got := dsnPoolSize(tc.dsn); got != tc.want {
 			t.Errorf("%s: got %d, want %d", tc.dsn, got, tc.want)
 		}
+	}
+}
+
+func TestDBConnectReusesPool(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test_reuse.db")
+	res1 := DBConnect("sqlite", dbPath)
+	if !res1.OK {
+		t.Fatalf("first connect failed: %v", res1.Error)
+	}
+	defer DBClose(res1.Value)
+
+	res2 := DBConnect("sqlite", dbPath)
+	if !res2.OK {
+		t.Fatalf("second connect failed: %v", res2.Error)
+	}
+	defer DBClose(res2.Value)
+
+	if res1.Value.pool != res2.Value.pool {
+		t.Errorf("expected same pool pointer, got %p and %p", res1.Value.pool, res2.Value.pool)
+	}
+}
+
+// Com o pool compartilhado, o db-close de um handler nao pode derrubar a
+// conexao de outro que ainda esta no meio da requisicao.
+func TestDBCloseOnSharedPoolKeepsOtherHandlesOpen(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "shared.db")
+	a := DBConnect("sqlite", dbPath)
+	b := DBConnect("sqlite", dbPath)
+	if !a.OK || !b.OK {
+		t.Fatalf("connect: %q %q", a.Error, b.Error)
+	}
+	if r := DBClose(a.Value); !r.OK {
+		t.Fatalf("close a: %s", r.Error)
+	}
+	if r := DBClose(a.Value); !r.OK {
+		t.Fatalf("close repetido de a devia ser no-op: %s", r.Error)
+	}
+	if r := DBExec(a.Value, "SELECT 1"); r.OK {
+		t.Error("consulta pelo handle fechado foi aceita")
+	}
+	if r := DBExec(b.Value, "CREATE TABLE t (x INTEGER)"); !r.OK {
+		t.Fatalf("b parou de funcionar depois do close de a: %s", r.Error)
+	}
+
+	// Fechar o ultimo handle fecha o pool; o proximo db-connect abre outro.
+	DBClose(b.Value)
+	c := DBConnect("sqlite", dbPath)
+	if !c.OK {
+		t.Fatal(c.Error)
+	}
+	defer DBClose(c.Value)
+	if c.Value.pool == b.Value.pool {
+		t.Error("db-connect reaproveitou um pool ja fechado")
+	}
+	if r := DBExec(c.Value, "INSERT INTO t VALUES (1)"); !r.OK {
+		t.Fatalf("pool reaberto: %s", r.Error)
+	}
+}
+
+// db-connect e db-close concorrentes no mesmo DSN, como num handler que abre
+// e fecha a conexao a cada requisicao. Uma ordem de lock invertida entre os
+// dois travava o processo inteiro.
+func TestDBConnectCloseConcurrentDoesNotDeadlock(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "concurrent.db")
+	done := make(chan struct{})
+	go func() {
+		var wg sync.WaitGroup
+		for w := 0; w < 8; w++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for i := 0; i < 200; i++ {
+					r := DBConnect("sqlite", dbPath)
+					if !r.OK {
+						t.Error(r.Error)
+						return
+					}
+					if q := DBExec(r.Value, "SELECT 1"); !q.OK {
+						t.Error(q.Error)
+					}
+					DBClose(r.Value)
+				}
+			}()
+		}
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(20 * time.Second):
+		t.Fatal("db-connect/db-close concorrentes travaram")
+	}
+	poolsMu.Lock()
+	defer poolsMu.Unlock()
+	if p := pools["sqlite::"+dbPath]; p != nil {
+		t.Errorf("pool continuou registrado com %d handles depois de todos fecharem", p.refs)
 	}
 }

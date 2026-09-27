@@ -1,0 +1,15 @@
+;; issue: std
+;; status: done
+;; out: ana
+;; out: 4102444800
+(module caso
+  (import "std/jwt")
+  ;; Claims registrados da RFC 7519, com os nomes originais.
+  (struct Claims (fields (sub str) (exp int)))
+  (fn main (params) (returns void) (effects io clock)
+    (on-err e (println e))
+    (body
+      (let token str (jwt-sign "s" "{\"sub\":\"ana\",\"exp\":4102444800}"))
+      (let c Claims (try (json-decode (try (jwt-verify "s" token)) Claims)))
+      (println (field c sub))
+      (println (field c exp)))))

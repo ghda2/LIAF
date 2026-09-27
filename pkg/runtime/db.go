@@ -7,16 +7,37 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"liaf/pkg/dbdrv"
 )
 
 // DBConn e o valor por tras do tipo opaco DBConnection da LIAF. Um mesmo
-// handle representa duas coisas: um pool, quando vem de db-connect, ou uma
-// transacao fixada numa conexao, quando vem de db-transaction. Os dois casos
-// tem o mesmo tipo na linguagem porque (db-query conn ...) precisa funcionar
-// dentro e fora da transacao, sem o autor reescrever a chamada.
+// handle representa duas coisas: uma conexao ao pool, quando vem de
+// db-connect, ou uma transacao fixada numa conexao, quando vem de
+// db-transaction. Os dois casos tem o mesmo tipo na linguagem porque
+// (db-query conn ...) precisa funcionar dentro e fora da transacao, sem o
+// autor reescrever a chamada.
 type DBConn struct {
+	driver string
+	dsn    string
+	pool   *dbPool
+
+	// closed e deste handle, nao do pool: um db-close fecha a conexao de quem
+	// o chamou sem derrubar os outros handlers que dividem o mesmo pool.
+	closed atomic.Bool
+
+	// tx != nil marca este handle como transacao.
+	tx     dbdrv.Conn
+	txDone bool
+}
+
+// dbPool e compartilhado por todos os db-connect com o mesmo driver e DSN.
+// A LIAF nao tem variavel global, entao o jeito natural de escrever um
+// handler e chamar db-connect a cada requisicao; sem o compartilhamento,
+// cada chamada abriria conexoes novas que ninguem fecharia.
+type dbPool struct {
+	key    string
 	driver string
 	dsn    string
 
@@ -24,15 +45,14 @@ type DBConn struct {
 	// mil conexoes e derrubar o banco; aqui ele espera por uma vaga.
 	sem chan struct{}
 
-	mu     sync.Mutex
-	idle   []dbdrv.Conn
-	closed bool
+	mu   sync.Mutex
+	idle []dbdrv.Conn
 
-	// tx != nil marca este handle como transacao. Nesse caso sem, idle e
-	// closed pertencem ao pool de origem (root).
-	tx     dbdrv.Conn
-	txDone bool
-	root   *DBConn
+	// refs conta os handles abertos. closed e escrito com poolsMu e mu
+	// seguros, entao basta um dos dois para le-lo. A ordem de travamento e
+	// sempre poolsMu antes de mu.
+	refs   int
+	closed bool
 }
 
 const (
@@ -40,24 +60,71 @@ const (
 	maxIdleConns   = 8
 )
 
+var (
+	poolsMu sync.Mutex
+	pools   = map[string]*dbPool{}
+)
+
 // DBConnect abre o pool e ja valida credenciais numa conexao real: um DSN
-// errado deve falhar em db-connect, nao na primeira consulta.
+// errado deve falhar em db-connect, nao na primeira consulta. Com o mesmo
+// driver e DSN, reaproveita o pool ja aberto e devolve um handle novo.
 func DBConnect(driver, dsn string) Result[*DBConn, string] {
+	key := driver + "::" + dsn
+	if c := shareOpenPool(key); c != nil {
+		return Ok[*DBConn, string](c)
+	}
+
+	// Um dial por DSN de cada vez: quem chega enquanto outro disca espera e
+	// reaproveita o pool dele. Sem isso, a primeira rajada de requisicoes
+	// abriria varias conexoes ao mesmo tempo e, num SQLite recem-criado, todas
+	// disputariam a troca para WAL e falhariam com SQLITE_BUSY. O lock e por
+	// chave, e nao poolsMu, para que um banco lento nao trave os outros.
+	dialMu := dialLock(key)
+	dialMu.Lock()
+	defer dialMu.Unlock()
+	if c := shareOpenPool(key); c != nil {
+		return Ok[*DBConn, string](c)
+	}
+
+	conn, err := dbdrv.Open(driver, dsn)
+	if err != nil {
+		return Err[*DBConn, string](err.Error())
+	}
+
 	maxOpen := defaultMaxOpen
 	if n := dsnPoolSize(dsn); n > 0 {
 		maxOpen = n
 	}
-	c := &DBConn{driver: driver, dsn: dsn, sem: make(chan struct{}, maxOpen)}
+	p := &dbPool{key: key, driver: driver, dsn: dsn, sem: make(chan struct{}, maxOpen), refs: 1}
+	p.idle = append(p.idle, conn)
+	poolsMu.Lock()
+	pools[key] = p
+	poolsMu.Unlock()
+	return Ok[*DBConn, string](newHandle(p))
+}
 
-	c.sem <- struct{}{}
-	conn, err := dbdrv.Open(driver, dsn)
-	if err != nil {
-		<-c.sem
-		return Err[*DBConn, string](err.Error())
+// dialLocks guarda um mutex por DSN. Nao ha remocao: e um por DSN distinto
+// usado pelo programa, e programas LIAF abrem poucos.
+var dialLocks sync.Map
+
+func dialLock(key string) *sync.Mutex {
+	mu, _ := dialLocks.LoadOrStore(key, &sync.Mutex{})
+	return mu.(*sync.Mutex)
+}
+
+func shareOpenPool(key string) *DBConn {
+	poolsMu.Lock()
+	defer poolsMu.Unlock()
+	p := pools[key]
+	if p == nil || p.closed {
+		return nil
 	}
-	c.idle = append(c.idle, conn)
-	<-c.sem
-	return Ok[*DBConn, string](c)
+	p.refs++
+	return newHandle(p)
+}
+
+func newHandle(p *dbPool) *DBConn {
+	return &DBConn{driver: p.driver, dsn: p.dsn, pool: p}
 }
 
 // dsnPoolSize le ?pool_max=N sem reabrir o parser de DSN do driver: e um
@@ -77,7 +144,8 @@ func dsnPoolSize(dsn string) int {
 	return 0
 }
 
-// DBClose devolve todas as conexoes ociosas e impede novas aquisicoes.
+// DBClose fecha este handle e e idempotente. O pool so e fechado, com suas
+// conexoes ociosas, quando o ultimo handle que o divide for fechado.
 func DBClose(c *DBConn) Result[bool, string] {
 	if c == nil {
 		return Err[bool, string]("db-close received a connection that was never opened")
@@ -85,19 +153,33 @@ func DBClose(c *DBConn) Result[bool, string] {
 	if c.tx != nil {
 		return Err[bool, string]("db-close cannot be used on a transaction handle; the block commits or rolls back on its own")
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.closed {
+	if !c.closed.CompareAndSwap(false, true) {
 		return Ok[bool, string](true)
 	}
-	c.closed = true
+
+	p := c.pool
+	poolsMu.Lock()
+	p.refs--
+	if p.refs > 0 {
+		poolsMu.Unlock()
+		return Ok[bool, string](true)
+	}
+	if pools[p.key] == p {
+		delete(pools, p.key)
+	}
+	p.mu.Lock()
+	p.closed = true
+	idle := p.idle
+	p.idle = nil
+	p.mu.Unlock()
+	poolsMu.Unlock()
+
 	var failure error
-	for _, conn := range c.idle {
+	for _, conn := range idle {
 		if err := conn.Close(); err != nil && failure == nil {
 			failure = err
 		}
 	}
-	c.idle = nil
 	if failure != nil {
 		return Err[bool, string](failure.Error())
 	}
@@ -117,25 +199,31 @@ func (c *DBConn) acquire() (dbdrv.Conn, error) {
 		}
 		return c.tx, nil
 	}
-
-	c.sem <- struct{}{}
-	c.mu.Lock()
-	if c.closed {
-		c.mu.Unlock()
-		<-c.sem
+	if c.closed.Load() {
 		return nil, errors.New("connection is closed")
 	}
-	if n := len(c.idle); n > 0 {
-		conn := c.idle[n-1]
-		c.idle = c.idle[:n-1]
-		c.mu.Unlock()
+	return c.pool.acquire()
+}
+
+func (p *dbPool) acquire() (dbdrv.Conn, error) {
+	p.sem <- struct{}{}
+	p.mu.Lock()
+	if p.closed {
+		p.mu.Unlock()
+		<-p.sem
+		return nil, errors.New("connection is closed")
+	}
+	if n := len(p.idle); n > 0 {
+		conn := p.idle[n-1]
+		p.idle = p.idle[:n-1]
+		p.mu.Unlock()
 		return conn, nil
 	}
-	c.mu.Unlock()
+	p.mu.Unlock()
 
-	conn, err := dbdrv.Open(c.driver, c.dsn)
+	conn, err := dbdrv.Open(p.driver, p.dsn)
 	if err != nil {
-		<-c.sem
+		<-p.sem
 		return nil, err
 	}
 	return conn, nil
@@ -147,17 +235,21 @@ func (c *DBConn) release(conn dbdrv.Conn, err error) {
 	if c.tx != nil {
 		return
 	}
+	c.pool.release(conn, err)
+}
+
+func (p *dbPool) release(conn dbdrv.Conn, err error) {
 	broken := errors.Is(err, dbdrv.ErrConnLost)
-	c.mu.Lock()
-	if !broken && !c.closed && len(c.idle) < maxIdleConns {
-		c.idle = append(c.idle, conn)
-		c.mu.Unlock()
-		<-c.sem
+	p.mu.Lock()
+	if !broken && !p.closed && len(p.idle) < maxIdleConns {
+		p.idle = append(p.idle, conn)
+		p.mu.Unlock()
+		<-p.sem
 		return
 	}
-	c.mu.Unlock()
+	p.mu.Unlock()
 	_ = conn.Close()
-	<-c.sem
+	<-p.sem
 }
 
 // DBQuery executa a consulta e converte cada linha na struct T. O SQL e os
@@ -252,7 +344,7 @@ func DBBegin(c *DBConn) Result[*DBConn, string] {
 		c.release(conn, err)
 		return Err[*DBConn, string](err.Error())
 	}
-	return Ok[*DBConn, string](&DBConn{driver: c.driver, dsn: c.dsn, tx: conn, root: c})
+	return Ok[*DBConn, string](&DBConn{driver: c.driver, dsn: c.dsn, pool: c.pool, tx: conn})
 }
 
 // DBCommit confirma e devolve a conexao ao pool.
@@ -265,7 +357,7 @@ func DBCommit(tx *DBConn) Result[bool, string] {
 	}
 	tx.txDone = true
 	err := tx.tx.Commit()
-	tx.root.release(tx.tx, err)
+	tx.pool.release(tx.tx, err)
 	if err != nil {
 		return Err[bool, string](err.Error())
 	}
@@ -281,7 +373,7 @@ func DBRollback(tx *DBConn) {
 	}
 	tx.txDone = true
 	err := tx.tx.Rollback()
-	tx.root.release(tx.tx, err)
+	tx.pool.release(tx.tx, err)
 }
 
 // --- Redis ------------------------------------------------------------------

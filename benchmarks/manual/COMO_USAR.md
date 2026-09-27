@@ -38,6 +38,6 @@ O código é estritamente formatado em S-expressions (estilo Lisp/Clojure). Não
 6. **Validação:**
    Para validar sua solução, execute no terminal desta pasta:
    ```bash
-   ..\liafc.exe check solucao.liaf --json
+   ..\..\liafc.exe check solucao.liaf --json
    ```
    Se o compilador retornar erros no JSON, leia o campo `code` e `suggested_patch` e corrija o arquivo `solucao.liaf`.

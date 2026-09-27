@@ -1,5 +1,5 @@
 ;; issue: #023
-;; status: pending
+;; status: done
 ;; out: 4
 ;; out: aç
 (println (str-len "ação"))

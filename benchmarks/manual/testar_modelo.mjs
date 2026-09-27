@@ -14,7 +14,7 @@ function getApiKey() {
   if (process.env.GEMINI_API_KEY) return process.env.GEMINI_API_KEY;
   const envPaths = [
     path.join(__dirname, '.env'),
-    path.join(__dirname, '..', '.env')
+    path.join(__dirname, '..', '..', '.env')
   ];
   for (const envPath of envPaths) {
     if (fs.existsSync(envPath)) {
@@ -129,7 +129,7 @@ function extractLiafCode(rawText) {
 
 function checkLiaf() {
   try {
-    const output = execSync('..\\liafc.exe check solucao.liaf --json', {
+    const output = execSync('..\\..\\liafc.exe check solucao.liaf --json', {
       cwd: __dirname,
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe']

@@ -1,0 +1,15 @@
+;; issue: parser
+;; status: done
+;; out: {"sub":"ana","add":2,"return":"x","send":true}
+;; out: ana 2 x
+;; out: bia
+(module caso
+  (struct Estranho (fields (sub str) (add int) (return str) (send bool)))
+  (fn main (params) (returns void) (effects io)
+    (on-err e (println e))
+    (body
+      (let v Estranho (new Estranho "ana" 2 "x" true))
+      (println (try (json-encode v)))
+      (println (concat (field v sub) " " (str-from-int (field v add)) " " (field v return)))
+      (let w Estranho (try (json-decode "{\"sub\":\"bia\",\"add\":1,\"return\":\"\",\"send\":false}" Estranho)))
+      (println (call field w sub)))))

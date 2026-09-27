@@ -1,5 +1,5 @@
 ;; issue: #026
-;; status: pending
+;; status: done
 ;; effects: io env
 ;; out: ausente
 (match (env-get "LIAF_VARIAVEL_QUE_NAO_EXISTE") (ok v (println v)) (err e (println "ausente")))

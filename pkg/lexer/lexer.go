@@ -139,6 +139,20 @@ func (l *Lexer) readNumber() (string, bool, bool) {
 		l.readChar()
 	}
 
+	// Hexadecimal (0x... / 0X...)
+	if l.ch == '0' && (l.peekChar() == 'x' || l.peekChar() == 'X') {
+		l.readChar() // '0'
+		l.readChar() // 'x' ou 'X'
+		if !isHex(l.ch) {
+			l.addError(fmt.Sprintf("Número hexadecimal malformado em %d:%d", l.line, l.col))
+			return l.input[startPos:l.position], false, false
+		}
+		for isHex(l.ch) {
+			l.readChar()
+		}
+		return l.input[startPos:l.position], false, true
+	}
+
 	for isDigit(l.ch) {
 		l.readChar()
 	}
@@ -150,6 +164,22 @@ func (l *Lexer) readNumber() (string, bool, bool) {
 		}
 		isFloat = true
 		l.readChar()
+		for isDigit(l.ch) {
+			l.readChar()
+		}
+	}
+
+	// Notação científica (1e3, 2.5e-3, etc.)
+	if l.ch == 'e' || l.ch == 'E' {
+		isFloat = true
+		l.readChar()
+		if l.ch == '+' || l.ch == '-' {
+			l.readChar()
+		}
+		if !isDigit(l.ch) {
+			l.addError(fmt.Sprintf("Expoente científico malformado em %d:%d", l.line, l.col))
+			return l.input[startPos:l.position], false, false
+		}
 		for isDigit(l.ch) {
 			l.readChar()
 		}
@@ -232,7 +262,7 @@ func (l *Lexer) addError(msg string) {
 }
 
 func isLetter(ch rune) bool {
-	return ('a' <= ch && ch <= 'z') || ('A' <= ch && ch <= 'Z')
+	return ('a' <= ch && ch <= 'z') || ('A' <= ch && ch <= 'Z') || ch == '_'
 }
 
 func isDigit(ch rune) bool {

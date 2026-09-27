@@ -126,6 +126,18 @@ func LookupIdent(ident string) TokenType {
 	return IDENT
 }
 
+// IsName diz se o token pode ocupar uma posicao de nome de campo. Alem de
+// identificadores, aceita as palavras reservadas: o nome de um campo e so um
+// rotulo (e a chave no JSON), e formatos externos usam nomes como "sub" e
+// "return" que a LIAF reserva. true e false ficam de fora porque tem valor.
+func IsName(tok Token) bool {
+	if tok.Type == IDENT {
+		return true
+	}
+	kw, ok := keywords[tok.Literal]
+	return ok && kw == tok.Type && tok.Type != BOOL
+}
+
 // IsOperator verifica se o tipo de token é um operador do núcleo
 func IsOperator(tok TokenType) bool {
 	switch tok {

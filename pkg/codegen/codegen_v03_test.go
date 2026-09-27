@@ -7,6 +7,7 @@ import (
 	"io"
 	"liaf/pkg/checker"
 	"liaf/pkg/lexer"
+	"liaf/pkg/loader"
 	"liaf/pkg/parser"
 	"net"
 	"net/http"
@@ -24,14 +25,11 @@ func generateExample(t *testing.T, name string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile(filepath.Join(root, "examples", name+".liaf"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	p := parser.New(lexer.New(string(data)), name)
-	mod := p.ParseModule()
-	if len(p.Diagnostics) > 0 {
-		t.Fatalf("parse: %+v", p.Diagnostics)
+	// Pelo loader, como o liafc faz: exemplos podem usar (import ...),
+	// inclusive da biblioteca padrao embutida.
+	mod, diags := loader.Load(filepath.Join(root, "examples", name+".liaf"))
+	if len(diags) > 0 {
+		t.Fatalf("load: %+v", diags)
 	}
 	if _, diags := checker.Check(mod, name); len(diags) > 0 {
 		t.Fatalf("check: %+v", diags)

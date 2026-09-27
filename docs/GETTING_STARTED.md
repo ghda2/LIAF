@@ -57,9 +57,11 @@ lugar de `match` aninhado, e rotas declarativas com parâmetros já tipados.
 
 ### Iniciar Web Engine com SSG dinâmico
 ```bash
-./liafc run examples/web_engine.liaf
+cd examples && ../liafc run web_engine.liaf   # serve ./public (examples/public/)
 ```
 Acesse `http://localhost:8080` no navegador.
+
+Para escutar só na sua máquina (e evitar o aviso do firewall do Windows a cada build novo), defina `LIAF_HOST=127.0.0.1` antes de rodar. No PowerShell: `$env:LIAF_HOST="127.0.0.1"`.
 
 ---
 

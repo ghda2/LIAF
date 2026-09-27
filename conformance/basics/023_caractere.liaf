@@ -1,5 +1,5 @@
 ;; issue: #023
-;; status: pending
+;; status: done
 ;; out: ç
 ;; out: erro
 (match (str-get "ação" 1) (ok v (println v)) (err e (println e)))

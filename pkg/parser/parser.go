@@ -178,23 +178,29 @@ func (p *Parser) parseStruct() *ast.StructDecl {
 	name := p.curToken.Literal
 	p.nextToken()
 
-	if !p.expectCur(token.LPAREN) {
-		return nil
-	}
-	if !p.expectCur(token.FIELDS) {
-		return nil
-	}
-
 	var fields []ast.Field
-	for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
-		f := p.parseField()
-		if f != nil {
-			fields = append(fields, *f)
+
+	if p.curTokenIs(token.LPAREN) && p.peekTokenIs(token.FIELDS) {
+		p.nextToken() // consome '('
+		p.nextToken() // consome 'fields'
+		for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+			f := p.parseField()
+			if f != nil {
+				fields = append(fields, *f)
+			}
+		}
+		if !p.expectCur(token.RPAREN) {
+			return nil
+		}
+	} else {
+		for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+			f := p.parseField()
+			if f != nil {
+				fields = append(fields, *f)
+			}
 		}
 	}
-	if !p.expectCur(token.RPAREN) {
-		return nil
-	}
+
 	if !p.expectCur(token.RPAREN) {
 		return nil
 	}
@@ -207,7 +213,7 @@ func (p *Parser) parseField() *ast.Field {
 		return nil
 	}
 	line, col := p.curToken.Line, p.curToken.Col
-	if !p.curTokenIs(token.IDENT) {
+	if !token.IsName(p.curToken) {
 		p.addError("Esperado nome do campo da struct", "E_EXPECTED_FIELD_NAME")
 		return nil
 	}
@@ -264,7 +270,32 @@ func (p *Parser) parseFunc() *ast.FuncDecl {
 		}
 	}
 
-	body := p.parseBody()
+	var body []ast.Stmt
+	if p.curTokenIs(token.LPAREN) && p.peekTokenIs(token.BODY) {
+		body = p.parseBody()
+	} else {
+		for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+			stmt := p.parseStatement()
+			if stmt != nil {
+				body = append(body, stmt)
+			}
+		}
+	}
+
+	// Implicit return: se a função não retorna void e o último statement for uma expressão (ExprStmt)
+	if retType != nil {
+		if prim, ok := retType.(*ast.PrimitiveType); !ok || prim.Name != "void" {
+			if len(body) > 0 {
+				if es, ok := body[len(body)-1].(*ast.ExprStmt); ok {
+					body[len(body)-1] = &ast.ReturnStmt{
+						Value: es.Expr,
+						Line:  es.Line,
+						Col:   es.Col,
+					}
+				}
+			}
+		}
+	}
 
 	if !p.expectCur(token.RPAREN) {
 		return nil
@@ -329,7 +360,32 @@ func (p *Parser) parseRoute() *ast.RouteDecl {
 		}
 	}
 
-	body := p.parseBody()
+	var body []ast.Stmt
+	if p.curTokenIs(token.LPAREN) && p.peekTokenIs(token.BODY) {
+		body = p.parseBody()
+	} else {
+		for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+			stmt := p.parseStatement()
+			if stmt != nil {
+				body = append(body, stmt)
+			}
+		}
+	}
+
+	// Implicit return para rotas não-void
+	if retType != nil {
+		if prim, ok := retType.(*ast.PrimitiveType); !ok || prim.Name != "void" {
+			if len(body) > 0 {
+				if es, ok := body[len(body)-1].(*ast.ExprStmt); ok {
+					body[len(body)-1] = &ast.ReturnStmt{
+						Value: es.Expr,
+						Line:  es.Line,
+						Col:   es.Col,
+					}
+				}
+			}
+		}
+	}
 
 	if !p.expectCur(token.RPAREN) {
 		return nil
@@ -353,59 +409,83 @@ func (p *Parser) parseParams() []ast.Param {
 	if !p.expectCur(token.LPAREN) {
 		return nil
 	}
-	if !p.expectCur(token.PARAMS) {
-		return nil
-	}
 
 	var params []ast.Param
-	for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
-		if !p.expectCur(token.LPAREN) {
-			break
-		}
-		pLine, pCol := p.curToken.Line, p.curToken.Col
-		if !p.curTokenIs(token.IDENT) {
-			p.addError("Esperado nome do parâmetro", "E_EXPECTED_PARAM_NAME")
-			break
-		}
-		pName := p.curToken.Literal
-		p.nextToken()
 
-		pType := p.parseType()
-		if pType == nil {
-			break
+	// Caso 1: (params ...) ou (params)
+	if p.curTokenIs(token.PARAMS) {
+		p.nextToken() // consome 'params'
+		for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+			param := p.parseSingleParam()
+			if param != nil {
+				params = append(params, *param)
+			} else {
+				break
+			}
 		}
-
-		if !p.expectCur(token.RPAREN) {
-			break
-		}
-		params = append(params, ast.Param{Name: pName, Type: pType, Line: pLine, Col: pCol})
+		p.expectCur(token.RPAREN)
+		return params
 	}
 
+	// Caso 2: () - lista vazia compacta
+	if p.curTokenIs(token.RPAREN) {
+		p.nextToken() // consome ')'
+		return params
+	}
+
+	// Caso 3: ((id int) (name str)) - lista compacta com parâmetros
+	for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+		param := p.parseSingleParam()
+		if param != nil {
+			params = append(params, *param)
+		} else {
+			break
+		}
+	}
 	p.expectCur(token.RPAREN)
 	return params
 }
 
-func (p *Parser) parseReturns() ast.Type {
+func (p *Parser) parseSingleParam() *ast.Param {
 	if !p.expectCur(token.LPAREN) {
 		return nil
 	}
-	if !p.expectCur(token.RETURNS) {
+	pLine, pCol := p.curToken.Line, p.curToken.Col
+	if !p.curTokenIs(token.IDENT) {
+		p.addError("Esperado nome do parâmetro", "E_EXPECTED_PARAM_NAME")
+		return nil
+	}
+	pName := p.curToken.Literal
+	p.nextToken()
+
+	pType := p.parseType()
+	if pType == nil {
 		return nil
 	}
 
-	retType := p.parseType()
+	if !p.expectCur(token.RPAREN) {
+		return nil
+	}
+	return &ast.Param{Name: pName, Type: pType, Line: pLine, Col: pCol}
+}
 
-	p.expectCur(token.RPAREN)
-	return retType
+func (p *Parser) parseReturns() ast.Type {
+	if p.curTokenIs(token.LPAREN) && p.peekTokenIs(token.RETURNS) {
+		p.nextToken() // consome '('
+		p.nextToken() // consome 'returns'
+		retType := p.parseType()
+		p.expectCur(token.RPAREN)
+		return retType
+	}
+	return p.parseType()
 }
 
 func (p *Parser) parseEffects() []string {
-	if !p.expectCur(token.LPAREN) {
+	if !p.curTokenIs(token.LPAREN) || !p.peekTokenIs(token.EFFECTS) {
 		return nil
 	}
-	if !p.expectCur(token.EFFECTS) {
-		return nil
-	}
+	p.nextToken() // consome '('
+	p.nextToken() // consome 'effects'
 
 	var effects []string
 	for p.curTokenIs(token.IDENT) || p.curTokenIs(token.SPAWN) {
@@ -438,10 +518,10 @@ func (p *Parser) parseBody() []ast.Stmt {
 }
 
 func (p *Parser) parseStatement() ast.Stmt {
+	line, col := p.curToken.Line, p.curToken.Col
 	if !p.expectCur(token.LPAREN) {
 		return nil
 	}
-	line, col := p.curToken.Line, p.curToken.Col
 
 	switch p.curToken.Type {
 	case token.WHILE, token.FOR_RANGE, token.FOR_EACH:
@@ -510,6 +590,23 @@ func (p *Parser) parseStatement() ast.Stmt {
 		}
 		return &ast.ExprStmt{Expr: &ast.CallExpr{Func: fnName, Args: args, HasCall: false, Line: line, Col: col}, Line: line, Col: col}
 	default:
+		if token.IsOperator(p.curToken.Type) {
+			op := p.curToken.Literal
+			p.nextToken()
+			left := p.parseExpression()
+			right := p.parseExpression()
+			var cur ast.Expr = &ast.BinaryOpExpr{Op: op, Left: left, Right: right, Line: line, Col: col}
+			if op == "add" || op == "mul" || op == "and" || op == "or" {
+				for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+					next := p.parseExpression()
+					cur = &ast.BinaryOpExpr{Op: op, Left: cur, Right: next, Line: line, Col: col}
+				}
+			}
+			if !p.expectCur(token.RPAREN) {
+				return nil
+			}
+			return &ast.ExprStmt{Expr: cur, Line: line, Col: col}
+		}
 		p.addError(fmt.Sprintf("Comando desconhecido: %q", p.curToken.Literal), "E_UNKNOWN_STATEMENT")
 		return nil
 	}
@@ -525,14 +622,33 @@ func (p *Parser) parseLetStmt(line, col int) *ast.LetStmt {
 	name := p.curToken.Literal
 	p.nextToken()
 
-	varType := p.parseType()
-	if varType == nil {
-		return nil
+	var varType ast.Type
+	var val ast.Expr
+
+	hasExplicitType := false
+	if p.curTokenIs(token.IDENT) && !p.peekTokenIs(token.RPAREN) {
+		hasExplicitType = true
+	} else if p.curTokenIs(token.LPAREN) {
+		switch p.peekToken.Literal {
+		case "chan", "list", "map", "option", "result":
+			hasExplicitType = true
+		}
 	}
 
-	val := p.parseExpression()
-	if val == nil {
-		return nil
+	if hasExplicitType {
+		varType = p.parseType()
+		if varType == nil {
+			return nil
+		}
+		val = p.parseExpression()
+		if val == nil {
+			return nil
+		}
+	} else {
+		val = p.parseExpression()
+		if val == nil {
+			return nil
+		}
 	}
 
 	if !p.expectCur(token.RPAREN) {
@@ -579,7 +695,7 @@ func (p *Parser) parseReturnStmt(line, col int) *ast.ReturnStmt {
 	return &ast.ReturnStmt{Value: val, Line: line, Col: col}
 }
 
-func (p *Parser) parseIfStmt(line, col int) *ast.IfStmt {
+func (p *Parser) parseIfStmt(line, col int) ast.Stmt {
 	p.nextToken()
 
 	cond := p.parseExpression()
@@ -592,6 +708,36 @@ func (p *Parser) parseIfStmt(line, col int) *ast.IfStmt {
 	}
 	if !p.expectCur(token.THEN) {
 		return nil
+	}
+
+	if !p.curTokenIs(token.LPAREN) {
+		thenExpr := p.parseExpression()
+		if !p.expectCur(token.RPAREN) {
+			return nil
+		}
+		var elseExpr ast.Expr
+		if p.curTokenIs(token.LPAREN) && p.peekTokenIs(token.ELSE) {
+			p.nextToken()
+			p.nextToken()
+			elseExpr = p.parseExpression()
+			if !p.expectCur(token.RPAREN) {
+				return nil
+			}
+		}
+		if !p.expectCur(token.RPAREN) {
+			return nil
+		}
+		return &ast.ExprStmt{
+			Expr: &ast.IfExpr{
+				Condition: cond,
+				Then:      thenExpr,
+				Else:      elseExpr,
+				Line:      line,
+				Col:       col,
+			},
+			Line: line,
+			Col:  col,
+		}
 	}
 
 	var thenStmts []ast.Stmt
@@ -628,6 +774,48 @@ func (p *Parser) parseIfStmt(line, col int) *ast.IfStmt {
 		Condition: cond,
 		Then:      thenStmts,
 		Else:      elseStmts,
+		Line:      line,
+		Col:       col,
+	}
+}
+
+func (p *Parser) parseIfExpr(line, col int) *ast.IfExpr {
+	p.nextToken()
+
+	cond := p.parseExpression()
+	if cond == nil {
+		return nil
+	}
+
+	if !p.expectCur(token.LPAREN) {
+		return nil
+	}
+	if !p.expectCur(token.THEN) {
+		return nil
+	}
+	thenExpr := p.parseExpression()
+	if !p.expectCur(token.RPAREN) {
+		return nil
+	}
+
+	var elseExpr ast.Expr
+	if p.curTokenIs(token.LPAREN) && p.peekTokenIs(token.ELSE) {
+		p.nextToken()
+		p.nextToken()
+		elseExpr = p.parseExpression()
+		if !p.expectCur(token.RPAREN) {
+			return nil
+		}
+	}
+
+	if !p.expectCur(token.RPAREN) {
+		return nil
+	}
+
+	return &ast.IfExpr{
+		Condition: cond,
+		Then:      thenExpr,
+		Else:      elseExpr,
 		Line:      line,
 		Col:       col,
 	}
@@ -683,7 +871,7 @@ func (p *Parser) parseExpression() ast.Expr {
 
 	switch p.curToken.Type {
 	case token.INT:
-		val, err := strconv.ParseInt(p.curToken.Literal, 10, 64)
+		val, err := strconv.ParseInt(p.curToken.Literal, 0, 64)
 		if err != nil {
 			p.addError("Inteiro fora do intervalo int64", "E_INVALID_NUMBER")
 		}
@@ -729,13 +917,7 @@ func (p *Parser) parseExpression() ast.Expr {
 			fnName := p.curToken.Literal
 			p.nextToken()
 
-			var args []ast.Expr
-			for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
-				arg := p.parseExpression()
-				if arg != nil {
-					args = append(args, arg)
-				}
-			}
+			args := p.parseCallArgs(fnName)
 			if !p.expectCur(token.RPAREN) {
 				return nil
 			}
@@ -758,10 +940,19 @@ func (p *Parser) parseExpression() ast.Expr {
 			left := p.parseExpression()
 			right := p.parseExpression()
 
+			var cur ast.Expr = &ast.BinaryOpExpr{Op: op, Left: left, Right: right, Line: innerLine, Col: innerCol}
+
+			if op == "add" || op == "mul" || op == "and" || op == "or" {
+				for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+					next := p.parseExpression()
+					cur = &ast.BinaryOpExpr{Op: op, Left: cur, Right: next, Line: innerLine, Col: innerCol}
+				}
+			}
+
 			if !p.expectCur(token.RPAREN) {
 				return nil
 			}
-			return &ast.BinaryOpExpr{Op: op, Left: left, Right: right, Line: innerLine, Col: innerCol}
+			return cur
 		}
 
 		if p.curTokenIs(token.RECV) {
@@ -773,18 +964,20 @@ func (p *Parser) parseExpression() ast.Expr {
 			return &ast.RecvExpr{Channel: ch, Line: innerLine, Col: innerCol}
 		}
 
+		if p.curTokenIs(token.IF) {
+			return p.parseIfExpr(innerLine, innerCol)
+		}
+
+		if p.curTokenIs(token.MATCH) {
+			return p.parseMatchExpr(innerLine, innerCol)
+		}
+
 		// Chamada direta de função: (fn-name arg1 arg2 ...)
 		if p.curTokenIs(token.IDENT) {
 			fnName := p.curToken.Literal
 			p.nextToken()
 
-			var args []ast.Expr
-			for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
-				arg := p.parseExpression()
-				if arg != nil {
-					args = append(args, arg)
-				}
-			}
+			args := p.parseCallArgs(fnName)
 			if !p.expectCur(token.RPAREN) {
 				return nil
 			}
@@ -798,6 +991,25 @@ func (p *Parser) parseExpression() ast.Expr {
 		p.addError(fmt.Sprintf("Token inesperado ao iniciar expressão: %q", p.curToken.Literal), "E_UNEXPECTED_TOKEN")
 		return nil
 	}
+}
+
+// parseCallArgs le os argumentos ate o ')'. O segundo argumento de field e
+// um nome de campo, nao uma expressao: aceita palavras reservadas, para que
+// (field claims sub) leia o campo declarado como (sub str).
+func (p *Parser) parseCallArgs(fnName string) []ast.Expr {
+	var args []ast.Expr
+	for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+		if fnName == "field" && len(args) == 1 && token.IsName(p.curToken) {
+			args = append(args, &ast.IdentExpr{Name: p.curToken.Literal, Line: p.curToken.Line, Col: p.curToken.Col})
+			p.nextToken()
+			continue
+		}
+		arg := p.parseExpression()
+		if arg != nil {
+			args = append(args, arg)
+		}
+	}
+	return args
 }
 
 func (p *Parser) parseType() ast.Type {
@@ -821,6 +1033,13 @@ func (p *Parser) parseType() ast.Type {
 			return nil
 		}
 		constructor := p.curToken.Literal
+		switch constructor {
+		case "chan", "list", "map", "option", "result":
+			// valido
+		default:
+			p.addError(fmt.Sprintf("Construtor de tipo desconhecido %q. Esperado chan, list, map, option ou result", constructor), "E_INVALID_TYPE_CONSTRUCTOR")
+			return nil
+		}
 		p.nextToken()
 
 		var args []ast.Type

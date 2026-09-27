@@ -3,6 +3,7 @@ package web
 import (
 	"fmt"
 
+	"net"
 	"net/http"
 	"os"
 	"path"
@@ -247,7 +248,17 @@ func (s *Server) Start() error {
 
 	// Modo HTTP Local / Standard
 	fmt.Printf("🚀 [LIAF Web Engine] Rodando em http://localhost%s\n", port)
-	return http.ListenAndServe(port, s)
+	return http.ListenAndServe(ListenAddr(port), s)
+}
+
+// ListenAddr monta o endereco de escuta das portas HTTP comuns. Sem
+// LIAF_HOST, escuta em todas as interfaces, como sempre. LIAF_HOST=127.0.0.1
+// restringe ao loopback: serve para testes e desenvolvimento local (no
+// Windows, escutar so no loopback nao dispara o aviso do firewall) e para
+// rodar atras de um proxy reverso na mesma maquina. As portas 80 e 443 do
+// Auto-TLS nao passam por aqui: existem para receber trafego publico.
+func ListenAddr(port string) string {
+	return net.JoinHostPort(strings.TrimSpace(os.Getenv("LIAF_HOST")), strings.TrimPrefix(port, ":"))
 }
 
 // ServeSite is the high-level entrypoint exposed to LIAF programs.

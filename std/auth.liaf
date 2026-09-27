@@ -1,0 +1,23 @@
+;; std/auth - autenticacao por header HTTP.
+;;
+;;   (import "std/auth")
+;;   (let token str (try (auth-bearer-token req)))
+;;
+;; Os nomes publicos comecam com "auth-" porque o import mescla tudo num
+;; espaco unico: o prefixo evita colidir com as funcoes do programa.
+(module auth
+  ;; Le "Authorization: Bearer <token>". Ausente, com outro esquema (Basic)
+  ;; ou com o token vazio, devolve (err ...) com o motivo.
+  (fn auth-bearer-token (params (req Request)) (returns (result str str)) (effects)
+    (body
+      (let header str "")
+      (match (request-header req "Authorization")
+        (ok h (set header h))
+        (err e (return (err "missing Authorization header"))))
+      (if (not (str-starts-with header "Bearer "))
+        (then (return (err "expected Authorization: Bearer <token>"))))
+      (let token str (str-trim (try (str-slice header 7 (str-len header)))))
+      (if (str-eq token "")
+        (then (return (err "empty bearer token"))))
+      (return (ok token))))
+)

@@ -19,9 +19,9 @@
 
   (fn inserir-cliente (params (db DBConnection) (cliente NovoCliente)) (returns (result bool str)) (effects db)
     (body
-      (let id (field cliente id))
-      (let nome (field cliente nome))
-      (let email (field cliente email))
+      (let id int (field cliente id))
+      (let nome str (field cliente nome))
+      (let email str (field cliente email))
       (try (db-exec db "INSERT INTO clientes (id, nome, email, ativo) VALUES ($1, $2, $3, $4)" id nome email true))
       (return (ok true))))
 
@@ -42,17 +42,6 @@
           (println "Conectado ao banco")
           (match (inicializar-banco db)
             (ok r (println "Banco inicializado"))
-            (err msg (println msg))))
-          (match (inserir-cliente db (new NovoCliente 1 "João" "joao@example.com"))
-            (ok r (println "Cliente inserido"))
-            (err msg (println msg))))
-          (match (listar-clientes db)
-            (ok clientes
-              (for-each cliente clientes
-                (println (concat "ID: " (str-from-int (field cliente id)) " Nome: " (field cliente nome)))))
-            (err msg (println msg))))
-          (match (desativar-cliente db 1)
-            (ok r (println "Cliente desativado"))
             (err msg (println msg))))
         (err msg
           (println (concat "Erro de conexão: " msg))))))

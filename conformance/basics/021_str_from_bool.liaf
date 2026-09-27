@@ -1,4 +1,4 @@
 ;; issue: #021
-;; status: pending
+;; status: done
 ;; out: true
 (println (str-from-bool true))

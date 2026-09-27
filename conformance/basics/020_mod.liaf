@@ -1,6 +1,6 @@
 ;; issue: #020
-;; status: pending
+;; status: done
 ;; out: 1
 ;; out: -1
-(println (mod 7 3))
-(println (mod -7 3))
+(match (mod 7 3) (ok v (println v)) (err e (println e)))
+(match (mod -7 3) (ok v (println v)) (err e (println e)))

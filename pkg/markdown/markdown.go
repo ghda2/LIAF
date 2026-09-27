@@ -61,140 +61,128 @@ func parseFrontmatter(raw string, target map[string]string) {
 	}
 }
 
+type markdownRenderer struct {
+	buf            bytes.Buffer
+	inCodeBlock    bool
+	codeBlockLang  string
+	codeBlockLines []string
+	inList         bool
+	inBlockquote   bool
+	paraLines      []string
+}
+
+func (r *markdownRenderer) flushPara() {
+	if len(r.paraLines) > 0 {
+		text := strings.Join(r.paraLines, " ")
+		text = processInlines(text)
+		r.buf.WriteString(fmt.Sprintf("<p>%s</p>\n", text))
+		r.paraLines = nil
+	}
+}
+
+func (r *markdownRenderer) flushList() {
+	if r.inList {
+		r.buf.WriteString("</ul>\n")
+		r.inList = false
+	}
+}
+
+func (r *markdownRenderer) flushBlockquote() {
+	if r.inBlockquote {
+		r.buf.WriteString("</blockquote>\n")
+		r.inBlockquote = false
+	}
+}
+
+func (r *markdownRenderer) flushAll() {
+	r.flushPara()
+	r.flushList()
+	r.flushBlockquote()
+}
+
+func (r *markdownRenderer) handleCodeFence(line string) {
+	r.flushAll()
+	if !r.inCodeBlock {
+		r.inCodeBlock = true
+		r.codeBlockLang = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "```"))
+		r.codeBlockLines = nil
+	} else {
+		r.inCodeBlock = false
+		codeContent := html.EscapeString(strings.Join(r.codeBlockLines, "\n"))
+		if r.codeBlockLang != "" {
+			r.buf.WriteString(fmt.Sprintf("<pre><code class=\"language-%s\">%s</code></pre>\n", r.codeBlockLang, codeContent))
+		} else {
+			r.buf.WriteString(fmt.Sprintf("<pre><code>%s</code></pre>\n", codeContent))
+		}
+	}
+}
+
+func (r *markdownRenderer) processLine(line string) {
+	if strings.HasPrefix(strings.TrimSpace(line), "```") {
+		r.handleCodeFence(line)
+		return
+	}
+	if r.inCodeBlock {
+		r.codeBlockLines = append(r.codeBlockLines, line)
+		return
+	}
+
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		r.flushAll()
+		return
+	}
+
+	if hMatch := headerRegex.FindStringSubmatch(trimmed); len(hMatch) == 3 {
+		r.flushAll()
+		level := len(hMatch[1])
+		title := processInlines(hMatch[2])
+		r.buf.WriteString(fmt.Sprintf("<h%d>%s</h%d>\n", level, title, level))
+		return
+	}
+
+	if trimmed == "---" || trimmed == "***" || trimmed == "___" {
+		r.flushAll()
+		r.buf.WriteString("<hr />\n")
+		return
+	}
+
+	if strings.HasPrefix(trimmed, ">") {
+		r.flushPara()
+		r.flushList()
+		quoteContent := strings.TrimSpace(strings.TrimPrefix(trimmed, ">"))
+		if !r.inBlockquote {
+			r.buf.WriteString("<blockquote>\n")
+			r.inBlockquote = true
+		}
+		r.buf.WriteString(fmt.Sprintf("<p>%s</p>\n", processInlines(quoteContent)))
+		return
+	}
+	r.flushBlockquote()
+
+	if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") {
+		r.flushPara()
+		itemContent := strings.TrimSpace(trimmed[2:])
+		if !r.inList {
+			r.buf.WriteString("<ul>\n")
+			r.inList = true
+		}
+		r.buf.WriteString(fmt.Sprintf("<li>%s</li>\n", processInlines(itemContent)))
+		return
+	}
+	r.flushList()
+
+	r.paraLines = append(r.paraLines, trimmed)
+}
+
 // RenderHTML converte Markdown padrão para HTML semanticamente limpo.
 func RenderHTML(md string) string {
-	var buf bytes.Buffer
-	lines := strings.Split(md, "\n")
-
-	inCodeBlock := false
-	codeBlockLang := ""
-	var codeBlockLines []string
-
-	inList := false
-	inBlockquote := false
-	var paraLines []string
-
-	flushPara := func() {
-		if len(paraLines) > 0 {
-			text := strings.Join(paraLines, " ")
-			text = processInlines(text)
-			buf.WriteString(fmt.Sprintf("<p>%s</p>\n", text))
-			paraLines = nil
-		}
+	r := &markdownRenderer{}
+	for _, rawLine := range strings.Split(md, "\n") {
+		r.processLine(strings.TrimRight(rawLine, "\r"))
 	}
-
-	flushList := func() {
-		if inList {
-			buf.WriteString("</ul>\n")
-			inList = false
-		}
-	}
-
-	flushBlockquote := func() {
-		if inBlockquote {
-			buf.WriteString("</blockquote>\n")
-			inBlockquote = false
-		}
-	}
-
-	for _, rawLine := range lines {
-		line := strings.TrimRight(rawLine, "\r")
-
-		// Blocos de código ```
-		if strings.HasPrefix(strings.TrimSpace(line), "```") {
-			flushPara()
-			flushList()
-			flushBlockquote()
-
-			if !inCodeBlock {
-				inCodeBlock = true
-				codeBlockLang = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "```"))
-				codeBlockLines = nil
-			} else {
-				inCodeBlock = false
-				codeContent := html.EscapeString(strings.Join(codeBlockLines, "\n"))
-				if codeBlockLang != "" {
-					buf.WriteString(fmt.Sprintf("<pre><code class=\"language-%s\">%s</code></pre>\n", codeBlockLang, codeContent))
-				} else {
-					buf.WriteString(fmt.Sprintf("<pre><code>%s</code></pre>\n", codeContent))
-				}
-			}
-			continue
-		}
-
-		if inCodeBlock {
-			codeBlockLines = append(codeBlockLines, line)
-			continue
-		}
-
-		trimmed := strings.TrimSpace(line)
-
-		// Linha em branco
-		if trimmed == "" {
-			flushPara()
-			flushList()
-			flushBlockquote()
-			continue
-		}
-
-		// Headings (# Título)
-		if hMatch := headerRegex.FindStringSubmatch(trimmed); len(hMatch) == 3 {
-			flushPara()
-			flushList()
-			flushBlockquote()
-			level := len(hMatch[1])
-			title := processInlines(hMatch[2])
-			buf.WriteString(fmt.Sprintf("<h%d>%s</h%d>\n", level, title, level))
-			continue
-		}
-
-		// Horizontal Rule (--- ou ***)
-		if trimmed == "---" || trimmed == "***" || trimmed == "___" {
-			flushPara()
-			flushList()
-			flushBlockquote()
-			buf.WriteString("<hr />\n")
-			continue
-		}
-
-		// Blockquotes (> citação)
-		if strings.HasPrefix(trimmed, ">") {
-			flushPara()
-			flushList()
-			quoteContent := strings.TrimSpace(strings.TrimPrefix(trimmed, ">"))
-			if !inBlockquote {
-				buf.WriteString("<blockquote>\n")
-				inBlockquote = true
-			}
-			buf.WriteString(fmt.Sprintf("<p>%s</p>\n", processInlines(quoteContent)))
-			continue
-		} else {
-			flushBlockquote()
-		}
-
-		// Unordered List (- item ou * item)
-		if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") {
-			flushPara()
-			itemContent := strings.TrimSpace(trimmed[2:])
-			if !inList {
-				buf.WriteString("<ul>\n")
-				inList = true
-			}
-			buf.WriteString(fmt.Sprintf("<li>%s</li>\n", processInlines(itemContent)))
-			continue
-		} else {
-			flushList()
-		}
-
-		// Parágrafos normais
-		paraLines = append(paraLines, trimmed)
-	}
-
-	flushPara()
-	flushList()
-	flushBlockquote()
-
-	return strings.TrimSpace(buf.String())
+	r.flushAll()
+	return strings.TrimSpace(r.buf.String())
 }
 
 func processInlines(text string) string {

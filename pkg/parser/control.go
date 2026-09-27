@@ -110,97 +110,106 @@ func (p *Parser) parseMatch(line, col int) ast.Stmt {
 	b1 := p.curToken.Literal
 	p.nextToken()
 
-	if b1 == "some" {
-		okName := p.identifier()
-		if !p.curTokenIs(token.LPAREN) && !p.curTokenIs(token.RPAREN) {
-			okExpr := p.parseExpression()
-			p.expectCur(token.RPAREN)
-			p.expectCur(token.LPAREN)
-			if p.curToken.Literal != "none" {
-				p.addError("match de option exige ramo none", "E_NONEXHAUSTIVE_MATCH")
-			}
-			p.nextToken()
-			var errName string
-			if p.curTokenIs(token.IDENT) {
-				errName = p.curToken.Literal
-				p.nextToken()
-			}
-			errExpr := p.parseExpression()
-			p.expectCur(token.RPAREN)
-			p.expectCur(token.RPAREN)
-			return &ast.ExprStmt{
-				Expr: &ast.MatchExpr{
-					Value:    val,
-					OKName:   okName,
-					OK:       okExpr,
-					ErrName:  errName,
-					Err:      errExpr,
-					IsOption: true,
-					Line:     line,
-					Col:      col,
-				},
-				Line: line,
-				Col:  col,
-			}
-		}
+	switch b1 {
+	case "some":
+		return p.parseMatchSome(line, col, val)
+	case "ok":
+		return p.parseMatchOk(line, col, val)
+	default:
+		p.addError(fmt.Sprintf("match exige ramos ok/err ou some/none, mas obteve %s", b1), "E_NONEXHAUSTIVE_MATCH")
+		return nil
+	}
+}
 
-		s := &ast.MatchStmt{Value: val, IsOption: true, OKName: okName, Line: line, Col: col}
-		s.OK = p.statements()
+func (p *Parser) parseMatchSome(line, col int, val ast.Expr) ast.Stmt {
+	okName := p.identifier()
+	if !p.curTokenIs(token.LPAREN) && !p.curTokenIs(token.RPAREN) {
+		okExpr := p.parseExpression()
+		p.expectCur(token.RPAREN)
 		p.expectCur(token.LPAREN)
 		if p.curToken.Literal != "none" {
 			p.addError("match de option exige ramo none", "E_NONEXHAUSTIVE_MATCH")
 		}
 		p.nextToken()
+		var errName string
 		if p.curTokenIs(token.IDENT) {
-			s.ErrName = p.curToken.Literal
+			errName = p.curToken.Literal
 			p.nextToken()
 		}
-		s.Err = p.statements()
+		errExpr := p.parseExpression()
 		p.expectCur(token.RPAREN)
-		return s
-	} else if b1 == "ok" {
-		okName := p.identifier()
-		if !p.curTokenIs(token.LPAREN) && !p.curTokenIs(token.RPAREN) {
-			okExpr := p.parseExpression()
-			p.expectCur(token.RPAREN)
-			p.expectCur(token.LPAREN)
-			if p.curToken.Literal != "err" {
-				p.addError("match exige ramos ok e err, nessa ordem", "E_NONEXHAUSTIVE_MATCH")
-			}
-			p.nextToken()
-			errName := p.identifier()
-			errExpr := p.parseExpression()
-			p.expectCur(token.RPAREN)
-			p.expectCur(token.RPAREN)
-			return &ast.ExprStmt{
-				Expr: &ast.MatchExpr{
-					Value:    val,
-					OKName:   okName,
-					OK:       okExpr,
-					ErrName:  errName,
-					Err:      errExpr,
-					IsOption: false,
-					Line:     line,
-					Col:      col,
-				},
-				Line: line,
-				Col:  col,
-			}
+		p.expectCur(token.RPAREN)
+		return &ast.ExprStmt{
+			Expr: &ast.MatchExpr{
+				Value:    val,
+				OKName:   okName,
+				OK:       okExpr,
+				ErrName:  errName,
+				Err:      errExpr,
+				IsOption: true,
+				Line:     line,
+				Col:      col,
+			},
+			Line: line,
+			Col:  col,
 		}
+	}
 
-		s := &ast.MatchStmt{Value: val, OKName: okName, Line: line, Col: col}
-		s.OK = p.statements()
+	s := &ast.MatchStmt{Value: val, IsOption: true, OKName: okName, Line: line, Col: col}
+	s.OK = p.statements()
+	p.expectCur(token.LPAREN)
+	if p.curToken.Literal != "none" {
+		p.addError("match de option exige ramo none", "E_NONEXHAUSTIVE_MATCH")
+	}
+	p.nextToken()
+	if p.curTokenIs(token.IDENT) {
+		s.ErrName = p.curToken.Literal
+		p.nextToken()
+	}
+	s.Err = p.statements()
+	p.expectCur(token.RPAREN)
+	return s
+}
+
+func (p *Parser) parseMatchOk(line, col int, val ast.Expr) ast.Stmt {
+	okName := p.identifier()
+	if !p.curTokenIs(token.LPAREN) && !p.curTokenIs(token.RPAREN) {
+		okExpr := p.parseExpression()
+		p.expectCur(token.RPAREN)
 		p.expectCur(token.LPAREN)
 		if p.curToken.Literal != "err" {
 			p.addError("match exige ramos ok e err, nessa ordem", "E_NONEXHAUSTIVE_MATCH")
 		}
 		p.nextToken()
-		s.ErrName = p.identifier()
-		s.Err = p.statements()
+		errName := p.identifier()
+		errExpr := p.parseExpression()
 		p.expectCur(token.RPAREN)
-		return s
-	} else {
-		p.addError(fmt.Sprintf("match exige ramos ok/err ou some/none, mas obteve %s", b1), "E_NONEXHAUSTIVE_MATCH")
-		return nil
+		p.expectCur(token.RPAREN)
+		return &ast.ExprStmt{
+			Expr: &ast.MatchExpr{
+				Value:    val,
+				OKName:   okName,
+				OK:       okExpr,
+				ErrName:  errName,
+				Err:      errExpr,
+				IsOption: false,
+				Line:     line,
+				Col:      col,
+			},
+			Line: line,
+			Col:  col,
+		}
 	}
+
+	s := &ast.MatchStmt{Value: val, OKName: okName, Line: line, Col: col}
+	s.OK = p.statements()
+	p.expectCur(token.LPAREN)
+	if p.curToken.Literal != "err" {
+		p.addError("match exige ramos ok e err, nessa ordem", "E_NONEXHAUSTIVE_MATCH")
+	}
+	p.nextToken()
+	s.ErrName = p.identifier()
+	s.Err = p.statements()
+	p.expectCur(token.RPAREN)
+	return s
 }

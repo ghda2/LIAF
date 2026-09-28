@@ -14,6 +14,8 @@
 *.dylib
 /liafc
 /liafc.exe
+/bin/liafc
+/bin/liafc.exe
 /liaf_server.exe
 /liaf_linux
 /liaf_server_linux
@@ -21,6 +23,8 @@
 /server.exe
 /server_*
 *.db
+node_modules/
+
 
 
 # Cache, builds e dados temporários

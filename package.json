@@ -1,0 +1,36 @@
+{
+  "name": "liaf",
+  "version": "0.3.0",
+  "description": "LIAF — Language for AI First compiler & CLI",
+  "main": "bin/liaf.js",
+  "bin": {
+    "liaf": "./bin/liaf.js",
+    "liafc": "./bin/liaf.js"
+  },
+  "scripts": {
+    "postinstall": "node ./scripts/install.js"
+  },
+  "files": [
+    "bin/liaf.js",
+    "scripts/install.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ghda2/LIAF.git"
+  },
+  "keywords": [
+    "liaf",
+    "compiler",
+    "cli",
+    "ai-first",
+    "language"
+  ],
+  "author": "ghda2",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ghda2/LIAF/issues"
+  },
+  "homepage": "https://github.com/ghda2/LIAF#readme"
+}

@@ -4,8 +4,8 @@
   "description": "LIAF — Language for AI First compiler & CLI",
   "main": "bin/liaf.js",
   "bin": {
-    "liaf": "./bin/liaf.js",
-    "liafc": "./bin/liaf.js"
+    "liaf": "bin/liaf.js",
+    "liafc": "bin/liaf.js"
   },
   "scripts": {
     "postinstall": "node ./scripts/install.js"

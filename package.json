@@ -1,6 +1,6 @@
 {
   "name": "liaf",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "LIAF — Language for AI First compiler & CLI",
   "main": "bin/liaf.js",
   "bin": {

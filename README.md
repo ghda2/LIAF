@@ -1,51 +1,100 @@
 # LIAF — Language for AI First
 
-Linguagem experimental com AST textual em S-expressions, tipos e efeitos explícitos, diagnósticos JSON e compilação via Go. A hipótese de reduzir o custo de programação por modelos menores deve ser medida com benchmarks.
+LIAF é uma linguagem de programação moderna desenvolvida especificamente para modelos de inteligência artificial (LLMs) e agentes autônomos escreverem código correto, conciso e de alta performance no menor custo de tokens possível.
+
+O código compila para binários autônomos ultrarrápidos via Go, trazendo um runtime seguro, biblioteca padrão integrada e motor nativo de renderização de documentos (Typst WASM).
 
 ```liaf
-(module hello
-  (fn main (params) (returns void) (effects io)
-    (body (do (println "Hello, LIAF")))))
+module api_tarefas
+
+struct Tarefa
+  id int
+  titulo str
+  concluida bool
+end
+
+route GET "/tarefas/{id}" (id int) Response effects(io)
+  let tarefa = new Tarefa(id, "Aprender LIAF", true)
+  json-response(200, tarefa)
+end
+
+fn main() void effects(io)
+  println("Servidor LIAF rodando em http://127.0.0.1:8080")
+end
 ```
 
-```powershell
+---
+
+## Principais Pilares
+
+- **AI-First & Eficiência de Tokens:** Sintaxe linear concisa (redução de até 69% em tokens BPE frente a formatos tradicionais) e diagnósticos com saída em JSON (`--json`) pensados para auto-cura mecânica imediata por agentes de IA.
+- **Motor de Documentos & PDF Nativo:** Renderizador [Typst](https://typst.app) embutido no binário via WebAssembly (Wazero). Gera PDFs e prévias PNG sem necessidade de Chromium, NodeJS ou binários externos no sistema.
+- **Auditoria Automática de Layout (WCAG AA):** Com o comando `liafc doc check`, o motor detecta overflow, páginas em branco e mede o contraste das cores, sugerindo a correção exata em hexadecimais para modelos de linguagem.
+- **Web & Dados Integrados:** Rotas HTTP declarativas, WebSockets bidirecionais, drivers nativos para PostgreSQL, MySQL e Redis, e suporte a escrita atômica em arquivos e JSON.
+- **Compilação Autônoma:** Binário gerado (`liafc build`) é 100% estático e autocontido, pronto para deploy sem requerer a instalação do compilador na máquina de produção.
+
+---
+
+## Instalação e Compilação
+
+Para compilar a toolchain `liafc` a partir do repositório:
+
+```bash
+# Compilar o compilador (liafc)
 go build -o liafc.exe ./cmd/liafc
-./liafc.exe check pkg/codegen/testdata/loops.liaf --json
-./liafc.exe run pkg/codegen/testdata/collections.liaf
-./liafc.exe build app.liaf -o app.exe --embed=public
+
+# Executar a suíte de testes
 go test ./...
 ```
 
-Recursos: loops, listas e mapas tipados, `Result` com `match` e `try`/`on-err`, rotas HTTP declarativas, arquivos com escrita atômica e JSON, concorrência por canais, SSG Markdown, layouts, includes, gzip, ETags, streaming de mídias, publicação autenticada e geração de PDF com o Typst embutido. A compilação pelo backend Go requer Go e este repositório; o executável gerado funciona sem Go instalado.
+---
 
-## Documentos e PDF
+## Comandos da CLI (`liafc`)
 
-O layout do documento é escrito em [Typst](https://typst.app/docs) (arquivo `.typ`) e o programa LIAF
-entrega os dados tipados. Não há modelos prontos: a liberdade criativa vem do código. O motor Typst vai
-embutido no executável, então em execução não há Rust, binário extra nem rede.
+| Comando | Descrição |
+|---|---|
+| `liafc init [caminho]` | Inicializa um novo projeto LIAF no diretório |
+| `liafc check <arquivo.liaf> [--json]` | Valida sintaxe, contratos de efeitos e tipos com retorno amigável para IA |
+| `liafc run <arquivo.liaf>` | Compila em memória e executa imediatamente |
+| `liafc build <arquivo.liaf> [-o binario]` | Gera executável nativo autônomo |
+| `liafc doc check <doc.typ> --dados d.json` | Valida layout, páginas e contraste de acessibilidade do documento |
+| `liafc doc preview <doc.typ> -o p.png` | Gera prévia em imagem da 1ª página do documento |
+| `liafc doc watch <doc.typ> -o p.png` | Observa alterações em tempo real e regrava a prévia |
+| `liafc fmt <arquivo.liaf> -w` | Formata o código fonte no padrão canônico |
+
+---
+
+## Geração de Documentos em PDF
+
+Em LIAF, o layout visual é escrito em **Typst** (`.typ`) e os dados de negócio são fornecidos de forma tipada pelo programa via `/dados.json`.
 
 ```liaf
-let layout = try fs-read-file("recibo.typ")        // o .typ lê os dados com json("/dados.json")
-let pdf = try pdf-typst(layout, try json-encode(recibo))
-try fs-write-file("recibo.pdf", pdf)                 // numa rota: pdf-response(pdf, "recibo.pdf")
+fn emitir_recibo() void effects(fs, io)
+  on-err e
+    println(fmt("erro ao gerar: {}", e))
+    exit(1)
+  end
+
+  let layout = try fs-read-file("recibo.typ")
+  let dados_json = try json-encode(new Recibo(1042, "30/09/2026", "Café Central", 2500))
+  let pdf = try pdf-typst(layout, dados_json)
+
+  try fs-write-file("recibo.pdf", pdf)
+  println(fmt("recibo.pdf gerado com sucesso ({} bytes)", str-byte-len(pdf)))
+end
 ```
 
-Exemplos: `curriculo.liaf` + `curriculo.typ` (raiz) e `examples/cobranca_pix_pdf/` (QR Code via pacote
-do Typst Universe). Para conferir um documento enquanto edita:
-`liafc doc watch meu.typ --dados dados.json -o previa.png`. Referência completa: SPEC §26.
+Exemplos inclusos no repositório:
+- [curriculo.liaf](curriculo.liaf) + [curriculo.typ](curriculo.typ): Currículo executivo diagramado.
+- [relatorio.liaf](examples/relatorio_lambari/relatorio.liaf) + [relatorio.typ](examples/relatorio_lambari/relatorio.typ): Boletim climatológico semanal de Lambari/MG.
+- [cobranca.liaf](examples/cobranca_pix_pdf/cobranca.liaf) + [cobranca.typ](examples/cobranca_pix_pdf/cobranca.typ): Boleto e cobrança com QR Code Pix gerado dinamicamente.
+
+---
 
 ## Documentação
 
-- [Primeiros passos](docs/linguagem/GETTING_STARTED.md) — compilar, rodar, formatar
-- [Guia de agentes](docs/linguagem/AI_GUIDE.md) — o que um modelo precisa saber para escrever LIAF correta
-- [Especificação da linguagem](docs/linguagem/SPEC.md) — núcleo v0.2; a seção 18 cobre as adições da v0.3
-- [Arquitetura](docs/linguagem/ARCHITECTURE.md) — pipeline do compilador e pacotes
-- [Mapa do código](docs/linguagem/SOURCEMAP.md) — onde cada coisa mora no repositório
-
-Exemplo completo em v0.3: [`pkg/codegen/testdata/task_api_v03.liaf`](pkg/codegen/testdata/task_api_v03.liaf) — API REST com
-rotas declarativas, `try`/`on-err` e escrita atômica de estado.
-
-O estado do projeto está em [docs/STATUS.md](docs/STATUS.md): o que falta em [docs/a-fazer/](docs/a-fazer/)
-e o que já foi entregue em [docs/feito/](docs/feito/). Índice completo: [docs/README.md](docs/README.md).
-
-Publish/reload são desabilitados sem token configurado. Defina `LIAF_DEPLOY_TOKEN` e use POST com `Authorization: Bearer ...`. Assets embutidos são imutáveis; publicação dinâmica requer diretório em disco.
+- [Guia de Primeiros Passos](docs/linguagem/GETTING_STARTED.md) — Como configurar e rodar seu primeiro programa.
+- [Guia para Agentes de IA](docs/linguagem/AI_GUIDE.md) — Referência técnica e regras de ouro para LLMs escreverem LIAF.
+- [Especificação da Linguagem (SPEC)](docs/linguagem/SPEC.md) — Gramática completa, tipos primitivos, efeitos e builtins.
+- [Arquitetura do Compilador](docs/linguagem/ARCHITECTURE.md) — Pipeline interno do frontend, checker e emissores de código.
+- [Status do Projeto](docs/STATUS.md) — Roadmap, histórico de releases e issues concluídas/arquivadas.

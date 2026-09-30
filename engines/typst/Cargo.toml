@@ -1,0 +1,32 @@
+[package]
+name = "liaf-typst"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+description = "Motor de documentos da LIAF: Typst compilado para wasm32-wasip1, carregado pelo runtime Go via wazero."
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+typst = "0.15.1"
+typst-pdf = "0.15.1"
+typst-render = "0.15.1"
+typst-layout = "0.15.1"
+typst-assets = { version = "0.15.1", optional = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+comemo = "0.5.1"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[features]
+# Embute as fontes padrão do Typst (+9,6 MB). Desligado: as fontes vêm do host (pkg/typst/fonts).
+embedded-fonts = ["dep:typst-assets", "typst-assets/fonts"]

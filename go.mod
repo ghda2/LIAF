@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	github.com/HugoSmits86/nativewebp v1.3.0
+	github.com/tetratelabs/wazero v1.12.0
 	golang.org/x/crypto v0.57.0
 	golang.org/x/image v0.46.0
 	modernc.org/sqlite v1.59.0

@@ -40,3 +40,6 @@ Thumbs.db
 .DS_Store
 
 /examples/tw_chat/server_tw_linux
+
+# Build do motor de documentos (Rust -> WASM); o artefato versionado fica em pkg/typst/wasm
+/engines/typst/target/

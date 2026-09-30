@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"liaf/pkg/toolchain"
@@ -97,4 +98,31 @@ func typstPackageCache() (string, error) {
 		return "", fmt.Errorf("sem pasta de cache para pacotes Typst (defina LIAF_TYPST_PACKAGES): %w", err)
 	}
 	return filepath.Join(base, "liaf", "typst-packages"), nil
+}
+
+// Famílias de fonte do motor de documentos (pkg/typst/fonts). Cada uma pode ser excluída do
+// binário com a build tag liaf_doc_sem_<id>.
+var docFontFamilies = []string{"inter", "serif", "math", "mono"}
+
+// docFontTags converte --doc-fonts=inter,math nas tags que excluem as demais famílias.
+// Vazio mantém todas.
+func docFontTags(list string) ([]string, error) {
+	if strings.TrimSpace(list) == "" {
+		return nil, nil
+	}
+	keep := map[string]bool{}
+	for _, f := range strings.Split(list, ",") {
+		f = strings.TrimSpace(f)
+		if !slices.Contains(docFontFamilies, f) {
+			return nil, fmt.Errorf("--doc-fonts: família desconhecida %q (use %s)", f, strings.Join(docFontFamilies, ", "))
+		}
+		keep[f] = true
+	}
+	var tags []string
+	for _, f := range docFontFamilies {
+		if !keep[f] {
+			tags = append(tags, "liaf_doc_sem_"+f)
+		}
+	}
+	return tags, nil
 }

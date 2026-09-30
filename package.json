@@ -14,7 +14,8 @@
     "bin/liaf.js",
     "scripts/install.js",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "repository": {
     "type": "git",

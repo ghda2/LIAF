@@ -25,16 +25,20 @@ type Job struct {
 	Ident     string            // identificador estável: deixa o /ID do PDF determinístico
 	Today     string            // data de datetime.today(), "AAAA-MM-DD"; vazio = indisponível
 	Untagged  bool              // desliga o PDF marcado (acessível), que é o padrão
+	Layout    bool              // inclui o relatório de layout (Result.Layout)
 }
 
 // Diagnostic é um erro ou aviso do Typst, com a posição no arquivo virtual.
 type Diagnostic struct {
-	Severity string   `json:"severity"` // "error" ou "warning"
+	Code     string   `json:"code,omitempty"` // W_LAYOUT_*, preenchido pela análise de qualidade
+	Severity string   `json:"severity"`       // "error" ou "warning"
 	Message  string   `json:"message"`
 	File     string   `json:"file,omitempty"`
 	Line     int      `json:"line,omitempty"`
 	Column   int      `json:"column,omitempty"`
 	Hints    []string `json:"hints,omitempty"`
+	Page     int      `json:"page,omitempty"` // página (1..n) dos avisos de layout
+	Fix      string   `json:"fix,omitempty"`  // correção sugerida, pronta para aplicar
 }
 
 func (d Diagnostic) String() string {
@@ -60,7 +64,8 @@ type Result struct {
 	OK          bool         `json:"ok"`
 	Diagnostics []Diagnostic `json:"diagnostics"`
 	Pages       []Page       `json:"pages"`
-	Outputs     [][]byte     `json:"-"` // PDF: um item; PNG: um por página; check: nenhum
+	Layout      []PageLayout `json:"layout,omitempty"` // só com Job.Layout
+	Outputs     [][]byte     `json:"-"`                // PDF: um item; PNG: um por página; check: nenhum
 }
 
 // Err devolve os erros do documento como um único error, ou nil se compilou.
@@ -99,6 +104,7 @@ type request struct {
 	Ident     string   `json:"ident,omitempty"`
 	Today     string   `json:"today,omitempty"`
 	Untagged  bool     `json:"untagged,omitempty"`
+	Layout    bool     `json:"layout,omitempty"`
 }
 
 func (j Job) request() request {
@@ -108,6 +114,6 @@ func (j Job) request() request {
 	}
 	return request{
 		Main: main, Format: j.Format, PPI: j.PPI, Standards: j.Standards,
-		Ident: j.Ident, Today: j.Today, Untagged: j.Untagged,
+		Ident: j.Ident, Today: j.Today, Untagged: j.Untagged, Layout: j.Layout,
 	}
 }

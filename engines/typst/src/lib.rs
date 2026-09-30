@@ -16,6 +16,7 @@
 //! - `liaf_output_count()`, `liaf_output_ptr/len(i)`: bytes gerados (um PDF ou um PNG por página).
 //! - `liaf_evict(max_age)`: descarta memoização antiga (limita a memória num servidor).
 
+mod layout;
 mod world;
 
 use std::cell::RefCell;
@@ -69,6 +70,9 @@ struct Request {
     /// Desliga o PDF marcado (acessível), que é o padrão.
     #[serde(default)]
     untagged: bool,
+    /// Inclui o relatório de layout (caixas, conteúdo fora da página) na resposta.
+    #[serde(default)]
+    layout: bool,
 }
 
 #[derive(Serialize)]
@@ -76,6 +80,8 @@ struct Response {
     ok: bool,
     diagnostics: Vec<Diag>,
     pages: Vec<PageInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    layout: Option<Vec<layout::PageLayout>>,
 }
 
 #[derive(Serialize)]
@@ -111,7 +117,7 @@ fn render(state: &mut State, raw: &[u8]) -> Response {
         Ok(doc) => doc,
         Err(errors) => {
             diagnostics.extend(errors.iter().map(|d| diag(&state.world, d)));
-            return Response { ok: false, diagnostics, pages: Vec::new() };
+            return Response { ok: false, diagnostics, pages: Vec::new(), layout: None };
         }
     };
     let pages = document
@@ -154,13 +160,14 @@ fn render(state: &mut State, raw: &[u8]) -> Response {
                 Ok(bytes) => state.outputs.push(bytes),
                 Err(errors) => {
                     diagnostics.extend(errors.iter().map(|d| diag(&state.world, d)));
-                    return Response { ok: false, diagnostics, pages };
+                    return Response { ok: false, diagnostics, pages, layout: None };
                 }
             }
         }
         other => return fail(format!("formato desconhecido: {other} (use pdf, png ou check)")),
     }
-    Response { ok: true, diagnostics, pages }
+    let layout = req.layout.then(|| layout::report(document.pages()));
+    Response { ok: true, diagnostics, pages, layout }
 }
 
 fn parse_standards(names: &[String]) -> Result<PdfStandards, String> {
@@ -205,6 +212,7 @@ fn fail(message: String) -> Response {
             hints: Vec::new(),
         }],
         pages: Vec::new(),
+        layout: None,
     }
 }
 

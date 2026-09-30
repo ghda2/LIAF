@@ -1,18 +1,20 @@
 // Currículo moderno em PDF (issue #034).
 //
-// Os dados são structs LIAF tipadas: um campo com nome errado para no `liafc check`, antes
-// de gerar qualquer PDF. O layout vem do modelo "cv-moderno" da biblioteca de documentos,
-// renderizado pelo motor Typst embutido no próprio executável (sem Rust e sem binário extra).
+// Sem modelo pronto: o layout é código Typst em curriculo.typ, ao lado deste arquivo, e a
+// liberdade criativa é toda sua. Os dados são structs LIAF tipadas (um campo com nome errado
+// para no `liafc check`) entregues ao documento em /dados.json. O PDF sai do motor Typst
+// embutido no próprio executável: sem Rust, sem binário extra e sem rede.
 //
 //   liafc run curriculo.liaf      -> grava curriculo.pdf e curriculo.png (prévia)
 //
 // Numa API, o mesmo PDF sai direto na resposta:
 //
-//   route GET "/curriculo.pdf" () Response
+//   route GET "/curriculo.pdf" () Response effects(fs)
 //     on-err e
 //       json-response(500, e)
 //     end
-//     let pdf = try pdf-template("cv-moderno", try json-encode(dados()))
+//     let layout = try fs-read-file("curriculo.typ")
+//     let pdf = try pdf-typst(layout, try json-encode(dados()))
 //     pdf-response(pdf, "curriculo.pdf")
 //   end
 module curriculo
@@ -110,10 +112,11 @@ fn main() void effects(fs, io)
     println(fmt("erro: {}", e))
     exit(1)
   end
+  let layout = try fs-read-file("curriculo.typ")
   let json = try json-encode(dados())
-  let pdf = try pdf-template("cv-moderno", json)
+  let pdf = try pdf-typst(layout, json)
   try fs-write-file("curriculo.pdf", pdf)
-  let png = try png-template("cv-moderno", json)
+  let png = try png-typst(layout, json)
   try fs-write-file("curriculo.png", png)
   println(fmt("curriculo.pdf gerado ({} bytes)", str-byte-len(pdf)))
 end

@@ -251,5 +251,65 @@ func loadPipeline(ac *AssetCache, fsys fs.FS, diskBaseDir string) error {
 		}
 	}
 
+	// Pass 4: Auto-geração de SEO (sitemap.xml e robots.txt) caso não fornecidos manualmente
+	if len(htmlItems) > 0 {
+		if _, hasSitemap := ac.assets["/sitemap.xml"]; !hasSitemap {
+			var sb strings.Builder
+			sb.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+			sb.WriteString("<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n")
+
+			var routes []string
+			seen := make(map[string]bool)
+			for _, item := range htmlItems {
+				route := strings.TrimSuffix(item.relPath, ".html")
+				if item.relPath == "/index.html" {
+					route = "/"
+				} else if strings.HasSuffix(item.relPath, "/index.html") {
+					route = strings.TrimSuffix(item.relPath, "index.html")
+				}
+				if !seen[route] {
+					seen[route] = true
+					routes = append(routes, route)
+				}
+			}
+			sort.Strings(routes)
+
+			for _, r := range routes {
+				priority := "0.8"
+				if r == "/" {
+					priority = "1.0"
+				}
+				sb.WriteString(fmt.Sprintf("  <url>\n    <loc>%s</loc>\n    <changefreq>weekly</changefreq>\n    <priority>%s</priority>\n  </url>\n", r, priority))
+			}
+			sb.WriteString("</urlset>\n")
+
+			sitemapBytes := []byte(sb.String())
+			sitemapGzip, _ := CompressGzip(sitemapBytes)
+			etag := fmt.Sprintf("\"%x\"", sha1.Sum(sitemapBytes))
+			ac.assets["/sitemap.xml"] = &CachedAsset{
+				Path:        "/sitemap.xml",
+				ContentType: "application/xml; charset=utf-8",
+				Content:     sitemapBytes,
+				GzipContent: sitemapGzip,
+				ETag:        etag,
+				Size:        len(sitemapBytes),
+			}
+		}
+
+		if _, hasRobots := ac.assets["/robots.txt"]; !hasRobots {
+			robotsContent := []byte("User-agent: *\nAllow: /\nSitemap: /sitemap.xml\n")
+			robotsGzip, _ := CompressGzip(robotsContent)
+			etag := fmt.Sprintf("\"%x\"", sha1.Sum(robotsContent))
+			ac.assets["/robots.txt"] = &CachedAsset{
+				Path:        "/robots.txt",
+				ContentType: "text/plain; charset=utf-8",
+				Content:     robotsContent,
+				GzipContent: robotsGzip,
+				ETag:        etag,
+				Size:        len(robotsContent),
+			}
+		}
+	}
+
 	return nil
 }

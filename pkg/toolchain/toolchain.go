@@ -82,8 +82,9 @@ func Module() (string, error) {
 
 // App e um programa gerado pronto para o go build.
 type App struct {
-	Module string // raiz do modulo do runtime
-	Dir    string // pasta do pacote main, dentro de Module
+	Module string   // raiz do modulo do runtime
+	Dir    string   // pasta do pacote main, dentro de Module
+	Tags   []string // build tags extras (ex.: familias de fonte excluidas)
 }
 
 // NewApp grava main.go num pacote novo dentro do modulo do runtime. Quem chama
@@ -110,7 +111,11 @@ func (a *App) Remove() { os.RemoveAll(a.Dir) }
 
 // Build compila o programa em out (caminho absoluto).
 func (a *App) Build(out string) *exec.Cmd {
-	cmd := exec.Command("go", "build", "-o", out, "./"+filepath.Base(a.Dir))
+	args := []string{"build", "-o", out}
+	if len(a.Tags) > 0 {
+		args = append(args, "-tags", strings.Join(a.Tags, ","))
+	}
+	cmd := exec.Command("go", append(args, "./"+filepath.Base(a.Dir))...)
 	cmd.Dir = a.Module
 	// Um go.work do usuario acima do cache mudaria como liaf/... resolve.
 	cmd.Env = append(os.Environ(), "GOWORK=off")

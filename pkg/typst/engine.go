@@ -62,6 +62,9 @@ func New(ctx context.Context, opts Options) (*Engine, error) {
 	if len(packs) == 0 {
 		packs = fonts.Default()
 	}
+	if len(packs) == 0 {
+		return nil, fmt.Errorf("typst: nenhuma família de fonte no binário (liafc build --doc-fonts precisa de pelo menos uma)")
+	}
 
 	cfg := wazero.NewRuntimeConfig()
 	if dir := cacheDir(opts.CacheDir); dir != "" {

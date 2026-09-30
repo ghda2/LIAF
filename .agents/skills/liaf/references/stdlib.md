@@ -81,3 +81,37 @@ let meta = try storage-save-image(req, "foto", "./uploads", 1200, 1200)
 // Upload de arquivo binário genérico
 let arquivo = try storage-save-file(req, "documento", "./uploads", "contrato.pdf")
 ```
+
+---
+
+## 6. `std/seo` — Otimização para Motores de Busca e Metatags
+Gera meta tags completas (OpenGraph, Twitter Cards, Canonical), Schema.org JSON-LD e Sitemaps:
+
+```liaf
+import "std/seo"
+
+// 1. Criar metadados da página / artigo
+let meta = new MetaTags(
+  "Guia Completo da LIAF",
+  "Aprenda a construir APIs e blogs ultra-rápidos.",
+  "https://meusite.com/artigo",
+  "https://meusite.com/capa.webp",
+  "Meu Blog",
+  "Gabriel Santos",
+  "@gabriel",
+  "2026-09-27",
+  "pt_BR"
+)
+
+// 2. Renderizar bloco de tags HTML <head> (OpenGraph + Twitter Cards + Canonical)
+let head_tags = seo-meta-tags(meta)
+
+// 3. Renderizar Schema.org JSON-LD estruturado para o Google
+let schema_json = seo-jsonld-article(meta, "Meu Blog", "https://meusite.com/logo.webp")
+
+// 4. Gerar robots.txt e sitemaps dinâmicos
+let robots = seo-robots-txt("https://meusite.com/sitemap.xml", true)
+```
+
+> **Dica SEO Automático:** Servidores `serve-hybrid` geram `/sitemap.xml` e `/robots.txt` automaticamente a partir dos arquivos HTML e posts Markdown caso não sejam definidos manualmente em `public/`.
+

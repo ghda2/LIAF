@@ -255,3 +255,14 @@ Por padrão o servidor escuta em todas as interfaces. `LIAF_HOST=127.0.0.1` rest
 Publicação: `liafc publish pagina.md --url https://HOST/_liaf/publish --path blog/pagina.md`. Defina `LIAF_DEPLOY_TOKEN` no cliente e no servidor. Reload também exige POST autenticado. Não coloque credenciais em código ou documentação.
 
 Deploy: inspecione a unidade com `liafc service install --name site --bin /opt/site/server --dry-run`. Para Caddy: `liafc deploy caddy-bind --domain HOST --upstream HOST:PORT --server srv0`.
+
+## Documentos e PDF (#034)
+
+- Não há modelo pronto: escreva o documento em **Typst** (arquivo `.typ` ao lado do `.liaf`, lido com `fs-read-file`, ou string no código). O layout é todo seu.
+- Dados: passe uma struct com `json-encode`; o documento lê com `#let d = json("/dados.json")` e acessa `d.campo` (nomes iguais aos da struct).
+- `pdf-typst(fonte, json)` → `(result str str)` com os bytes do PDF. Com imagens: `pdf-typst-files(fonte, json, arquivos)`, onde `arquivos` é `(map str str)` de nome para bytes, lido no documento como `/nome`.
+- Em rota: `pdf-response(pdf, "nome.pdf")`. Para gravar: `fs-write-file("x.pdf", pdf)`. Para medir, use `str-byte-len`, nunca `str-len`.
+- Fontes disponíveis: `"Inter"`, `"Libertinus Serif"`, `"DejaVu Sans Mono"` e a matemática (fórmulas `$ ... $` funcionam). Não invente outra família: ela cai na fonte padrão com aviso.
+- Pacotes: `#import "@preview/tiaoma:0.3.0": qrcode` funciona. O `liafc build` embute o pacote e grava `liaf-typst.lock`.
+- Texto para copiar (Pix copia e cola, chaves, códigos): `text(lang: "en", hyphenate: false, ...)`. Em pt o Typst repete o hífen na quebra de linha e corrompe o que for colado.
+- Laço de correção: `liafc doc check doc.typ --dados d.json --json` devolve `errors` (`E_TYPST` com linha e coluna), `warnings` com `fix` (`W_LAYOUT_OUT_OF_PAGE`, `W_LAYOUT_BLANK_PAGE`, `W_LAYOUT_EMPTY_TAIL`, `W_LAYOUT_LOW_CONTRAST` com a cor que passa) e `metrics`. Aplique os `fix`, rode de novo e pare quando não houver aviso ou as métricas pararem de melhorar (no máximo 3 rodadas). Se você enxerga imagem, `liafc doc preview doc.typ -o p.png` mostra a página.

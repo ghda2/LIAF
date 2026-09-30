@@ -83,6 +83,7 @@ O executável `liafc` é a ferramenta central:
 ## 4. Biblioteca de Referência
 
 Consulte os guias especializados da skill conforme sua necessidade:
+- [references/builtins.md](references/builtins.md): Catálogo completo de todas as 128 funções nativas (Web, DB, FS, Cripto, Coleções, Strings).
 - [references/syntax.md](references/syntax.md): Especificação completa da gramática v0.6 e v0.5.
 - [references/stdlib.md](references/stdlib.md): Guia de `std/cookie`, `std/auth`, `std/jwt`, `std/cors` e `std/storage`.
 - [references/auto_healing.md](references/auto_healing.md): Tabela de códigos de erro e estratégias de correção.

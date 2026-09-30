@@ -1242,3 +1242,82 @@ Substitui cadeias profundas de `concat` por interpolação posicional `{}`:
 
 ### 25.8 Comparação redundante com booleano (#012)
 Comparar com os literais `true` ou `false` é erro `E_REDUNDANT_BOOL_COMPARE`, porque cada construção tem uma só forma válida. `(eq x false)` e `(neq x true)` se escrevem `(not x)`; `(eq x true)` e `(neq x false)` se escrevem `x`. O diagnóstico traz a forma canônica em `suggested_patch`. Comparar duas expressões booleanas, como `(eq a b)`, continua válido.
+
+## 26. Documentos e PDF (#034, #037)
+
+Um programa gera PDF escrevendo o documento em **Typst**, como código comum: não há modelos
+prontos, e o layout, as cores, as fontes e as seções são decisão de quem escreve. O motor Typst
+vai embutido no executável (WebAssembly executado em Go puro): em execução não há binário extra,
+Rust nem acesso à rede.
+
+### 26.1 Builtins
+
+| Builtin | Assinatura | Efeitos |
+|---|---|---|
+| `pdf-typst` | `(fonte str, dados_json str) (result str str)` | — |
+| `pdf-typst-files` | `(fonte str, dados_json str, arquivos (map str str)) (result str str)` | — |
+| `png-typst` | `(fonte str, dados_json str) (result str str)` | — |
+| `png-typst-files` | `(fonte str, dados_json str, arquivos (map str str)) (result str str)` | — |
+| `pdf-response` | `(pdf str, nome str) Response` | — |
+
+- O documento lê os dados em `/dados.json` (`#let d = json("/dados.json")`). Os dados são
+  normalmente uma struct passada por `json-encode`, e os nomes dos campos do JSON são os da struct.
+- `arquivos` mapeia nome para bytes: `{"img/logo.png": bytes}` fica em `/img/logo.png`. Nomes com
+  `..`, `\`, partes vazias, prefixo `@` ou os reservados `main.typ`/`dados.json` são recusados.
+  A soma é limitada a 64 MB.
+- `png-typst` devolve a primeira página a 144 ppi, como prévia.
+- Os bytes trafegam como `str`. `str-len` conta caracteres, então use `str-byte-len` para medir.
+- O erro vem com a posição no documento: `typst: /main.typ:3:5: error: ...`.
+- A mesma entrada gera o mesmo PDF, byte a byte.
+
+```liaf
+struct Recibo
+  cliente str
+  total float
+end
+
+fn main() void effects(fs, io)
+  on-err e
+    println(fmt("erro: {}", e))
+    exit(1)
+  end
+  let layout = "#let d = json(\"/dados.json\")\n= Recibo\nCliente: #d.cliente\n\nTotal: #d.total"
+  let pdf = try pdf-typst(layout, try json-encode(new Recibo("Ana", 47.9)))
+  try fs-write-file("recibo.pdf", pdf)
+end
+```
+
+Numa rota: `pdf-response(pdf, "recibo.pdf")` responde `application/pdf` com
+`Content-Disposition: inline`.
+
+### 26.2 Fontes, imagens e pacotes
+
+- **Fontes embutidas:** Inter, Libertinus Serif (padrão do Typst), New Computer Modern Math
+  (fórmulas) e DejaVu Sans Mono (código). `liafc build --doc-fonts=inter,math` exclui as outras
+  famílias do binário.
+- **Pacotes do Typst Universe** (`#import "@preview/nome:1.0.0"`): o `liafc build`/`run` encontra
+  as citações no programa, no `.liaf` e nos `.typ` da pasta, baixa uma vez, confere o SHA-256 em
+  `liaf-typst.lock` (versione esse arquivo) e embute os pacotes no binário.
+- Um programa que não usa `pdf-*`/`png-*` não recebe o motor. Um que usa cresce cerca de 18 MB
+  com todas as fontes, ou 15 MB com `--doc-fonts=inter`.
+
+### 26.3 Conferência: `liafc doc`
+
+```text
+liafc doc check   doc.typ [--dados d.json] [--arquivo nome=caminho]... [--json] [--layout]
+liafc doc preview doc.typ [--dados d.json] [--arquivo nome=caminho]... [-o p.png] [--pagina N] [--ppi N]
+liafc doc watch   doc.typ [mesmas opções]   # reconfere a cada mudança; com -o regrava a prévia
+```
+
+O `check` devolve erros (`E_TYPST`), avisos do Typst (`W_TYPST`) e avisos de layout com a correção
+em `fix`:
+
+| Código | Quando |
+|---|---|
+| `W_LAYOUT_OUT_OF_PAGE` | Um elemento visível passa da borda da página (vai ser cortado). Recorte intencional (`clip`) e espaços não contam |
+| `W_LAYOUT_BLANK_PAGE` | Uma página não tem nenhum conteúdo |
+| `W_LAYOUT_EMPTY_TAIL` | A última página usa menos de 15% da altura |
+| `W_LAYOUT_LOW_CONTRAST` | Texto abaixo do contraste WCAG AA (4,5:1; 3:1 para texto grande) contra o fundo sólido desenhado atrás dele. O `fix` traz uma cor que passa |
+
+As `metrics` (`pages`, `overflow`, `low_contrast`, `blank_pages`, `last_page_usage`, `warnings`)
+servem para comparar uma rodada de correção com a anterior.

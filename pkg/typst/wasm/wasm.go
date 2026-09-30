@@ -14,6 +14,13 @@ import (
 //go:embed liaf_typst.wasm.gz
 var compressed []byte
 
+//go:embed THIRD_PARTY.txt
+var notices string
+
+// Notices devolve as licenças do Typst e das dependências Rust embutidas no motor. O arquivo é
+// gerado por scripts/build-typst-wasm.sh junto com o .wasm.gz.
+func Notices() string { return notices }
+
 // Module devolve o binário WASM descomprimido.
 func Module() ([]byte, error) {
 	r, err := gzip.NewReader(bytes.NewReader(compressed))

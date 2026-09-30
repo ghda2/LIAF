@@ -44,14 +44,14 @@ fn main() void effects(fs, io)
   on-err e
     exit(1)
   end
-  let pdf = try pdf-template("cv-moderno", "{\"nome\": \"Ana\"}")
+  let pdf = try pdf-typst("= Olá", "{}")
   try fs-write-file("cv.pdf", pdf)
 end
 `)
 	if !strings.Contains(com, docImport) {
-		t.Error("programa com pdf-template não importou o motor")
+		t.Error("programa com pdf-typst não importou o motor")
 	}
-	if !strings.Contains(com, "liafdoc.Template(") {
-		t.Error("pdf-template não virou liafdoc.Template")
+	if !strings.Contains(com, "liafdoc.Source(") {
+		t.Error("pdf-typst não virou liafdoc.Source")
 	}
 }

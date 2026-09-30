@@ -13,7 +13,6 @@ import (
 	"testing/fstest"
 
 	"liaf/pkg/typst"
-	"liaf/pkg/typst/lib"
 )
 
 // Com LIAF_DOC_OUT=<pasta>, os testes gravam o PDF e a prévia PNG para inspeção visual.
@@ -27,70 +26,45 @@ func save(t *testing.T, name, data string) {
 	}
 }
 
-func TestEveryTemplateRendersSample(t *testing.T) {
-	for _, name := range lib.Templates() {
-		t.Run(name, func(t *testing.T) {
-			sample := filepath.Join("testdata", strings.TrimPrefix(name, "cv-")[:0]+sampleFor(name))
-			data, err := os.ReadFile(sample)
-			if err != nil {
-				t.Fatalf("modelo %s sem dados de exemplo em %s", name, sample)
-			}
-			pdf := Template(name, string(data))
-			if !pdf.OK {
-				t.Fatal(pdf.Error)
-			}
-			if !bytes.HasPrefix([]byte(pdf.Value), []byte("%PDF-")) {
-				t.Fatal("não gerou PDF")
-			}
-			again := Template(name, string(data))
-			if again.Value != pdf.Value {
-				t.Fatal("a mesma entrada gerou PDFs diferentes")
-			}
-			png := TemplatePNG(name, string(data))
-			if !png.OK {
-				t.Fatal(png.Error)
-			}
-			save(t, name+".pdf", pdf.Value)
-			save(t, name+".png", png.Value)
-		})
+// O currículo da raiz do repositório (curriculo.typ) é o exemplo de referência: este teste
+// garante que ele continua compilando, é determinístico e gera prévia.
+func curriculo(t *testing.T) (string, string) {
+	t.Helper()
+	src, err := os.ReadFile("../../curriculo.typ")
+	if err != nil {
+		t.Fatal(err)
 	}
+	data, err := os.ReadFile("testdata/cv.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(src), string(data)
 }
 
-func sampleFor(template string) string {
-	if strings.HasPrefix(template, "cv") {
-		return "cv.json"
+func TestCurriculoExample(t *testing.T) {
+	src, data := curriculo(t)
+	pdf := Source(src, data)
+	if !pdf.OK {
+		t.Fatal(pdf.Error)
 	}
-	return template + ".json"
+	if !bytes.HasPrefix([]byte(pdf.Value), []byte("%PDF-")) {
+		t.Fatal("não gerou PDF")
+	}
+	if again := Source(src, data); again.Value != pdf.Value {
+		t.Fatal("a mesma entrada gerou PDFs diferentes")
+	}
+	png := SourcePNG(src, data)
+	if !png.OK {
+		t.Fatal(png.Error)
+	}
+	save(t, "curriculo.pdf", pdf.Value)
+	save(t, "curriculo.png", png.Value)
 }
 
-func TestTemplateMinimalData(t *testing.T) {
-	res := Template("cv-moderno", `{"nome": "Ana"}`)
-	if !res.OK {
+func TestCurriculoMinimalData(t *testing.T) {
+	src, _ := curriculo(t)
+	if res := Source(src, `{"nome": "Ana"}`); !res.OK {
 		t.Fatalf("campos opcionais deveriam ser opcionais: %s", res.Error)
-	}
-}
-
-func TestTemplateUnknown(t *testing.T) {
-	res := Template("nao-existe", "{}")
-	if res.OK || !strings.Contains(res.Error, "cv-moderno") {
-		t.Fatalf("esperava erro listando os modelos, veio %q", res.Error)
-	}
-}
-
-func TestTemplateRejectsPathTraversal(t *testing.T) {
-	if res := Template("../tema", "{}"); res.OK {
-		t.Fatal("aceitou caminho fora de modelos/")
-	}
-}
-
-func TestSourceWithLibrary(t *testing.T) {
-	src := `#import "/liaf/componentes.typ": etiqueta
-#import "/liaf/tema.typ": paleta
-#let d = json("/dados.json")
-Olá, #d.nome #etiqueta(paleta(blue), "novo")`
-	res := Source(src, `{"nome": "Bruno"}`)
-	if !res.OK {
-		t.Fatal(res.Error)
 	}
 }
 
@@ -175,24 +149,20 @@ func TestSourceFilesImage(t *testing.T) {
 	}
 }
 
-func TestTemplateFilesPhoto(t *testing.T) {
-	data, err := os.ReadFile("testdata/cv.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	withPhoto := strings.Replace(string(data), `"cor":`, `"foto": "foto.jpg", "cor":`, 1)
-	res := TemplateFiles("cv-moderno", withPhoto, map[string]string{"foto.jpg": fakePhoto(t)})
+func TestCurriculoWithPhoto(t *testing.T) {
+	src, data := curriculo(t)
+	withPhoto := strings.Replace(data, `"cor":`, `"foto": "foto.jpg", "cor":`, 1)
+	files := map[string]string{"foto.jpg": fakePhoto(t)}
+	res := SourceFiles(src, withPhoto, files)
 	if !res.OK {
 		t.Fatal(res.Error)
 	}
-	save(t, "cv-moderno-foto.pdf", res.Value)
-	png := render(lib.TemplateMain("cv-moderno", dataPath), withPhoto,
-		map[string]string{"foto.jpg": fakePhoto(t)}, typst.FormatPNG, "cv-moderno")
+	png := SourcePNGFiles(src, withPhoto, files)
 	if !png.OK {
 		t.Fatal(png.Error)
 	}
-	save(t, "cv-moderno-foto.png", png.Value)
-	missing := TemplateFiles("cv-moderno", withPhoto, nil)
+	save(t, "curriculo-foto.png", png.Value)
+	missing := SourceFiles(src, withPhoto, nil)
 	if missing.OK || !strings.Contains(missing.Error, "foto.jpg") {
 		t.Fatalf("foto ausente deveria falhar citando o arquivo, veio %q", missing.Error)
 	}
@@ -200,7 +170,7 @@ func TestTemplateFilesPhoto(t *testing.T) {
 
 func TestExtraPathRejectsReservedAndTraversal(t *testing.T) {
 	for _, name := range []string{"", "../x.png", "a/../../x", "main.typ", "/dados.json",
-		"liaf/tema.typ", `a\b.png`, "a//b.png", "./x.png"} {
+		"@preview/x:1.0.0/lib.typ", `a\b.png`, "a//b.png", "./x.png"} {
 		if res := SourceFiles("oi", "{}", map[string]string{name: "x"}); res.OK {
 			t.Errorf("aceitou o nome %q", name)
 		}

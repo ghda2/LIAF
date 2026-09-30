@@ -48,7 +48,7 @@ func universe(t *testing.T, hits *int32) *httptest.Server {
 			"lib.typ":    "#let f() = [b]",
 		}),
 		"/preview/mau-1.0.0.tar.gz": tarGz(t, map[string]string{
-			"typst.toml":   "",
+			"typst.toml":    "",
 			"../escape.typ": "x",
 		}),
 	}

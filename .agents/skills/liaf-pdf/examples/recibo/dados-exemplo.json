@@ -1,0 +1,12 @@
+{
+  "numero": 1042,
+  "emitido_em": "30/09/2026",
+  "loja": "Padaria Pão Quente",
+  "cliente": "Ana Souza",
+  "itens": [
+    {"nome": "Café coado", "qtd": 2, "preco_centavos": 850},
+    {"nome": "Pão de queijo", "qtd": 3, "preco_centavos": 600},
+    {"nome": "Bolo de cenoura", "qtd": 1, "preco_centavos": 1490}
+  ],
+  "cor": "#b45309"
+}

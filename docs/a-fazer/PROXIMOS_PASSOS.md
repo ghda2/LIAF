@@ -35,6 +35,28 @@ repositório)~~ (feito em 27/09) → bytes, upload, data/hora, regex.
 **Se perder:** atacar tokens primeiro — ~~resto da #012 (`s.campo`)~~ (feito em 27/09), `on-err` padrão por módulo, e decidir
 se a #033 (sintaxe sem parênteses) vale a troca. Medir de novo antes de crescer.
 
+### Documentos e PDF (#034, #035, #037) — estado em 30/09/2026
+
+Os commits `013a7e5`..`c8ea94c` têm a primeira versão (motor, fontes, pacotes, exemplos). A rodada
+seguinte está **só na árvore de trabalho, sem commit**: sem modelos prontos (`pdf-typst*`/`png-typst*`),
+fontes comprimidas com `--doc-fonts`, aquecimento do motor, licenças (`THIRD_PARTY_NOTICES.md`), build
+reprodutível e o workflow `typst-wasm.yml`, e o `liafc doc check/preview/watch` com avisos de layout
+(inclui contraste WCAG) e regressão visual. O `cmd/liafc/main.go` mistura a linha do comando `doc` com o
+trabalho pendente do `liafc init`.
+
+Para retomar:
+
+`go test ./...` passou inteiro em 30/09/2026, depois de todas as mudanças.
+
+1. Decidir o escopo do commit: tudo, ou só o essencial (motor, `pdf-typst*`, fontes, licenças),
+   deixando `liafc doc`, análise de layout e CI do WASM num branch.
+2. Depois do push, o job `typst-wasm` deve falhar uma vez (o `.wasm.gz` foi gerado no Windows):
+   `scripts/build-typst-wasm.sh --docker` ou versionar o artefato que o CI publica.
+3. #035 (sintaxe `doc` própria): só seguir se a medição de tokens mostrar ganho sobre escrever Typst.
+
+Achados fora de documentos, ainda sem correção: o `release.yml` usa Go 1.22 e o `go.mod` pede 1.26; o
+`package.json` lista um `LICENSE` que não existe na raiz.
+
 ### A qualquer momento (não dependem do benchmark)
 
 Itens de biblioteca e runtime, sem mudar a linguagem:

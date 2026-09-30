@@ -260,3 +260,30 @@ func WriteLock(file string, lock map[Spec]string) error {
 	}
 	return os.WriteFile(file, []byte(b.String()), 0o644)
 }
+
+// Files lê os pacotes do cache no formato que o motor aceita: "@ns/nome:versão/caminho".
+func (r *Resolver) Files(specs []Spec) (map[string][]byte, error) {
+	out := map[string][]byte{}
+	for _, s := range specs {
+		dir := r.Path(s)
+		err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			rel, err := filepath.Rel(dir, p)
+			if err != nil {
+				return err
+			}
+			data, err := os.ReadFile(p)
+			if err != nil {
+				return err
+			}
+			out[s.String()+"/"+filepath.ToSlash(rel)] = data
+			return nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("pacote %s: %w", s, err)
+		}
+	}
+	return out, nil
+}

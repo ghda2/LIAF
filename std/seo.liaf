@@ -1,0 +1,118 @@
+;; std/seo - Otimizacao para motores de busca (SEO), OpenGraph, Twitter Cards, Schema.org e Sitemaps.
+;;
+;;   (import "std/seo")
+;;   (let meta MetaTags (new MetaTags "Meu Artigo" "Descricao..." "https://exemplo.com/artigo" "https://exemplo.com/capa.webp" "Meu Site" "Autor" "@site" "2026-09-27" "pt_BR"))
+;;   (let tags str (seo-meta-tags meta))
+;;
+(module seo
+  (struct MetaTags (fields
+    (title str)
+    (description str)
+    (canonical str)
+    (image str)
+    (site_name str)
+    (author str)
+    (twitter_handle str)
+    (article_date str)
+    (locale str)))
+
+  ;; seo-meta-tags gera o bloco completo de tags HTML para SEO, OpenGraph e Twitter Cards.
+  (fn seo-meta-tags (params (meta MetaTags)) (returns str) (effects)
+    (body
+      (let out str (fmt "<title>{}</title>\n" (field meta title)))
+      (if (not (str-eq (field meta description) ""))
+        (then (set out (concat out (fmt "<meta name=\"description\" content=\"{}\">\n" (field meta description))))))
+      (if (not (str-eq (field meta canonical) ""))
+        (then
+          (set out (concat out (fmt "<link rel=\"canonical\" href=\"{}\">\n" (field meta canonical))))
+          (set out (concat out (fmt "<meta property=\"og:url\" content=\"{}\">\n" (field meta canonical))))))
+      (set out (concat out (fmt "<meta property=\"og:title\" content=\"{}\">\n" (field meta title))))
+      (if (not (str-eq (field meta description) ""))
+        (then (set out (concat out (fmt "<meta property=\"og:description\" content=\"{}\">\n" (field meta description))))))
+      (if (not (str-eq (field meta image) ""))
+        (then
+          (set out (concat out (fmt "<meta property=\"og:image\" content=\"{}\">\n" (field meta image))))
+          (set out (concat out (fmt "<meta name=\"twitter:image\" content=\"{}\">\n" (field meta image))))))
+      (if (not (str-eq (field meta site_name) ""))
+        (then (set out (concat out (fmt "<meta property=\"og:site_name\" content=\"{}\">\n" (field meta site_name))))))
+      (if (not (str-eq (field meta locale) ""))
+        (then (set out (concat out (fmt "<meta property=\"og:locale\" content=\"{}\">\n" (field meta locale)))))
+        (else (set out (concat out "<meta property=\"og:locale\" content=\"pt_BR\">\n"))))
+      (if (not (str-eq (field meta article_date) ""))
+        (then
+          (set out (concat out "<meta property=\"og:type\" content=\"article\">\n"))
+          (set out (concat out (fmt "<meta property=\"article:published_time\" content=\"{}\">\n" (field meta article_date))))
+          (if (not (str-eq (field meta author) ""))
+            (then (set out (concat out (fmt "<meta property=\"article:author\" content=\"{}\">\n" (field meta author)))))))
+        (else (set out (concat out "<meta property=\"og:type\" content=\"website\">\n"))))
+      (set out (concat out "<meta name=\"twitter:card\" content=\"summary_large_image\">\n"))
+      (set out (concat out (fmt "<meta name=\"twitter:title\" content=\"{}\">\n" (field meta title))))
+      (if (not (str-eq (field meta description) ""))
+        (then (set out (concat out (fmt "<meta name=\"twitter:description\" content=\"{}\">\n" (field meta description))))))
+      (if (not (str-eq (field meta twitter_handle) ""))
+        (then (set out (concat out (fmt "<meta name=\"twitter:site\" content=\"{}\">\n" (field meta twitter_handle))))))
+      (return out)))
+
+  ;; seo-jsonld-article gera o JSON-LD estruturado Schema.org para artigos/noticias
+  (fn seo-jsonld-article (params (meta MetaTags) (publisher_name str) (publisher_logo str)) (returns str) (effects)
+    (body
+      (let json str (fmt "<script type=\"application/ld+json\">{{\"@context\":\"https://schema.org\",\"@type\":\"NewsArticle\",\"headline\":\"{}\",\"description\":\"{}\",\"image\":\"{}\",\"datePublished\":\"{}\",\"author\":{{\"@type\":\"Person\",\"name\":\"{}\"}},\"publisher\":{{\"@type\":\"Organization\",\"name\":\"{}\",\"logo\":{{\"@type\":\"ImageObject\",\"url\":\"{}\"}}}}}}</script>\n"
+        (field meta title)
+        (field meta description)
+        (field meta image)
+        (field meta article_date)
+        (field meta author)
+        publisher_name
+        publisher_logo))
+      (return json)))
+
+  ;; seo-jsonld-website gera o JSON-LD estruturado Schema.org para o site geral
+  (fn seo-jsonld-website (params (site_name str) (site_url str)) (returns str) (effects)
+    (body
+      (let json str (fmt "<script type=\"application/ld+json\">{{\"@context\":\"https://schema.org\",\"@type\":\"WebSite\",\"name\":\"{}\",\"url\":\"{}\"}}</script>\n"
+        site_name
+        site_url))
+      (return json)))
+
+  ;; seo-robots-txt gera o conteudo padrao para /robots.txt
+  (fn seo-robots-txt (params (sitemap_url str) (allow bool)) (returns str) (effects)
+    (body
+      (let rule str "Allow: /\n")
+      (if (not allow)
+        (then (set rule "Disallow: /\n")))
+      (let out str (fmt "User-agent: *\n{}Sitemap: {}\n" rule sitemap_url))
+      (return out)))
+
+  ;; seo-sitemap-start inicia documento XML de sitemap
+  (fn seo-sitemap-start (params) (returns str) (effects)
+    (body
+      (return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n")))
+
+  ;; seo-sitemap-url gera uma entrada <url> para o sitemap.xml
+  (fn seo-sitemap-url (params (loc str) (lastmod str) (changefreq str) (priority str)) (returns str) (effects)
+    (body
+      (return (fmt "  <url>\n    <loc>{}</loc>\n    <lastmod>{}</lastmod>\n    <changefreq>{}</changefreq>\n    <priority>{}</priority>\n  </url>\n"
+        loc lastmod changefreq priority))))
+
+  ;; seo-sitemap-end encerra o sitemap.xml
+  (fn seo-sitemap-end (params) (returns str) (effects)
+    (body
+      (return "</urlset>\n")))
+
+  ;; seo-rss-start inicia um feed RSS 2.0
+  (fn seo-rss-start (params (title str) (description str) (link str)) (returns str) (effects)
+    (body
+      (return (fmt "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rss version=\"2.0\">\n  <channel>\n    <title>{}</title>\n    <description>{}</description>\n    <link>{}</link>\n"
+        title description link))))
+
+  ;; seo-rss-item adiciona um artigo ao feed RSS
+  (fn seo-rss-item (params (title str) (link str) (description str) (pub_date str)) (returns str) (effects)
+    (body
+      (return (fmt "    <item>\n      <title>{}</title>\n      <link>{}</link>\n      <description>{}</description>\n      <pubDate>{}</pubDate>\n    </item>\n"
+        title link description pub_date))))
+
+  ;; seo-rss-end encerra o feed RSS 2.0
+  (fn seo-rss-end (params) (returns str) (effects)
+    (body
+      (return "  </channel>\n</rss>\n")))
+)

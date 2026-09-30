@@ -16,6 +16,7 @@ func runBuild(args []string) {
 	embedAssets := false
 	embedDir := "public"
 	assetsDir := ""
+	docFonts := ""
 
 	for i := 0; i < len(args); i++ {
 		if args[i] == "-o" && i+1 < len(args) {
@@ -28,13 +29,15 @@ func runBuild(args []string) {
 		} else if strings.HasPrefix(args[i], "--embed=") {
 			embedAssets = true
 			embedDir = strings.TrimPrefix(args[i], "--embed=")
+		} else if strings.HasPrefix(args[i], "--doc-fonts=") {
+			docFonts = strings.TrimPrefix(args[i], "--doc-fonts=")
 		} else if !strings.HasPrefix(args[i], "-") && filePath == "" {
 			filePath = args[i]
 		}
 	}
 
 	if filePath == "" {
-		fmt.Fprintln(os.Stderr, "Uso: liafc build <arquivo.liaf> [-o saida] [--embed]")
+		fmt.Fprintln(os.Stderr, "Uso: liafc build <arquivo.liaf> [-o saida] [--embed] [--doc-fonts=inter,serif,math,mono]")
 		os.Exit(1)
 	}
 
@@ -90,7 +93,11 @@ func runBuild(args []string) {
 		fmt.Printf("📦 [LIAF Pack] Pasta '%s' embutida com sucesso no binário nativo\n", targetDir)
 	}
 
-	if err := compileGo(generatedCode, assetsDir, outFile, filePath); err != nil {
+	fontTags, err := docFontTags(docFonts)
+	if err != nil {
+		fatal(err)
+	}
+	if err := compileGo(generatedCode, assetsDir, outFile, filePath, fontTags...); err != nil {
 		fmt.Fprintf(os.Stderr, "Erro compilando binário: %v\n", err)
 		os.Exit(1)
 	}
@@ -103,12 +110,13 @@ func runBuild(args []string) {
 // assetsDir, se nao vazio, e copiado como public/ ao lado do main.go para o
 // //go:embed do --embed. srcPath e o .liaf de origem: os pacotes Typst citados
 // sao resolvidos a partir dele (arquivo de trava ao lado).
-func compileGo(generatedCode, assetsDir, outFile, srcPath string) error {
+func compileGo(generatedCode, assetsDir, outFile, srcPath string, tags ...string) error {
 	app, err := toolchain.NewApp(generatedCode)
 	if err != nil {
 		return err
 	}
 	defer app.Remove()
+	app.Tags = tags
 
 	if assetsDir != "" {
 		if err := copyDirectory(assetsDir, filepath.Join(app.Dir, "public")); err != nil {

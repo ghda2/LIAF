@@ -17,10 +17,6 @@ Como as pastas estão organizadas: [README.md](README.md).
 | [#001 SSG](a-fazer/ISSUE_001_SSG_EVOLUTION.md) | Implementada | Metas de desempenho (RAM <5 MB, reload <5 ms) nunca medidas sob carga definida |
 | [#006 Result](a-fazer/ISSUE_006_STRUCTURED_ERROR_HANDLING.md) | Implementada | Revisão de fluxo entre ramos e loops, sem registro de andamento desde 16/09 |
 | [#017 Tempo real](a-fazer/ISSUE_017_REALTIME_CHANNELS_RESILIENCY.md) | Proposta | Nada implementado |
-| [#034 Motor de documentos](a-fazer/ISSUE_034_DOCUMENTOS_PDF_NATIVOS.md) | Implementada (base) | Typst 0.15.1 em WASM via wazero, builtins `pdf-*`, fontes (texto, serifa, matemática, código), imagens e pacotes do Typst Universe embutidos no build com trava SHA-256. Faltam CI do WASM, licenças na distribuição e reduzir os +21 MB por app |
-| [#035 Declaração `doc`](a-fazer/ISSUE_035_DECLARACAO_DOC.md) | Proposta | Sintaxe LIAF traduzida para Typst; nada implementado |
-| [#036 Biblioteca de documentos](a-fazer/ISSUE_036_BIBLIOTECA_DE_DOCUMENTOS.md) | Em andamento | Tema, componentes e `cv-moderno` feitos; faltam recibo, cobrança Pix (QR), boleto, relatório |
-| [#037 Qualidade e laço do agente](a-fazer/ISSUE_037_QUALIDADE_E_LACO_DO_AGENTE.md) | Proposta | `liafc doc`, avisos de layout com `fix`, score e regressão visual |
 | [#011 Self-hosting](a-fazer/ISSUE_011_SELF_HOSTING_COMPILER.md) | Pendente | Depende de linguagem e backend estáveis |
 | [#031 Guia](a-fazer/ISSUE_031_GUIA_PROXIMAS_ISSUES.md) | Aberta | Itens 0.1 e 0.2 feitos; faltam transformar as seções B e C em issues |
 | **#029** `std/storage` | Concluída / Pendente commit | Upload multipart/raw, compressão WebP sem perdas e serviço de imagens |
@@ -29,6 +25,8 @@ Como as pastas estão organizadas: [README.md](README.md).
 
 | Issue | Evidência |
 |---|---|
+| [#034 Motor de documentos](feito/ISSUE_034_DOCUMENTOS_PDF_NATIVOS.md) | Typst 0.15.1 em WASM embutido no compilador via wazero, builtins `pdf-typst*` e `png-typst*`, pacotes de fontes com gzip, determinação por SHA-256 e exemplos de ponta a ponta (`curriculo.liaf`, `cobranca.liaf`, `relatorio.liaf`) |
+| [#037 Qualidade e laço do agente](feito/ISSUE_037_QUALIDADE_E_LACO_DO_AGENTE.md) | Subcomandos `liafc doc check/preview/watch`, cálculo de métricas de ocupação de página, detecção e sugestão de correção automática para contraste WCAG AA e regressão visual testada |
 | [#033 Sintaxe linear v0.6](feito/ISSUE_033_LIAF_V06_SINTAXE_LINEAR_SEM_PARENTESES.md) | Sintaxe sem parênteses envolventes implementada no lexer e parser linear (`linear.go`, `linear_test.go`); gerada mesma AST; redução comprovada de 69,3% de tokens BPE frente à v0.3; executado servidor HTTP fim a fim em `TestExecuteV06TaskAPI` |
 | [#015 Bancos](feito/ISSUE_015_DATABASE_DRIVERS_NETWORK.md) | Drivers nativos testados e validados contra PostgreSQL 16, MySQL 8 (caching_sha2_password) e Redis 7 reais via Docker; programas `db_postgres.liaf`, `db_mysql.liaf` e `db_redis.liaf` executados |
 | [#030 Modularização dos monólitos](feito/ISSUE_030_MODULARIZACAO_MONOLITOS.md) | Modularizados os 6 monólitos críticos (cache, table, builtins_hooks, parser, checker, codegen), 4 módulos de prioridade média (mysql, postgres, websocket, liafc) e funções longas |
@@ -51,3 +49,5 @@ Como as pastas estão organizadas: [README.md](README.md).
 | [#008 Streaming](feito/ISSUE_008_HYBRID_STORAGE_AND_STREAMING.md) | Range 206/416 testados |
 | [#002–#005](feito/) | Loops, coleções, rotas HTTP, FS/JSON |
 | [#014 Modularização](arquivo/ISSUE_014_MODULARIZACAO_CODEBASE.md) | **Substituída** pela #030; está em `arquivo/` |
+| [#035 Declaração `doc`](arquivo/ISSUE_035_DECLARACAO_DOC.md) | **Descartada** em 30/09: substituída pelo uso direto de Typst (`pdf-typst`) com dados em JSON, sem sobretaxa de tokens |
+| [#036 Biblioteca de documentos](arquivo/ISSUE_036_BIBLIOTECA_DE_DOCUMENTOS.md) | **Descartada** em 30/09: sem modelos prontos, o documento é código; está em `arquivo/` |

@@ -38,7 +38,7 @@ func runRun(args []string) {
 	if runtime.GOOS == "windows" {
 		bin += ".exe"
 	}
-	if err := compileGo(generatedCode, "", bin); err != nil {
+	if err := compileGo(generatedCode, "", bin, filePath); err != nil {
 		os.RemoveAll(tmpDir)
 		fmt.Fprintf(os.Stderr, "Erro compilando programa: %v\n", err)
 		os.Exit(1)

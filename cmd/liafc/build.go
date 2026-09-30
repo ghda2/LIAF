@@ -90,7 +90,7 @@ func runBuild(args []string) {
 		fmt.Printf("📦 [LIAF Pack] Pasta '%s' embutida com sucesso no binário nativo\n", targetDir)
 	}
 
-	if err := compileGo(generatedCode, assetsDir, outFile); err != nil {
+	if err := compileGo(generatedCode, assetsDir, outFile, filePath); err != nil {
 		fmt.Fprintf(os.Stderr, "Erro compilando binário: %v\n", err)
 		os.Exit(1)
 	}
@@ -101,8 +101,9 @@ func runBuild(args []string) {
 // compileGo compila o Go gerado em outFile usando o runtime embutido no
 // liafc (issue #032): funciona em qualquer pasta, sem go.mod do usuario.
 // assetsDir, se nao vazio, e copiado como public/ ao lado do main.go para o
-// //go:embed do --embed.
-func compileGo(generatedCode, assetsDir, outFile string) error {
+// //go:embed do --embed. srcPath e o .liaf de origem: os pacotes Typst citados
+// sao resolvidos a partir dele (arquivo de trava ao lado).
+func compileGo(generatedCode, assetsDir, outFile, srcPath string) error {
 	app, err := toolchain.NewApp(generatedCode)
 	if err != nil {
 		return err
@@ -113,6 +114,10 @@ func compileGo(generatedCode, assetsDir, outFile string) error {
 		if err := copyDirectory(assetsDir, filepath.Join(app.Dir, "public")); err != nil {
 			return fmt.Errorf("could not embed %s: %w", assetsDir, err)
 		}
+	}
+
+	if err := embedTypstPackages(app, generatedCode, srcPath); err != nil {
+		return fmt.Errorf("pacotes Typst: %w", err)
 	}
 
 	cmd := app.Build(outFile)

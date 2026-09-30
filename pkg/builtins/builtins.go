@@ -75,6 +75,9 @@ type Builtin struct {
 	GoCall     string // Nome da função no runtime Go (ex: "rt.ReadFile" gera "rt.ReadFile(arg1, arg2)")
 	GoTemplate string // Formato Go (ex: "fmt.Println(%s)" ou "(%s == %s)")
 	GoEmit     func(ctx GoContext, call *ast.CallExpr, args []string) (string, bool)
+	// GoImport é um import extra ("alias \"caminho\"") que o programa só recebe se usar este
+	// builtin. Mantém pacotes pesados (ex.: o motor de documentos) fora de quem não os usa.
+	GoImport string
 
 	// Emissão C
 	UnsupportedC       bool

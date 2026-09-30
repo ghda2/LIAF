@@ -14,6 +14,9 @@ func (g *Generator) libraryCall(c *ast.CallExpr) (string, bool) {
 	if b == nil {
 		return "", false
 	}
+	if b.GoImport != "" {
+		g.extraImports[b.GoImport] = true
+	}
 	args := make([]string, len(c.Args))
 	for i, a := range c.Args {
 		args[i] = g.genExpr(a)

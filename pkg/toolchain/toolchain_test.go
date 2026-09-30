@@ -15,7 +15,7 @@ import (
 // de que eles dependem tem de estar embutido, senao liafc build quebra fora do
 // repositorio com "package liaf/pkg/x is not in std".
 func TestRuntimeFSCoversRuntimeDeps(t *testing.T) {
-	out, err := exec.Command("go", "list", "-deps", "liaf/pkg/web", "liaf/pkg/runtime").Output()
+	out, err := exec.Command("go", "list", "-deps", "liaf/pkg/web", "liaf/pkg/runtime", "liaf/pkg/docrt").Output()
 	if err != nil {
 		t.Fatalf("go list: %v", err)
 	}

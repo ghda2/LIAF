@@ -2,6 +2,7 @@ package codegen
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"liaf/pkg/ast"
@@ -16,11 +17,16 @@ type Generator struct {
 	serial      int
 	curOnErrVar string
 	curRetType  ast.Type
+	// extraImports são imports pedidos por builtins usados (Builtin.GoImport).
+	extraImports map[string]bool
 }
+
+const extraImportsMarker = "\t// liaf:extra-imports\n"
+
 
 func New(mod *ast.Module) *Generator {
 	info, _ := checker.Check(mod, "")
-	return &Generator{mod: mod, info: info}
+	return &Generator{mod: mod, info: info, extraImports: map[string]bool{}}
 }
 
 func (g *Generator) Generate() string {
@@ -34,6 +40,7 @@ func (g *Generator) Generate() string {
 	g.sb.WriteString("\t\"time\"\n")
 	g.sb.WriteString("\t\"liaf/pkg/web\"\n")
 	g.sb.WriteString("\trt \"liaf/pkg/runtime\"\n")
+	g.sb.WriteString(extraImportsMarker)
 	g.sb.WriteString(")\n\n")
 
 	g.sb.WriteString("var (\n")
@@ -112,7 +119,16 @@ func (g *Generator) Generate() string {
 		}
 	}
 
-	return g.sb.String()
+	return strings.Replace(g.sb.String(), extraImportsMarker, g.importLines(), 1)
+}
+
+func (g *Generator) importLines() string {
+	lines := make([]string, 0, len(g.extraImports))
+	for imp := range g.extraImports {
+		lines = append(lines, "\t"+imp+"\n")
+	}
+	sort.Strings(lines)
+	return strings.Join(lines, "")
 }
 
 func (g *Generator) genStruct(s *ast.StructDecl) {

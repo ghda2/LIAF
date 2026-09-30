@@ -17,6 +17,10 @@ Como as pastas estão organizadas: [README.md](README.md).
 | [#001 SSG](a-fazer/ISSUE_001_SSG_EVOLUTION.md) | Implementada | Metas de desempenho (RAM <5 MB, reload <5 ms) nunca medidas sob carga definida |
 | [#006 Result](a-fazer/ISSUE_006_STRUCTURED_ERROR_HANDLING.md) | Implementada | Revisão de fluxo entre ramos e loops, sem registro de andamento desde 16/09 |
 | [#017 Tempo real](a-fazer/ISSUE_017_REALTIME_CHANNELS_RESILIENCY.md) | Proposta | Nada implementado |
+| [#034 Motor de documentos](a-fazer/ISSUE_034_DOCUMENTOS_PDF_NATIVOS.md) | Implementada (base) | Typst 0.15.1 em WASM via wazero, builtins `pdf-*`, fontes (texto, serifa, matemática, código), imagens e pacotes do Typst Universe embutidos no build com trava SHA-256. Faltam CI do WASM, licenças na distribuição e reduzir os +21 MB por app |
+| [#035 Declaração `doc`](a-fazer/ISSUE_035_DECLARACAO_DOC.md) | Proposta | Sintaxe LIAF traduzida para Typst; nada implementado |
+| [#036 Biblioteca de documentos](a-fazer/ISSUE_036_BIBLIOTECA_DE_DOCUMENTOS.md) | Em andamento | Tema, componentes e `cv-moderno` feitos; faltam recibo, cobrança Pix (QR), boleto, relatório |
+| [#037 Qualidade e laço do agente](a-fazer/ISSUE_037_QUALIDADE_E_LACO_DO_AGENTE.md) | Proposta | `liafc doc`, avisos de layout com `fix`, score e regressão visual |
 | [#011 Self-hosting](a-fazer/ISSUE_011_SELF_HOSTING_COMPILER.md) | Pendente | Depende de linguagem e backend estáveis |
 | [#031 Guia](a-fazer/ISSUE_031_GUIA_PROXIMAS_ISSUES.md) | Aberta | Itens 0.1 e 0.2 feitos; faltam transformar as seções B e C em issues |
 | **#029** `std/storage` | Concluída / Pendente commit | Upload multipart/raw, compressão WebP sem perdas e serviço de imagens |

@@ -1,0 +1,119 @@
+// Currículo moderno em PDF (issue #034).
+//
+// Os dados são structs LIAF tipadas: um campo com nome errado para no `liafc check`, antes
+// de gerar qualquer PDF. O layout vem do modelo "cv-moderno" da biblioteca de documentos,
+// renderizado pelo motor Typst embutido no próprio executável (sem Rust e sem binário extra).
+//
+//   liafc run curriculo.liaf      -> grava curriculo.pdf e curriculo.png (prévia)
+//
+// Numa API, o mesmo PDF sai direto na resposta:
+//
+//   route GET "/curriculo.pdf" () Response
+//     on-err e
+//       json-response(500, e)
+//     end
+//     let pdf = try pdf-template("cv-moderno", try json-encode(dados()))
+//     pdf-response(pdf, "curriculo.pdf")
+//   end
+module curriculo
+
+struct Experiencia
+  cargo str
+  empresa str
+  periodo str
+  local str
+  descricao str
+  destaques (list str)
+  tecnologias (list str)
+end
+
+struct Formacao
+  curso str
+  instituicao str
+  periodo str
+  descricao str
+end
+
+struct Projeto
+  nome str
+  descricao str
+  link str
+  tecnologias (list str)
+end
+
+struct Habilidade
+  nome str
+  nivel int
+end
+
+struct Idioma
+  nome str
+  nivel str
+end
+
+struct Curriculo
+  nome str
+  cargo str
+  resumo str
+  email str
+  telefone str
+  local str
+  site str
+  linkedin str
+  github str
+  cor str
+  experiencias (list Experiencia)
+  projetos (list Projeto)
+  formacao (list Formacao)
+  habilidades (list Habilidade)
+  idiomas (list Idioma)
+  certificacoes (list str)
+  interesses (list str)
+end
+
+fn experiencias() (list Experiencia)
+  let xs = make-list(Experiencia)
+  list-push(xs, new Experiencia("Engenheiro de Software Sênior", "Pagar Fácil", "2022 — atual", "Remoto", "Lidero a plataforma de cobranças Pix, que processa 2 milhões de transações por dia.", list("Reduzi a latência p99 da API de cobrança de 480 ms para 90 ms.", "Desenhei a idempotência ponta a ponta que eliminou cobranças duplicadas.", "Mentorei 4 pessoas até o nível pleno."), list("Go", "PostgreSQL", "Kafka", "Kubernetes")))
+  list-push(xs, new Experiencia("Engenheiro de Software", "Rota Certa Logística", "2018 — 2022", "Campinas, SP", "Backend de roteirização e rastreio de entregas em tempo real.", list("Migrei o monólito de rastreio para serviços orientados a eventos.", "Criei o painel de SLA usado por 300 transportadoras."), list("Python", "Redis", "WebSockets")))
+  list-push(xs, new Experiencia("Desenvolvedor Júnior", "Agência Pixel", "2016 — 2018", "São Paulo, SP", "Sites e APIs para clientes de varejo.", make-list(str), list("PHP", "MySQL")))
+  xs
+end
+
+fn habilidades() (list Habilidade)
+  let hs = make-list(Habilidade)
+  list-push(hs, new Habilidade("Go", 5))
+  list-push(hs, new Habilidade("Arquitetura de sistemas", 5))
+  list-push(hs, new Habilidade("PostgreSQL", 4))
+  list-push(hs, new Habilidade("Python", 4))
+  list-push(hs, new Habilidade("Kubernetes", 3))
+  hs
+end
+
+fn idiomas() (list Idioma)
+  let is = make-list(Idioma)
+  list-push(is, new Idioma("Português", "Nativo"))
+  list-push(is, new Idioma("Inglês", "Fluente"))
+  list-push(is, new Idioma("Espanhol", "Intermediário"))
+  is
+end
+
+fn dados() Curriculo
+  let projetos = make-list(Projeto)
+  list-push(projetos, new Projeto("LIAF", "Linguagem de programação pensada para modelos de IA, compilada para Go.", "github.com/rafael/liaf", list("Go", "Typst", "WebAssembly")))
+  let formacao = make-list(Formacao)
+  list-push(formacao, new Formacao("Bacharelado em Ciência da Computação", "Universidade de São Paulo", "2012 — 2016", ""))
+  new Curriculo("Rafael Monteiro", "Engenheiro de Software Sênior", "Engenheiro de backend com 9 anos construindo sistemas de pagamento e logística. Gosto de transformar domínios complexos em APIs simples, medir antes de otimizar e deixar o time mais rápido do que encontrei.", "rafael@exemplo.dev", "+55 11 98765-4321", "São Paulo, SP", "rafael.dev", "linkedin.com/in/rafael", "github.com/rafael", "#4f46e5", experiencias(), projetos, formacao, habilidades(), idiomas(), list("AWS Solutions Architect", "CKA — Kubernetes"), list("Tipografia", "Corrida", "Open source"))
+end
+
+fn main() void effects(fs, io)
+  on-err e
+    println(fmt("erro: {}", e))
+    exit(1)
+  end
+  let json = try json-encode(dados())
+  let pdf = try pdf-template("cv-moderno", json)
+  try fs-write-file("curriculo.pdf", pdf)
+  let png = try png-template("cv-moderno", json)
+  try fs-write-file("curriculo.png", png)
+  println(fmt("curriculo.pdf gerado ({} bytes)", str-byte-len(pdf)))
+end

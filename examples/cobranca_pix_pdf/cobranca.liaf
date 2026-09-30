@@ -1,0 +1,30 @@
+// Cobrança Pix em PDF com QR Code (issue #034).
+//
+// O layout está em cobranca.typ, que usa um pacote da comunidade Typst (@preview/tiaoma) para
+// o QR Code. O liafc build encontra a citação, baixa o pacote uma vez, confere o SHA-256 em
+// liaf-typst.lock e o embute no binário: em execução nada acessa a rede.
+//
+//   cd examples/cobranca_pix_pdf && liafc run cobranca.liaf   -> cobranca.pdf
+module cobranca_pix_pdf
+
+struct Cobranca
+  recebedor str
+  txid str
+  valor_centavos int
+  vencimento str
+  descricao str
+  copia_e_cola str
+  cor str
+end
+
+fn main() void effects(fs, io)
+  on-err e
+    println(fmt("erro: {}", e))
+    exit(1)
+  end
+  let c = new Cobranca("Padaria Pão Quente", "LIAF7K2M9Q4X", 4790, "05/10/2026", "Pedido #1042 — 2 cafés e 1 bolo", "00020126580014BR.GOV.BCB.PIX0136123e4567-e12b-12d1-a456-4266554400005204000053039865406047.905802BR5918PADARIA PAO QUENTE6009SAO PAULO62160512LIAF7K2M9Q4X6304ABCD", "#b45309")
+  let layout = try fs-read-file("cobranca.typ")
+  let pdf = try pdf-typst(layout, try json-encode(c))
+  try fs-write-file("cobranca.pdf", pdf)
+  println(fmt("cobranca.pdf gerado ({} bytes)", str-byte-len(pdf)))
+end

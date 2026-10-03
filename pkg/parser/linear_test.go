@@ -312,3 +312,65 @@ func TestCanonicalFormattingFromLinearAST(t *testing.T) {
 		t.Errorf("formatação divergente:\nEsperado:\n%s\nObtido:\n%s", expected, formatted)
 	}
 }
+
+func TestParseLinearEnumAndMatch(t *testing.T) {
+	input := `
+	enum Status
+		Pendente
+		Pago
+		Cancelado
+	end
+
+	fn checar(s Status) str
+		match s
+			case Status.Pendente
+				"Aguardando"
+			case Status.Pago
+				"Confirmado"
+			case Status.Cancelado
+				"Cancelado"
+		end
+	end
+	`
+	l := lexer.New(input)
+	p := New(l, "enum_test.liaf")
+	mod := p.ParseModule()
+
+	if len(p.Diagnostics) > 0 {
+		t.Fatalf("diagnósticos inesperados: %+v", p.Diagnostics)
+	}
+
+	if len(mod.Decls) != 2 {
+		t.Fatalf("esperado 2 declarações, obteve %d", len(mod.Decls))
+	}
+
+	enumDecl, ok := mod.Decls[0].(*ast.EnumDecl)
+	if !ok {
+		t.Fatalf("decls[0] não é *ast.EnumDecl")
+	}
+	if enumDecl.Name != "Status" || len(enumDecl.Variants) != 3 {
+		t.Fatalf("esperado enum Status com 3 variantes, obteve %+v", enumDecl)
+	}
+	if enumDecl.Variants[0].Name != "Pendente" || enumDecl.Variants[1].Name != "Pago" || enumDecl.Variants[2].Name != "Cancelado" {
+		t.Fatalf("variantes incorretas: %+v", enumDecl.Variants)
+	}
+
+	fnDecl, ok := mod.Decls[1].(*ast.FuncDecl)
+	if !ok {
+		t.Fatalf("decls[1] não é *ast.FuncDecl")
+	}
+	if len(fnDecl.Body) != 1 {
+		t.Fatalf("esperado 1 stmt no body, obteve %d", len(fnDecl.Body))
+	}
+	matchStmt, ok := fnDecl.Body[0].(*ast.MatchStmt)
+	if !ok {
+		t.Fatalf("stmt não é *ast.MatchStmt")
+	}
+	if len(matchStmt.Cases) != 3 {
+		t.Fatalf("esperado 3 cases, obteve %d", len(matchStmt.Cases))
+	}
+	if matchStmt.Cases[0].Pattern != "Status.Pendente" {
+		t.Fatalf("case[0] pattern incorreto: %s", matchStmt.Cases[0].Pattern)
+	}
+}
+

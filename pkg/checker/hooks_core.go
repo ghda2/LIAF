@@ -1,6 +1,8 @@
 package checker
 
 import (
+	"fmt"
+
 	"liaf/pkg/ast"
 	"liaf/pkg/builtins"
 )
@@ -100,6 +102,24 @@ func init() {
 		if !c.arity(v, 2) {
 			return nil
 		}
+		// Se a base for um enum diretamente (ex: Status.Pendente)
+		if id0, ok := v.Args[0].(*ast.IdentExpr); ok {
+			if enumDecl := c.Info.Enums[id0.Name]; enumDecl != nil {
+				id1, ok1 := v.Args[1].(*ast.IdentExpr)
+				if !ok1 {
+					c.error(v, "E_UNKNOWN_FIELD", "Expected variant name")
+					return nil
+				}
+				for _, variant := range enumDecl.Variants {
+					if variant.Name == id1.Name {
+						return &ast.NamedType{Name: enumDecl.Name}
+					}
+				}
+				c.error(v, "E_UNKNOWN_VARIANT", fmt.Sprintf("Enum %s has no variant %s", enumDecl.Name, id1.Name))
+				return nil
+			}
+		}
+
 		t := c.expr(v.Args[0], nil)
 		id, ok := v.Args[1].(*ast.IdentExpr)
 		if !ok {
@@ -115,6 +135,49 @@ func init() {
 		}
 		c.error(v, "E_UNKNOWN_FIELD", id.Name)
 		return nil
+	})
+
+	builtins.RegisterSpecialCheck("variant-call", func(ctx builtins.CheckContext, v *ast.CallExpr, want ast.Type) ast.Type {
+		c := ctx.(*Checker)
+		if len(v.Args) < 1 {
+			return nil
+		}
+		fieldCall, ok := v.Args[0].(*ast.CallExpr)
+		if !ok || fieldCall.Func != "field" || len(fieldCall.Args) != 2 {
+			c.error(v, "E_INVALID_VARIANT_CALL", "Expected Enum.Variant")
+			return nil
+		}
+		id0, ok0 := fieldCall.Args[0].(*ast.IdentExpr)
+		id1, ok1 := fieldCall.Args[1].(*ast.IdentExpr)
+		if !ok0 || !ok1 {
+			return nil
+		}
+		enumDecl := c.Info.Enums[id0.Name]
+		if enumDecl == nil {
+			c.error(v, "E_UNKNOWN_TYPE", id0.Name)
+			return nil
+		}
+		var targetVariant *ast.EnumVariant
+		for _, variant := range enumDecl.Variants {
+			if variant.Name == id1.Name {
+				targetVariant = &variant
+				break
+			}
+		}
+		if targetVariant == nil {
+			c.error(v, "E_UNKNOWN_VARIANT", fmt.Sprintf("Enum %s has no variant %s", enumDecl.Name, id1.Name))
+			return nil
+		}
+		actualArgs := v.Args[1:]
+		if len(actualArgs) != len(targetVariant.Fields) {
+			c.error(v, "E_ARITY_MISMATCH", fmt.Sprintf("Variant %s expects %d arguments, received %d", targetVariant.Name, len(targetVariant.Fields), len(actualArgs)))
+			return nil
+		}
+		for i, arg := range actualArgs {
+			argType := c.expr(arg, targetVariant.Fields[i].Type)
+			c.require(arg, argType, targetVariant.Fields[i].Type)
+		}
+		return &ast.NamedType{Name: enumDecl.Name}
 	})
 
 	// some

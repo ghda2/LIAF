@@ -28,6 +28,7 @@ const (
 	MODULE  TokenType = "module"
 	IMPORT  TokenType = "import"
 	STRUCT  TokenType = "struct"
+	ENUM    TokenType = "enum"
 	FIELDS  TokenType = "fields"
 	FN      TokenType = "fn"
 	PARAMS  TokenType = "params"
@@ -51,6 +52,7 @@ const (
 	BREAK     TokenType = "break"
 	CONTINUE  TokenType = "continue"
 	MATCH     TokenType = "match"
+	CASE      TokenType = "case"
 	ON_ERR    TokenType = "on-err"
 	ROUTE     TokenType = "route"
 
@@ -86,13 +88,14 @@ const (
 
 var keywords = map[string]TokenType{
 	"while": WHILE, "for-range": FOR_RANGE, "for-each": FOR_EACH,
-	"break": BREAK, "continue": CONTINUE, "match": MATCH,
+	"break": BREAK, "continue": CONTINUE, "match": MATCH, "case": CASE,
 	"on-err": ON_ERR, "route": ROUTE, "try": TRY,
 	"ws-route": WS_ROUTE, "on-open": ON_OPEN, "on-message": ON_MESSAGE, "on-close": ON_CLOSE,
 	"db-transaction": DB_TRANSACTION,
 	"module":  MODULE,
 	"import":  IMPORT,
 	"struct":  STRUCT,
+	"enum":    ENUM,
 	"fields":  FIELDS,
 	"fn":      FN,
 	"params":  PARAMS,

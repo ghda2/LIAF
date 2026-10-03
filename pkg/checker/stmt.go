@@ -2,6 +2,8 @@ package checker
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	"liaf/pkg/ast"
 )
@@ -93,6 +95,10 @@ func (c *Checker) statements(body []ast.Stmt) {
 			}
 		case *ast.MatchStmt:
 			valType := c.expr(s.Value, nil)
+			if len(s.Cases) > 0 {
+				c.checkMatchStmtCases(s, valType)
+				continue
+			}
 			if s.IsOption {
 				a := parts(valType, "option", 1)
 				if a == nil {
@@ -171,7 +177,23 @@ func returns(body []ast.Stmt) bool {
 				return true
 			}
 		case *ast.MatchStmt:
-			if returns(s.OK) && returns(s.Err) {
+			if len(s.Cases) > 0 {
+				allReturn := true
+				for _, c := range s.Cases {
+					if !returns(c.Body) {
+						if len(c.Body) > 0 {
+							if _, isExpr := c.Body[len(c.Body)-1].(*ast.ExprStmt); isExpr {
+								continue
+							}
+						}
+						allReturn = false
+						break
+					}
+				}
+				if allReturn {
+					return true
+				}
+			} else if returns(s.OK) && returns(s.Err) {
 				return true
 			}
 		case *ast.DBTransactionStmt:
@@ -183,4 +205,163 @@ func returns(body []ast.Stmt) bool {
 		}
 	}
 	return false
+}
+
+func (c *Checker) checkMatchStmtCases(s *ast.MatchStmt, valType ast.Type) {
+	c.consume(s.Value)
+	typeName := name(valType)
+
+	if enumDecl := c.Info.Enums[typeName]; enumDecl != nil {
+		variantsMap := map[string]ast.EnumVariant{}
+		unhandled := map[string]bool{}
+		for _, v := range enumDecl.Variants {
+			variantsMap[v.Name] = v
+			unhandled[v.Name] = true
+		}
+
+		hasWildcard := false
+		for _, cs := range s.Cases {
+			if cs.Pattern == "_" {
+				hasWildcard = true
+				c.push()
+				c.statements(cs.Body)
+				if c.fn != nil && name(c.fn.ReturnType) != "void" && len(cs.Body) > 0 {
+					if es, ok := cs.Body[len(cs.Body)-1].(*ast.ExprStmt); ok {
+						exprT := c.expr(es.Expr, c.fn.ReturnType)
+						c.require(es, exprT, c.fn.ReturnType)
+					}
+				}
+				c.pop()
+				continue
+			}
+
+			varName := cs.Pattern
+			if strings.Contains(varName, ".") {
+				parts := strings.Split(varName, ".")
+				if parts[0] != enumDecl.Name {
+					c.error(s, "E_TYPE_MISMATCH", fmt.Sprintf("Pattern %s does not belong to enum %s", cs.Pattern, enumDecl.Name))
+					continue
+				}
+				varName = parts[1]
+			}
+
+			variant, ok := variantsMap[varName]
+			if !ok {
+				c.error(s, "E_UNKNOWN_VARIANT", fmt.Sprintf("Enum %s has no variant %s", enumDecl.Name, varName))
+				continue
+			}
+
+			if !unhandled[varName] {
+				c.error(s, "E_DUPLICATE_CASE", fmt.Sprintf("Duplicate case for variant %s", varName))
+			}
+			delete(unhandled, varName)
+
+			c.push()
+			if len(cs.Variables) != len(variant.Fields) {
+				c.error(s, "E_ARITY_MISMATCH", fmt.Sprintf("Variant %s expects %d variables, got %d", varName, len(variant.Fields), len(cs.Variables)))
+			} else {
+				for i, f := range variant.Fields {
+					c.define(cs.Variables[i], f.Type, s, false)
+				}
+			}
+			c.statements(cs.Body)
+			if c.fn != nil && name(c.fn.ReturnType) != "void" && len(cs.Body) > 0 {
+				if es, ok := cs.Body[len(cs.Body)-1].(*ast.ExprStmt); ok {
+					exprT := c.expr(es.Expr, c.fn.ReturnType)
+					c.require(es, exprT, c.fn.ReturnType)
+				}
+			}
+			c.pop()
+		}
+
+		if !hasWildcard && len(unhandled) > 0 {
+			var missing []string
+			for m := range unhandled {
+				missing = append(missing, m)
+			}
+			sort.Strings(missing)
+			c.error(s, "E_NONEXHAUSTIVE_MATCH", fmt.Sprintf("Match on enum %s is not exhaustive; missing: %s", enumDecl.Name, strings.Join(missing, ", ")))
+		}
+		return
+	}
+
+	if optParts := parts(valType, "option", 1); optParts != nil {
+		unhandled := map[string]bool{"some": true, "none": true}
+		hasWildcard := false
+		for _, cs := range s.Cases {
+			if cs.Pattern == "_" {
+				hasWildcard = true
+				c.push()
+				c.statements(cs.Body)
+				c.pop()
+				continue
+			}
+			if cs.Pattern != "some" && cs.Pattern != "none" {
+				c.error(s, "E_UNKNOWN_VARIANT", fmt.Sprintf("Option has no variant %s", cs.Pattern))
+				continue
+			}
+			if !unhandled[cs.Pattern] {
+				c.error(s, "E_DUPLICATE_CASE", fmt.Sprintf("Duplicate case for %s", cs.Pattern))
+			}
+			delete(unhandled, cs.Pattern)
+
+			c.push()
+			if cs.Pattern == "some" {
+				if len(cs.Variables) > 0 && cs.Variables[0] != "_" {
+					c.define(cs.Variables[0], optParts[0], s, false)
+				}
+			} else if cs.Pattern == "none" {
+				if len(cs.Variables) > 0 && cs.Variables[0] != "_" {
+					c.define(cs.Variables[0], primitive("void"), s, false)
+				}
+			}
+			c.statements(cs.Body)
+			c.pop()
+		}
+		if !hasWildcard && len(unhandled) > 0 {
+			c.error(s, "E_NONEXHAUSTIVE_MATCH", "Match on option is not exhaustive")
+		}
+		return
+	}
+
+	if resParts := parts(valType, "result", 2); resParts != nil {
+		unhandled := map[string]bool{"ok": true, "err": true}
+		hasWildcard := false
+		for _, cs := range s.Cases {
+			if cs.Pattern == "_" {
+				hasWildcard = true
+				c.push()
+				c.statements(cs.Body)
+				c.pop()
+				continue
+			}
+			if cs.Pattern != "ok" && cs.Pattern != "err" {
+				c.error(s, "E_UNKNOWN_VARIANT", fmt.Sprintf("Result has no variant %s", cs.Pattern))
+				continue
+			}
+			if !unhandled[cs.Pattern] {
+				c.error(s, "E_DUPLICATE_CASE", fmt.Sprintf("Duplicate case for %s", cs.Pattern))
+			}
+			delete(unhandled, cs.Pattern)
+
+			c.push()
+			if cs.Pattern == "ok" {
+				if len(cs.Variables) > 0 && cs.Variables[0] != "_" {
+					c.define(cs.Variables[0], resParts[0], s, IsResult(resParts[0]))
+				}
+			} else if cs.Pattern == "err" {
+				if len(cs.Variables) > 0 && cs.Variables[0] != "_" {
+					c.define(cs.Variables[0], resParts[1], s, IsResult(resParts[1]))
+				}
+			}
+			c.statements(cs.Body)
+			c.pop()
+		}
+		if !hasWildcard && len(unhandled) > 0 {
+			c.error(s, "E_NONEXHAUSTIVE_MATCH", "Match on result is not exhaustive")
+		}
+		return
+	}
+
+	c.error(s, "E_TYPE_MISMATCH", fmt.Sprintf("match requires enum, option or result, received %s", typeName))
 }

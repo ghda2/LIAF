@@ -42,6 +42,38 @@ func (g *Generator) genExpr(expr ast.Expr) string {
 			retType = "interface{}"
 		}
 		g.serial++
+		if len(e.Cases) > 0 {
+			valType := g.TypeOf(e.Value)
+			typeName := ""
+			if valType != nil {
+				typeName = valType.String()
+			}
+			isEnum := g.info.Enums[typeName] != nil
+			if isEnum {
+				matchVal := fmt.Sprintf("_liaf_match_%d", g.serial)
+				var casesSb strings.Builder
+				for _, c := range e.Cases {
+					if c.Pattern == "_" {
+						casesSb.WriteString("\tdefault:\n")
+					} else {
+						varName := c.Pattern
+						if strings.Contains(varName, ".") {
+							parts := strings.Split(varName, ".")
+							varName = parts[1]
+						}
+						constName := fmt.Sprintf("%s_%s", sanitizeIdent(typeName), sanitizeIdent(varName))
+						casesSb.WriteString(fmt.Sprintf("\tcase %s:\n", constName))
+					}
+					bodyExpr := "nil"
+					if c.ExprBody != nil {
+						bodyExpr = g.genExpr(c.ExprBody)
+					}
+					casesSb.WriteString(fmt.Sprintf("\t\treturn %s\n", bodyExpr))
+				}
+				return fmt.Sprintf("func() %s {\n\t%s := %s\n\tswitch %s {\n%s\t}\n\tpanic(\"unreachable\")\n}()",
+					retType, matchVal, g.genExpr(e.Value), matchVal, casesSb.String())
+			}
+		}
 		if e.IsOption {
 			id := fmt.Sprintf("_liaf_opt_%d", g.serial)
 			okVar := sanitizeIdent(e.OKName)
@@ -88,6 +120,7 @@ func (g *Generator) GenExpr(e ast.Expr) string   { return g.genExpr(e) }
 func (g *Generator) MapType(t ast.Type) string    { return mapType(t) }
 func (g *Generator) TypeOf(e ast.Expr) ast.Type   { return g.info.Types[e] }
 func (g *Generator) FieldIdent(f string) string   { return fieldIdent(f) }
+func (g *Generator) IsEnum(name string) bool      { return g.info != nil && g.info.Enums != nil && g.info.Enums[name] != nil }
 func (g *Generator) TypeName(e ast.Expr) string {
 	if t, ok := ast.TypeFromExpr(e); ok {
 		return mapType(t)

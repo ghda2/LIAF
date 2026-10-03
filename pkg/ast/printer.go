@@ -53,6 +53,8 @@ func (p *printer) printTopLevel(decl TopLevel, isLastDecl bool) {
 		p.sb.WriteString(fmt.Sprintf("(import %q)%s", d.Path, suffix))
 	case *StructDecl:
 		p.printStruct(d, suffix)
+	case *EnumDecl:
+		p.printEnum(d, suffix)
 	case *FuncDecl:
 		p.printFunc(d, suffix)
 	case *RouteDecl:
@@ -134,6 +136,22 @@ func (p *printer) printStruct(s *StructDecl, suffix string) {
 	}
 	for _, f := range s.Fields {
 		p.sb.WriteString(fmt.Sprintf(" (%s %s)", f.Name, f.Type.String()))
+	}
+	p.sb.WriteString(")" + suffix)
+}
+
+func (p *printer) printEnum(e *EnumDecl, suffix string) {
+	p.sb.WriteString("(enum " + e.Name)
+	for _, v := range e.Variants {
+		if len(v.Fields) == 0 {
+			p.sb.WriteString(" " + v.Name)
+		} else {
+			p.sb.WriteString(" (" + v.Name)
+			for _, f := range v.Fields {
+				p.sb.WriteString(fmt.Sprintf(" (%s %s)", f.Name, f.Type.String()))
+			}
+			p.sb.WriteString(")")
+		}
 	}
 	p.sb.WriteString(")" + suffix)
 }
@@ -303,6 +321,28 @@ func (p *printer) printStmt(stmt Stmt, suffix string) {
 		p.sb.WriteString("(db-transaction " + s.Conn)
 		p.printBlock(s.Body, suffix)
 	case *MatchStmt:
+		if len(s.Cases) > 0 {
+			p.sb.WriteString("(match " + formatExpr(s.Value) + "\n")
+			p.indent++
+			for i, c := range s.Cases {
+				p.writeIndent()
+				suf := ""
+				if i == len(s.Cases)-1 {
+					suf = ")" + suffix
+				}
+				vars := ""
+				if len(c.Variables) > 0 {
+					vars = " (" + strings.Join(c.Variables, " ") + ")"
+				}
+				p.sb.WriteString(fmt.Sprintf("(case %s%s", c.Pattern, vars))
+				p.printBlock(c.Body, suf)
+				if i < len(s.Cases)-1 {
+					p.sb.WriteString("\n")
+				}
+			}
+			p.indent--
+			return
+		}
 		p.sb.WriteString("(match " + formatExpr(s.Value) + "\n")
 		p.indent++
 		p.writeIndent()
@@ -508,6 +548,17 @@ func formatExpr(expr Expr) string {
 		}
 		return fmt.Sprintf("(if %s (then %s))", formatExpr(e.Condition), formatExpr(e.Then))
 	case *MatchExpr:
+		if len(e.Cases) > 0 {
+			var parts []string
+			for _, c := range e.Cases {
+				vars := ""
+				if len(c.Variables) > 0 {
+					vars = " (" + strings.Join(c.Variables, " ") + ")"
+				}
+				parts = append(parts, fmt.Sprintf("(case %s%s %s)", c.Pattern, vars, formatExpr(c.ExprBody)))
+			}
+			return fmt.Sprintf("(match %s %s)", formatExpr(e.Value), strings.Join(parts, " "))
+		}
 		if e.IsOption {
 			nonePart := "(none"
 			if e.ErrName != "" && e.ErrName != "_" {

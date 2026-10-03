@@ -110,6 +110,8 @@ func (g *Generator) Generate() string {
 		switch d := decl.(type) {
 		case *ast.StructDecl:
 			g.genStruct(d)
+		case *ast.EnumDecl:
+			g.genEnum(d)
 		case *ast.FuncDecl:
 			g.genFunc(d)
 		case *ast.RouteDecl:
@@ -129,6 +131,17 @@ func (g *Generator) importLines() string {
 	}
 	sort.Strings(lines)
 	return strings.Join(lines, "")
+}
+
+func (g *Generator) genEnum(e *ast.EnumDecl) {
+	name := sanitizeIdent(e.Name)
+	g.sb.WriteString(fmt.Sprintf("type %s string\n\n", name))
+	g.sb.WriteString("const (\n")
+	for _, v := range e.Variants {
+		constName := fmt.Sprintf("%s_%s", name, sanitizeIdent(v.Name))
+		g.sb.WriteString(fmt.Sprintf("\t%s %s = %q\n", constName, name, v.Name))
+	}
+	g.sb.WriteString(")\n\n")
 }
 
 func (g *Generator) genStruct(s *ast.StructDecl) {

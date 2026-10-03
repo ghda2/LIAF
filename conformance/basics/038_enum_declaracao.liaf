@@ -1,0 +1,24 @@
+;; issue: #038
+;; status: done
+;; out: Aguardando
+;; out: Confirmado
+;; out: Cancelado
+(module caso_enum
+  (enum Status
+    Pendente
+    Pago
+    Cancelado)
+  (fn checar (params (s Status)) (returns str) (effects)
+    (body
+      (match s
+        (case Status.Pendente "Aguardando")
+        (case Status.Pago "Confirmado")
+        (case Status.Cancelado "Cancelado"))))
+  (fn main (params) (returns void) (effects io)
+    (body
+      (let s1 Status Status.Pendente)
+      (println (checar s1))
+      (let s2 Status Status.Pago)
+      (println (checar s2))
+      (let s3 Status Status.Cancelado)
+      (println (checar s3)))))

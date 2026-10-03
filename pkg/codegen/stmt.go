@@ -71,6 +71,54 @@ func (g *Generator) genStmt(stmt ast.Stmt) {
 		g.sb.WriteString("}\n")
 	case *ast.MatchStmt:
 		g.serial++
+		if len(s.Cases) > 0 {
+			valType := g.TypeOf(s.Value)
+			typeName := ""
+			if valType != nil {
+				typeName = valType.String()
+			}
+			isEnum := g.info != nil && g.info.Enums != nil && g.info.Enums[typeName] != nil
+
+			if isEnum {
+				matchVal := fmt.Sprintf("_liaf_match_%d", g.serial)
+				g.sb.WriteString(fmt.Sprintf("%s := %s\n", matchVal, g.genExpr(s.Value)))
+				g.writeIndent()
+				g.sb.WriteString(fmt.Sprintf("switch %s {\n", matchVal))
+				for _, c := range s.Cases {
+					g.writeIndent()
+					if c.Pattern == "_" {
+						g.sb.WriteString("default:\n")
+					} else {
+						varName := c.Pattern
+						if strings.Contains(varName, ".") {
+							parts := strings.Split(varName, ".")
+							varName = parts[1]
+						}
+						constName := fmt.Sprintf("%s_%s", sanitizeIdent(typeName), sanitizeIdent(varName))
+						g.sb.WriteString(fmt.Sprintf("case %s:\n", constName))
+					}
+					g.indent++
+					for i, st := range c.Body {
+						if isLast := i == len(c.Body)-1; isLast && g.curRetType != nil && g.MapType(g.curRetType) != "void" {
+							if es, ok := st.(*ast.ExprStmt); ok {
+								g.writeIndent()
+								g.sb.WriteString(fmt.Sprintf("return %s\n", g.genExpr(es.Expr)))
+								continue
+							}
+						}
+						g.genStmt(st)
+					}
+					g.indent--
+				}
+				g.writeIndent()
+				g.sb.WriteString("}\n")
+				if g.curRetType != nil && g.MapType(g.curRetType) != "void" {
+					g.writeIndent()
+					g.sb.WriteString("panic(\"unreachable\")\n")
+				}
+				return
+			}
+		}
 		if s.IsOption {
 			id := fmt.Sprintf("_liaf_opt_%d", g.serial)
 			g.sb.WriteString(fmt.Sprintf("if %s := %s; %s.Some {\n", id, g.genExpr(s.Value), id))

@@ -91,8 +91,25 @@ func (p *Parser) parseMatchExpr(line, col int) *ast.MatchExpr {
 		if !p.expectCur(token.RPAREN) {
 			return nil
 		}
+	} else if b1 == "case" {
+		c := p.parseSingleCase()
+		if c != nil {
+			s.Cases = append(s.Cases, *c)
+		}
+		for p.curTokenIs(token.LPAREN) {
+			p.nextToken() // consome '('
+			if !p.curTokenIs(token.CASE) {
+				p.addError(fmt.Sprintf("esperado 'case' no match, obteve %q", p.curToken.Literal), "E_EXPECTED_CASE")
+				return nil
+			}
+			p.nextToken() // consome 'case'
+			c2 := p.parseSingleCase()
+			if c2 != nil {
+				s.Cases = append(s.Cases, *c2)
+			}
+		}
 	} else {
-		p.addError(fmt.Sprintf("match exige ramos ok/err ou some/none, mas obteve %s", b1), "E_NONEXHAUSTIVE_MATCH")
+		p.addError(fmt.Sprintf("match exige ramos ok/err, some/none ou case, mas obteve %s", b1), "E_NONEXHAUSTIVE_MATCH")
 		return nil
 	}
 	if !p.expectCur(token.RPAREN) {
@@ -115,9 +132,110 @@ func (p *Parser) parseMatch(line, col int) ast.Stmt {
 		return p.parseMatchSome(line, col, val)
 	case "ok":
 		return p.parseMatchOk(line, col, val)
+	case "case":
+		return p.parseMatchCases(line, col, val)
 	default:
-		p.addError(fmt.Sprintf("match exige ramos ok/err ou some/none, mas obteve %s", b1), "E_NONEXHAUSTIVE_MATCH")
+		p.addError(fmt.Sprintf("match exige ramos ok/err, some/none ou case, mas obteve %s", b1), "E_NONEXHAUSTIVE_MATCH")
 		return nil
+	}
+}
+
+func (p *Parser) parseMatchCases(line, col int, val ast.Expr) ast.Stmt {
+	var cases []ast.MatchCase
+	firstCase := p.parseSingleCase()
+	if firstCase != nil {
+		cases = append(cases, *firstCase)
+	}
+
+	for p.curTokenIs(token.LPAREN) {
+		p.nextToken() // consome '('
+		if !p.curTokenIs(token.CASE) {
+			p.addError(fmt.Sprintf("esperado 'case' no match, obteve %q", p.curToken.Literal), "E_EXPECTED_CASE")
+			return nil
+		}
+		p.nextToken() // consome 'case'
+		c := p.parseSingleCase()
+		if c != nil {
+			cases = append(cases, *c)
+		}
+	}
+
+	if !p.expectCur(token.RPAREN) {
+		return nil
+	}
+
+	return &ast.MatchStmt{
+		Value: val,
+		Cases: cases,
+		Line:  line,
+		Col:   col,
+	}
+}
+
+func (p *Parser) parseSingleCase() *ast.MatchCase {
+	cLine, cCol := p.curToken.Line, p.curToken.Col
+	pattern := ""
+	if p.curTokenIs(token.PATH) || p.curTokenIs(token.IDENT) {
+		pattern = p.curToken.Literal
+		p.nextToken()
+	} else if p.curToken.Literal == "_" {
+		pattern = "_"
+		p.nextToken()
+	} else {
+		p.addError("Esperado padrão para o case do match", "E_EXPECTED_MATCH_PATTERN")
+		return nil
+	}
+
+	var vars []string
+	if p.curTokenIs(token.LPAREN) {
+		p.nextToken()
+		for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+			if !token.IsName(p.curToken) && p.curToken.Literal != "_" {
+				p.addError("Esperado nome de variável no padrão", "E_EXPECTED_IDENT")
+				return nil
+			}
+			vars = append(vars, p.curToken.Literal)
+			p.nextToken()
+		}
+		if !p.expectCur(token.RPAREN) {
+			return nil
+		}
+	}
+
+	var body []ast.Stmt
+	for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+		if p.curTokenIs(token.LPAREN) {
+			stmt := p.parseStatement()
+			if stmt != nil {
+				body = append(body, stmt)
+			}
+		} else {
+			expr := p.parseExpression()
+			if expr != nil {
+				body = append(body, &ast.ExprStmt{Expr: expr, Line: cLine, Col: cCol})
+			}
+		}
+	}
+	if !p.expectCur(token.RPAREN) {
+		return nil
+	}
+
+	var exprBody ast.Expr
+	if len(body) > 0 {
+		if es, ok := body[len(body)-1].(*ast.ExprStmt); ok {
+			exprBody = es.Expr
+		} else if rs, ok := body[len(body)-1].(*ast.ReturnStmt); ok {
+			exprBody = rs.Value
+		}
+	}
+
+	return &ast.MatchCase{
+		Pattern:   pattern,
+		Variables: vars,
+		Body:      body,
+		ExprBody:  exprBody,
+		Line:      cLine,
+		Col:       cCol,
 	}
 }
 

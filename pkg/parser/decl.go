@@ -19,6 +19,8 @@ func (p *Parser) parseTopLevel() ast.TopLevel {
 		return p.parseImport()
 	case token.STRUCT:
 		return p.parseStruct()
+	case token.ENUM:
+		return p.parseEnum()
 	case token.FN:
 		return p.parseFunc()
 	case token.ROUTE:
@@ -26,7 +28,7 @@ func (p *Parser) parseTopLevel() ast.TopLevel {
 	case token.WS_ROUTE:
 		return p.parseWSRoute()
 	default:
-		p.addError(fmt.Sprintf("Declaração inválida: esperado 'import', 'struct', 'fn', 'route' ou 'ws-route', mas obteve %q", p.curToken.Literal), "E_INVALID_TOPLEVEL")
+		p.addError(fmt.Sprintf("Declaração inválida: esperado 'import', 'struct', 'enum', 'fn', 'route' ou 'ws-route', mas obteve %q", p.curToken.Literal), "E_INVALID_TOPLEVEL")
 		return nil
 	}
 }
@@ -87,6 +89,70 @@ func (p *Parser) parseStruct() *ast.StructDecl {
 	}
 
 	return &ast.StructDecl{Name: name, Fields: fields, Line: line, Col: col}
+}
+
+func (p *Parser) parseEnum() *ast.EnumDecl {
+	line, col := p.curToken.Line, p.curToken.Col
+	p.nextToken() // consome 'enum'
+
+	if !p.curTokenIs(token.IDENT) {
+		p.addError("Esperado identificador para o nome do enum", "E_EXPECTED_ENUM_NAME")
+		return nil
+	}
+	name := p.curToken.Literal
+	p.nextToken()
+
+	var variants []ast.EnumVariant
+	for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+		vLine, vCol := p.curToken.Line, p.curToken.Col
+		if p.curTokenIs(token.LPAREN) {
+			p.nextToken() // consome '('
+			if !token.IsName(p.curToken) {
+				p.addError("Esperado nome da variante", "E_EXPECTED_VARIANT_NAME")
+				return nil
+			}
+			vName := p.curToken.Literal
+			p.nextToken()
+			var fields []ast.Field
+			for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+				f := p.parseField()
+				if f != nil {
+					fields = append(fields, *f)
+				}
+			}
+			if !p.expectCur(token.RPAREN) {
+				return nil
+			}
+			variants = append(variants, ast.EnumVariant{
+				Name:   vName,
+				Fields: fields,
+				Line:   vLine,
+				Col:    vCol,
+			})
+		} else if token.IsName(p.curToken) {
+			vName := p.curToken.Literal
+			p.nextToken()
+			variants = append(variants, ast.EnumVariant{
+				Name: vName,
+				Line: vLine,
+				Col:  vCol,
+			})
+		} else {
+			p.addError(fmt.Sprintf("Esperado nome de variante do enum, obteve %q", p.curToken.Literal), "E_EXPECTED_VARIANT_NAME")
+			return nil
+		}
+	}
+
+	if !p.expectCur(token.RPAREN) {
+		return nil
+	}
+
+	return &ast.EnumDecl{
+		Name:     name,
+		Variants: variants,
+		Line:     line,
+		Col:      col,
+	}
 }
 
 func (p *Parser) parseField() *ast.Field {

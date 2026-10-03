@@ -38,7 +38,7 @@ func (c *Checker) validType(t ast.Type, allowVoid bool) {
 			c.error(t, "E_INVALID_TYPE", "void is only a return type")
 		}
 	case *ast.NamedType:
-		if c.Info.Structs[v.Name] == nil && !opaqueTypes[v.Name] {
+		if c.Info.Structs[v.Name] == nil && c.Info.Enums[v.Name] == nil && !opaqueTypes[v.Name] {
 			c.error(t, "E_UNKNOWN_TYPE", v.Name)
 		}
 	case *ast.AppliedType:

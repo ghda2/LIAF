@@ -44,6 +44,7 @@ end
 5. **Inferência de tipos:** `let nome = expr` infere o tipo automaticamente. Especifique apenas se necessário (`let x int = 10`).
 6. **Acesso a campos:** Use `objeto.campo` diretamente (ex: `state.next_id`, `req.user.name`).
 7. **Efeitos obrigatórios:** Declare `effects(...)` para operações impuras (`io`, `fs`, `net`, `clock`, `db`, `rand`). Funções puras omitem ou usam `effects()`.
+8. **Enums e pattern matching:** Use `enum Nome ... end` para estados finitos e `match valor case Nome.Variante ... end` com checagem de exaustividade obrigatória pelo compilador (`E_NONEXHAUSTIVE_MATCH`).
 
 ---
 

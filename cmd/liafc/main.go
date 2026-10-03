@@ -39,6 +39,8 @@ func main() {
 		runPublish(args)
 	case "doc":
 		runDoc(args)
+	case "agents":
+		runAgents(args)
 	default:
 		fmt.Fprintf(os.Stderr, "Comando desconhecido: %s\n", cmd)
 		printUsage()
@@ -57,6 +59,7 @@ func printUsage() {
 	fmt.Println("  liafc emit <arquivo.liaf>                          Emite o código fonte Go intermediário")
 	fmt.Println("  liafc doc check|preview <doc.typ> [--dados d.json] Confere ou visualiza um documento (PDF)")
 	fmt.Println("  liafc fmt <arquivo.liaf> [-w grava no arquivo]     Formata o código no padrão canônico")
+	fmt.Println("  liafc agents [caminho] [--force]                   Grava as skills de IA da LIAF em .agents/skills")
 	fmt.Println("  liafc deploy caddy-bind [flags]                    Configura proxy reverso Caddy")
 	fmt.Println("  liafc publish <arquivo_local> --url <endpoint_url> Publica arquivo em servidor LIAF")
 	fmt.Println("  liafc service install --name <n> --bin <b>         Registra serviço no systemd (Linux)")

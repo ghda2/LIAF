@@ -38,8 +38,17 @@ type DBTransactionStmt struct {
 func (s *DBTransactionStmt) Pos() (int, int) { return s.Line, s.Col }
 func (s *DBTransactionStmt) stmtNode()       {}
 
+type MatchCase struct {
+	Pattern   string
+	Variables []string
+	Body      []Stmt
+	ExprBody  Expr
+	Line, Col int
+}
+
 type MatchStmt struct {
 	Value           Expr
+	Cases           []MatchCase
 	OKName, ErrName string
 	OK, Err         []Stmt
 	IsOption        bool
@@ -48,6 +57,29 @@ type MatchStmt struct {
 
 func (s *MatchStmt) Pos() (int, int) { return s.Line, s.Col }
 func (s *MatchStmt) stmtNode()       {}
+
+// EnumDecl representa (enum Nome ...) ou na linear:
+// enum Nome
+//   Pendente
+//   Pago
+// end
+type EnumDecl struct {
+	Name     string
+	Variants []EnumVariant
+	Line     int
+	Col      int
+}
+
+func (e *EnumDecl) Pos() (int, int) { return e.Line, e.Col }
+func (e *EnumDecl) topLevelNode()   {}
+
+type EnumVariant struct {
+	Name   string
+	Fields []Field
+	Line   int
+	Col    int
+}
+
 
 type TopLevel interface {
 	Node
@@ -357,9 +389,10 @@ type IfExpr struct {
 func (e *IfExpr) Pos() (int, int) { return e.Line, e.Col }
 func (e *IfExpr) exprNode()       {}
 
-// MatchExpr representa (match expr (ok/some var expr) (err/none [var] expr))
+// MatchExpr representa (match expr ...)
 type MatchExpr struct {
 	Value           Expr
+	Cases           []MatchCase
 	OKName, ErrName string
 	OK, Err         Expr
 	IsOption        bool

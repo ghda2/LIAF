@@ -59,6 +59,8 @@ func (p *Parser) parseLinearTopLevel() ast.TopLevel {
 		return p.parseLinearImport()
 	case token.STRUCT:
 		return p.parseLinearStruct()
+	case token.ENUM:
+		return p.parseLinearEnum()
 	case token.FN:
 		return p.parseLinearFunc()
 	case token.ROUTE:
@@ -68,7 +70,7 @@ func (p *Parser) parseLinearTopLevel() ast.TopLevel {
 	case token.LPAREN:
 		return p.parseTopLevel()
 	default:
-		p.addError(fmt.Sprintf("Declaração inválida: esperado 'import', 'struct', 'fn', 'route' ou 'ws-route', mas obteve %q", p.curToken.Literal), "E_INVALID_TOPLEVEL")
+		p.addError(fmt.Sprintf("Declaração inválida: esperado 'import', 'struct', 'enum', 'fn', 'route' ou 'ws-route', mas obteve %q", p.curToken.Literal), "E_INVALID_TOPLEVEL")
 		return nil
 	}
 }
@@ -138,6 +140,88 @@ func (p *Parser) parseLinearStruct() *ast.StructDecl {
 		Fields: fields,
 		Line:   line,
 		Col:    col,
+	}
+}
+
+func (p *Parser) parseLinearEnum() *ast.EnumDecl {
+	line, col := p.curToken.Line, p.curToken.Col
+	p.nextToken() // consome 'enum'
+
+	if !p.curTokenIs(token.IDENT) {
+		p.addError("Esperado identificador para o nome do enum", "E_EXPECTED_ENUM_NAME")
+		return nil
+	}
+	name := p.curToken.Literal
+	p.nextToken()
+
+	var variants []ast.EnumVariant
+	for !p.curTokenIs(token.END) && !p.curTokenIs(token.EOF) {
+		vLine, vCol := p.curToken.Line, p.curToken.Col
+		if !token.IsName(p.curToken) {
+			p.addError("Esperado nome da variante do enum", "E_EXPECTED_VARIANT_NAME")
+			return nil
+		}
+		vName := p.curToken.Literal
+		p.nextToken()
+
+		var fields []ast.Field
+		if p.curTokenIs(token.LPAREN) {
+			p.nextToken()
+			for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+				fLine, fCol := p.curToken.Line, p.curToken.Col
+				if !token.IsName(p.curToken) {
+					p.addError("Esperado nome do campo da variante", "E_EXPECTED_FIELD_NAME")
+					return nil
+				}
+				fName := p.curToken.Literal
+				p.nextToken()
+
+				if p.curTokenIs(token.COLON) {
+					p.nextToken()
+				}
+
+				fType := p.parseType()
+				if fType == nil {
+					return nil
+				}
+
+				if p.curTokenIs(token.COMMA) {
+					p.nextToken()
+				}
+
+				fields = append(fields, ast.Field{
+					Name: fName,
+					Type: fType,
+					Line: fLine,
+					Col:  fCol,
+				})
+			}
+			if !p.expectCur(token.RPAREN) {
+				return nil
+			}
+		}
+
+		if p.curTokenIs(token.COMMA) {
+			p.nextToken()
+		}
+
+		variants = append(variants, ast.EnumVariant{
+			Name:   vName,
+			Fields: fields,
+			Line:   vLine,
+			Col:    vCol,
+		})
+	}
+
+	if !p.expectCur(token.END) {
+		return nil
+	}
+
+	return &ast.EnumDecl{
+		Name:     name,
+		Variants: variants,
+		Line:     line,
+		Col:      col,
 	}
 }
 
@@ -294,6 +378,19 @@ func (p *Parser) parseLinearFunc() *ast.FuncDecl {
 						Line:  es.Line,
 						Col:   es.Col,
 					}
+				} else if ms, ok := body[len(body)-1].(*ast.MatchStmt); ok {
+					for i := range ms.Cases {
+						if len(ms.Cases[i].Body) > 0 {
+							lastIdx := len(ms.Cases[i].Body) - 1
+							if es, ok := ms.Cases[i].Body[lastIdx].(*ast.ExprStmt); ok {
+								ms.Cases[i].Body[lastIdx] = &ast.ReturnStmt{
+									Value: es.Expr,
+									Line:  es.Line,
+									Col:   es.Col,
+								}
+							}
+						}
+					}
 				}
 			}
 		}
@@ -392,6 +489,19 @@ func (p *Parser) parseLinearRoute() *ast.RouteDecl {
 						Value: es.Expr,
 						Line:  es.Line,
 						Col:   es.Col,
+					}
+				} else if ms, ok := body[len(body)-1].(*ast.MatchStmt); ok {
+					for i := range ms.Cases {
+						if len(ms.Cases[i].Body) > 0 {
+							lastIdx := len(ms.Cases[i].Body) - 1
+							if es, ok := ms.Cases[i].Body[lastIdx].(*ast.ExprStmt); ok {
+								ms.Cases[i].Body[lastIdx] = &ast.ReturnStmt{
+									Value: es.Expr,
+									Line:  es.Line,
+									Col:   es.Col,
+								}
+							}
+						}
 					}
 				}
 			}
@@ -503,6 +613,8 @@ func (p *Parser) parseLinearStatement() ast.Stmt {
 		return p.parseLinearReturn(line, col)
 	case token.IF:
 		return p.parseLinearIf(line, col)
+	case token.MATCH:
+		return p.parseLinearMatch(line, col)
 	case token.WHILE:
 		return p.parseLinearWhile(line, col)
 	case token.FOR_RANGE:
@@ -626,6 +738,154 @@ func (p *Parser) parseLinearIf(line, col int) ast.Stmt {
 		Line:      line,
 		Col:       col,
 	}
+}
+
+func (p *Parser) parseLinearMatch(line, col int) ast.Stmt {
+	p.nextToken() // consome 'match'
+	val := p.parseLinearExpression(0)
+	if val == nil {
+		return nil
+	}
+
+	var cases []ast.MatchCase
+	for !p.curTokenIs(token.END) && !p.curTokenIs(token.EOF) {
+		if !p.expectCur(token.CASE) {
+			return nil
+		}
+		cLine, cCol := p.curToken.Line, p.curToken.Col
+		pattern := ""
+		if p.curTokenIs(token.PATH) || p.curTokenIs(token.IDENT) {
+			pattern = p.curToken.Literal
+			p.nextToken()
+		} else if p.curToken.Literal == "_" {
+			pattern = "_"
+			p.nextToken()
+		} else {
+			p.addError("Esperado padrão para o case do match", "E_EXPECTED_MATCH_PATTERN")
+			return nil
+		}
+
+		var vars []string
+		if p.curTokenIs(token.LPAREN) {
+			p.nextToken()
+			for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+				if !token.IsName(p.curToken) && p.curToken.Literal != "_" {
+					p.addError("Esperado nome de variável no padrão", "E_EXPECTED_IDENT")
+					return nil
+				}
+				vars = append(vars, p.curToken.Literal)
+				p.nextToken()
+				if p.curTokenIs(token.COMMA) {
+					p.nextToken()
+				}
+			}
+			if !p.expectCur(token.RPAREN) {
+				return nil
+			}
+		}
+
+		var body []ast.Stmt
+		for !p.curTokenIs(token.CASE) && !p.curTokenIs(token.END) && !p.curTokenIs(token.EOF) {
+			stmt := p.parseLinearStatement()
+			if stmt != nil {
+				body = append(body, stmt)
+			} else {
+				p.nextToken()
+			}
+		}
+
+		cases = append(cases, ast.MatchCase{
+			Pattern:   pattern,
+			Variables: vars,
+			Body:      body,
+			Line:      cLine,
+			Col:       cCol,
+		})
+	}
+
+	if !p.expectCur(token.END) {
+		return nil
+	}
+
+	mStmt := &ast.MatchStmt{
+		Value: val,
+		Cases: cases,
+		Line:  line,
+		Col:   col,
+	}
+
+	if len(cases) == 2 {
+		if cases[0].Pattern == "some" && cases[1].Pattern == "none" {
+			mStmt.IsOption = true
+			if len(cases[0].Variables) > 0 {
+				mStmt.OKName = cases[0].Variables[0]
+			}
+			mStmt.OK = cases[0].Body
+			if len(cases[1].Variables) > 0 {
+				mStmt.ErrName = cases[1].Variables[0]
+			}
+			mStmt.Err = cases[1].Body
+		} else if cases[0].Pattern == "ok" && cases[1].Pattern == "err" {
+			if len(cases[0].Variables) > 0 {
+				mStmt.OKName = cases[0].Variables[0]
+			}
+			mStmt.OK = cases[0].Body
+			if len(cases[1].Variables) > 0 {
+				mStmt.ErrName = cases[1].Variables[0]
+			}
+			mStmt.Err = cases[1].Body
+		}
+	}
+
+	return mStmt
+}
+
+func (p *Parser) parseLinearMatchExpr(line, col int) *ast.MatchExpr {
+	stmt := p.parseLinearMatch(line, col)
+	if stmt == nil {
+		return nil
+	}
+	mStmt, ok := stmt.(*ast.MatchStmt)
+	if !ok {
+		return nil
+	}
+	mExpr := &ast.MatchExpr{
+		Value:    mStmt.Value,
+		Cases:    make([]ast.MatchCase, len(mStmt.Cases)),
+		OKName:   mStmt.OKName,
+		ErrName:  mStmt.ErrName,
+		IsOption: mStmt.IsOption,
+		Line:     line,
+		Col:      col,
+	}
+	for i, c := range mStmt.Cases {
+		exprCase := ast.MatchCase{
+			Pattern:   c.Pattern,
+			Variables: c.Variables,
+			Body:      c.Body,
+			Line:      c.Line,
+			Col:       c.Col,
+		}
+		if len(c.Body) > 0 {
+			lastStmt := c.Body[len(c.Body)-1]
+			if exprStmt, ok := lastStmt.(*ast.ExprStmt); ok {
+				exprCase.ExprBody = exprStmt.Expr
+			} else if retStmt, ok := lastStmt.(*ast.ReturnStmt); ok {
+				exprCase.ExprBody = retStmt.Value
+			}
+		}
+		mExpr.Cases[i] = exprCase
+	}
+	if len(mExpr.Cases) == 2 {
+		if mExpr.Cases[0].Pattern == "some" && mExpr.Cases[1].Pattern == "none" {
+			mExpr.OK = mExpr.Cases[0].ExprBody
+			mExpr.Err = mExpr.Cases[1].ExprBody
+		} else if mExpr.Cases[0].Pattern == "ok" && mExpr.Cases[1].Pattern == "err" {
+			mExpr.OK = mExpr.Cases[0].ExprBody
+			mExpr.Err = mExpr.Cases[1].ExprBody
+		}
+	}
+	return mExpr
 }
 
 func (p *Parser) parseLinearWhile(line, col int) ast.Stmt {
@@ -823,7 +1083,25 @@ func (p *Parser) parseLinearPrimary() ast.Expr {
 	case token.PATH:
 		expr := p.parsePath()
 		p.nextToken()
+		if p.curTokenIs(token.LPAREN) {
+			p.nextToken() // consome '('
+			var args []ast.Expr
+			for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+				arg := p.parseLinearExpression(0)
+				if arg != nil {
+					args = append(args, arg)
+				}
+				if p.curTokenIs(token.COMMA) {
+					p.nextToken()
+				}
+			}
+			p.expectCur(token.RPAREN)
+			return &ast.CallExpr{Func: "variant-call", Args: append([]ast.Expr{expr}, args...), Line: line, Col: col}
+		}
 		return expr
+
+	case token.MATCH:
+		return p.parseLinearMatchExpr(line, col)
 
 	case token.TRY:
 		p.nextToken() // consome 'try'

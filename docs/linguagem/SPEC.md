@@ -1321,3 +1321,62 @@ em `fix`:
 
 As `metrics` (`pages`, `overflow`, `low_contrast`, `blank_pages`, `last_page_usage`, `warnings`)
 servem para comparar uma rodada de correção com a anterior.
+
+---
+
+## 27. Tipos soma (enums) e pattern matching exaustivo (#038)
+
+A partir da issue #038, a LIAF suporta tipos enumerados e tipos soma com checagem de exaustividade estática.
+
+### 27.1 Declaração
+
+Sintaxe Linear:
+```liaf
+enum Status
+  Pendente
+  Pago
+  Cancelado
+end
+```
+
+S-expression:
+```liaf
+(enum Status
+  Pendente
+  Pago
+  Cancelado)
+```
+
+Variantes com dados (sum types):
+```liaf
+enum Evento
+  Desconectado
+  Mensagem(texto str)
+end
+```
+
+### 27.2 Construção e Acesso
+
+Valores são instanciados pelo prefixo do tipo:
+```liaf
+let s = Status.Pendente
+```
+
+### 27.3 Desconstrução com `match` Exaustivo
+
+O `match` exige cobrir todas as variantes declaradas ou fornecer um ramo curinga (`case _`):
+
+```liaf
+match s
+  case Status.Pendente
+    "Aguardando pagamento"
+  case Status.Pago
+    "Pagamento confirmado"
+  case Status.Cancelado
+    "Cancelado"
+end
+```
+
+Se alguma variante for omitida e não houver `case _`, o compilador rejeita o código com `E_NONEXHAUSTIVE_MATCH`.
+Variantes inexistentes geram `E_UNKNOWN_VARIANT`, e casos repetidos geram `E_DUPLICATE_CASE`.
+

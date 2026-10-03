@@ -2,6 +2,7 @@ package checker
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"liaf/pkg/ast"
@@ -43,7 +44,7 @@ func (c *Checker) expr(e ast.Expr, want ast.Type) (t ast.Type) {
 			return primitive("bool")
 		case "eq", "neq":
 			c.redundantBoolCompare(v)
-			if l != nil && !scalar(l) {
+			if l != nil && !scalar(l) && c.Info.Enums[name(l)] == nil {
 				c.error(e, "E_TYPE_MISMATCH", "Equality requires scalar operands")
 			}
 			return primitive("bool")
@@ -95,6 +96,9 @@ func (c *Checker) expr(e ast.Expr, want ast.Type) (t ast.Type) {
 		return thenType
 	case *ast.MatchExpr:
 		valType := c.expr(v.Value, nil)
+		if len(v.Cases) > 0 {
+			return c.checkMatchExprCases(v, valType, want)
+		}
 		if v.IsOption {
 			a := parts(valType, "option", 1)
 			if a == nil {
@@ -257,4 +261,198 @@ func (c *Checker) call(v *ast.CallExpr, want ast.Type) ast.Type {
 	}
 	c.error(v, "E_UNDEFINED_SYMBOL", v.Func)
 	return nil
+}
+
+func (c *Checker) checkMatchExprCases(v *ast.MatchExpr, valType ast.Type, want ast.Type) ast.Type {
+	c.consume(v.Value)
+	typeName := name(valType)
+	var retType ast.Type
+
+	if enumDecl := c.Info.Enums[typeName]; enumDecl != nil {
+		variantsMap := map[string]ast.EnumVariant{}
+		unhandled := map[string]bool{}
+		for _, varItem := range enumDecl.Variants {
+			variantsMap[varItem.Name] = varItem
+			unhandled[varItem.Name] = true
+		}
+
+		hasWildcard := false
+		for _, cs := range v.Cases {
+			if cs.Pattern == "_" {
+				hasWildcard = true
+				c.push()
+				branchType := c.expr(cs.ExprBody, want)
+				c.pop()
+				if retType == nil {
+					retType = branchType
+				} else if branchType != nil && retType != nil && name(branchType) != name(retType) {
+					c.error(v, "E_TYPE_MISMATCH", fmt.Sprintf("match branches have different types: %s and %s", name(retType), name(branchType)))
+				}
+				continue
+			}
+
+			varName := cs.Pattern
+			if strings.Contains(varName, ".") {
+				parts := strings.Split(varName, ".")
+				if parts[0] != enumDecl.Name {
+					c.error(v, "E_TYPE_MISMATCH", fmt.Sprintf("Pattern %s does not belong to enum %s", cs.Pattern, enumDecl.Name))
+					continue
+				}
+				varName = parts[1]
+			}
+
+			variant, ok := variantsMap[varName]
+			if !ok {
+				c.error(v, "E_UNKNOWN_VARIANT", fmt.Sprintf("Enum %s has no variant %s", enumDecl.Name, varName))
+				continue
+			}
+
+			if !unhandled[varName] {
+				c.error(v, "E_DUPLICATE_CASE", fmt.Sprintf("Duplicate case for variant %s", varName))
+			}
+			delete(unhandled, varName)
+
+			c.push()
+			if len(cs.Variables) != len(variant.Fields) {
+				c.error(v, "E_ARITY_MISMATCH", fmt.Sprintf("Variant %s expects %d variables, got %d", varName, len(variant.Fields), len(cs.Variables)))
+			} else {
+				for i, f := range variant.Fields {
+					c.define(cs.Variables[i], f.Type, v, false)
+				}
+			}
+			branchType := c.expr(cs.ExprBody, want)
+			c.pop()
+
+			if retType == nil {
+				retType = branchType
+			} else if branchType != nil && retType != nil && name(branchType) != name(retType) {
+				c.error(v, "E_TYPE_MISMATCH", fmt.Sprintf("match branches have different types: %s and %s", name(retType), name(branchType)))
+			}
+		}
+
+		if !hasWildcard && len(unhandled) > 0 {
+			var missing []string
+			for m := range unhandled {
+				missing = append(missing, m)
+			}
+			sort.Strings(missing)
+			c.error(v, "E_NONEXHAUSTIVE_MATCH", fmt.Sprintf("Match on enum %s is not exhaustive; missing: %s", enumDecl.Name, strings.Join(missing, ", ")))
+		}
+
+		if want != nil && retType != nil {
+			c.require(v, retType, want)
+			return want
+		}
+		if retType != nil {
+			return retType
+		}
+		return primitive("void")
+	}
+
+	if optParts := parts(valType, "option", 1); optParts != nil {
+		unhandled := map[string]bool{"some": true, "none": true}
+		hasWildcard := false
+		for _, cs := range v.Cases {
+			if cs.Pattern == "_" {
+				hasWildcard = true
+				c.push()
+				bType := c.expr(cs.ExprBody, want)
+				c.pop()
+				if retType == nil {
+					retType = bType
+				} else if bType != nil && retType != nil && name(bType) != name(retType) {
+					c.error(v, "E_TYPE_MISMATCH", fmt.Sprintf("match branches have different types: %s and %s", name(retType), name(bType)))
+				}
+				continue
+			}
+			if cs.Pattern != "some" && cs.Pattern != "none" {
+				c.error(v, "E_UNKNOWN_VARIANT", fmt.Sprintf("Option has no variant %s", cs.Pattern))
+				continue
+			}
+			if !unhandled[cs.Pattern] {
+				c.error(v, "E_DUPLICATE_CASE", fmt.Sprintf("Duplicate case for %s", cs.Pattern))
+			}
+			delete(unhandled, cs.Pattern)
+
+			c.push()
+			if cs.Pattern == "some" && len(cs.Variables) > 0 && cs.Variables[0] != "_" {
+				c.define(cs.Variables[0], optParts[0], v, false)
+			}
+			bType := c.expr(cs.ExprBody, want)
+			c.pop()
+
+			if retType == nil {
+				retType = bType
+			} else if bType != nil && retType != nil && name(bType) != name(retType) {
+				c.error(v, "E_TYPE_MISMATCH", fmt.Sprintf("match branches have different types: %s and %s", name(retType), name(bType)))
+			}
+		}
+		if !hasWildcard && len(unhandled) > 0 {
+			c.error(v, "E_NONEXHAUSTIVE_MATCH", "Match on option is not exhaustive")
+		}
+		if want != nil && retType != nil {
+			c.require(v, retType, want)
+			return want
+		}
+		if retType != nil {
+			return retType
+		}
+		return primitive("void")
+	}
+
+	if resParts := parts(valType, "result", 2); resParts != nil {
+		unhandled := map[string]bool{"ok": true, "err": true}
+		hasWildcard := false
+		for _, cs := range v.Cases {
+			if cs.Pattern == "_" {
+				hasWildcard = true
+				c.push()
+				bType := c.expr(cs.ExprBody, want)
+				c.pop()
+				if retType == nil {
+					retType = bType
+				} else if bType != nil && retType != nil && name(bType) != name(retType) {
+					c.error(v, "E_TYPE_MISMATCH", fmt.Sprintf("match branches have different types: %s and %s", name(retType), name(bType)))
+				}
+				continue
+			}
+			if cs.Pattern != "ok" && cs.Pattern != "err" {
+				c.error(v, "E_UNKNOWN_VARIANT", fmt.Sprintf("Result has no variant %s", cs.Pattern))
+				continue
+			}
+			if !unhandled[cs.Pattern] {
+				c.error(v, "E_DUPLICATE_CASE", fmt.Sprintf("Duplicate case for %s", cs.Pattern))
+			}
+			delete(unhandled, cs.Pattern)
+
+			c.push()
+			if cs.Pattern == "ok" && len(cs.Variables) > 0 && cs.Variables[0] != "_" {
+				c.define(cs.Variables[0], resParts[0], v, IsResult(resParts[0]))
+			} else if cs.Pattern == "err" && len(cs.Variables) > 0 && cs.Variables[0] != "_" {
+				c.define(cs.Variables[0], resParts[1], v, IsResult(resParts[1]))
+			}
+			bType := c.expr(cs.ExprBody, want)
+			c.pop()
+
+			if retType == nil {
+				retType = bType
+			} else if bType != nil && retType != nil && name(bType) != name(retType) {
+				c.error(v, "E_TYPE_MISMATCH", fmt.Sprintf("match branches have different types: %s and %s", name(retType), name(bType)))
+			}
+		}
+		if !hasWildcard && len(unhandled) > 0 {
+			c.error(v, "E_NONEXHAUSTIVE_MATCH", "Match on result is not exhaustive")
+		}
+		if want != nil && retType != nil {
+			c.require(v, retType, want)
+			return want
+		}
+		if retType != nil {
+			return retType
+		}
+		return primitive("void")
+	}
+
+	c.error(v, "E_TYPE_MISMATCH", fmt.Sprintf("match requires enum, option or result, received %s", typeName))
+	return primitive("void")
 }

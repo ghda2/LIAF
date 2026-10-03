@@ -227,6 +227,9 @@ func init() {
 		Arity:           ExactArity(2),
 		UnevaluatedArgs: true,
 		GoEmit: func(ctx GoContext, call *ast.CallExpr, args []string) (string, bool) {
+			if id0, ok := call.Args[0].(*ast.IdentExpr); ok && ctx.IsEnum(id0.Name) {
+				return id0.Name + "_" + call.Args[1].(*ast.IdentExpr).Name, true
+			}
 			fName := ctx.FieldIdent(call.Args[1].(*ast.IdentExpr).Name)
 			return "(" + args[0] + ")." + fName, true
 		},

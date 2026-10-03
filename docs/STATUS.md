@@ -21,10 +21,12 @@ Como as pastas estão organizadas: [README.md](README.md).
 | [#031 Guia](a-fazer/ISSUE_031_GUIA_PROXIMAS_ISSUES.md) | Aberta | Itens 0.1 e 0.2 feitos; faltam transformar as seções B e C em issues |
 | **#029** `std/storage` | Concluída / Pendente commit | Upload multipart/raw, compressão WebP sem perdas e serviço de imagens |
 
+
 ## Feito — [feito/](feito/)
 
 | Issue | Evidência |
 |---|---|
+| [#038 Tipos soma / Enums](feito/ISSUE_038_TIPOS_SOMA_ENUMS.md) | Declaração de enums lineares e S-exp, pattern matching com checagem de exaustividade (`E_NONEXHAUSTIVE_MATCH`), detecção de duplicadas e variantes inexistentes, codegen Go com switch exaustivo e testes de conformidade |
 | [#034 Motor de documentos](feito/ISSUE_034_DOCUMENTOS_PDF_NATIVOS.md) | Typst 0.15.1 em WASM embutido no compilador via wazero, builtins `pdf-typst*` e `png-typst*`, pacotes de fontes com gzip, determinação por SHA-256 e exemplos de ponta a ponta (`curriculo.liaf`, `cobranca.liaf`, `relatorio.liaf`) |
 | [#037 Qualidade e laço do agente](feito/ISSUE_037_QUALIDADE_E_LACO_DO_AGENTE.md) | Subcomandos `liafc doc check/preview/watch`, cálculo de métricas de ocupação de página, detecção e sugestão de correção automática para contraste WCAG AA e regressão visual testada |
 | [#033 Sintaxe linear v0.6](feito/ISSUE_033_LIAF_V06_SINTAXE_LINEAR_SEM_PARENTESES.md) | Sintaxe sem parênteses envolventes implementada no lexer e parser linear (`linear.go`, `linear_test.go`); gerada mesma AST; redução comprovada de 69,3% de tokens BPE frente à v0.3; executado servidor HTTP fim a fim em `TestExecuteV06TaskAPI` |

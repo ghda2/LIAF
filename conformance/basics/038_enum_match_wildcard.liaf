@@ -1,0 +1,18 @@
+;; issue: #038
+;; status: done
+;; out: Pago direto
+;; out: Outro estado
+(module caso_wildcard
+  (enum Status
+    Pendente
+    Pago
+    Cancelado)
+  (fn checar (params (s Status)) (returns str) (effects)
+    (body
+      (match s
+        (case Status.Pago "Pago direto")
+        (case _ "Outro estado"))))
+  (fn main (params) (returns void) (effects io)
+    (body
+      (println (checar Status.Pago))
+      (println (checar Status.Pendente)))))

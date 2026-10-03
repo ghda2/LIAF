@@ -13,6 +13,7 @@ type Info struct {
 	Types     map[ast.Expr]ast.Type
 	Functions map[string]*ast.FuncDecl
 	Structs   map[string]*ast.StructDecl
+	Enums     map[string]*ast.EnumDecl
 	Routes    []*ast.RouteDecl
 	WSRoutes  []*ast.WSRouteDecl
 }
@@ -49,7 +50,12 @@ type Checker struct {
 }
 
 func Check(mod *ast.Module, file string) (*Info, []diagnostic.Diagnostic) {
-	c := &Checker{file: file, Info: &Info{Types: map[ast.Expr]ast.Type{}, Functions: map[string]*ast.FuncDecl{}, Structs: map[string]*ast.StructDecl{}}}
+	c := &Checker{file: file, Info: &Info{
+		Types:     map[ast.Expr]ast.Type{},
+		Functions: map[string]*ast.FuncDecl{},
+		Structs:   map[string]*ast.StructDecl{},
+		Enums:     map[string]*ast.EnumDecl{},
+	}}
 	seen := map[string]bool{}
 	for _, d := range mod.Decls {
 		var id string
@@ -60,6 +66,9 @@ func Check(mod *ast.Module, file string) (*Info, []diagnostic.Diagnostic) {
 		case *ast.StructDecl:
 			id = v.Name
 			c.Info.Structs[id] = v
+		case *ast.EnumDecl:
+			id = v.Name
+			c.Info.Enums[id] = v
 		case *ast.RouteDecl:
 			c.Info.Routes = append(c.Info.Routes, v)
 		case *ast.WSRouteDecl:
@@ -86,6 +95,22 @@ func Check(mod *ast.Module, file string) (*Info, []diagnostic.Diagnostic) {
 				c.error(s, "E_DUPLICATE_SYMBOL", f.Name)
 			}
 			fields[f.Name] = true
+		}
+	}
+	for _, decl := range mod.Decls {
+		e, ok := decl.(*ast.EnumDecl)
+		if !ok {
+			continue
+		}
+		varSeen := map[string]bool{}
+		for _, variant := range e.Variants {
+			if varSeen[variant.Name] {
+				c.error(e, "E_DUPLICATE_SYMBOL", fmt.Sprintf("Duplicate variant %s in enum %s", variant.Name, e.Name))
+			}
+			varSeen[variant.Name] = true
+			for _, f := range variant.Fields {
+				c.validType(f.Type, false)
+			}
 		}
 	}
 	for _, d := range mod.Decls {

@@ -45,6 +45,7 @@ type GoContext interface {
 	TypeOf(e ast.Expr) ast.Type
 	TypeName(e ast.Expr) string
 	FieldIdent(f string) string
+	IsEnum(name string) bool
 }
 
 // CContext é a interface oferecida pelo gerador C.

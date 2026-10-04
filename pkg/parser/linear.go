@@ -44,6 +44,7 @@ func (p *Parser) parseLinearModule() *ast.Module {
 	for !p.curTokenIs(token.EOF) {
 		decl := p.parseLinearTopLevel()
 		if decl != nil {
+			setDeclModule(decl, modName)
 			mod.Decls = append(mod.Decls, decl)
 		} else {
 			p.nextToken()
@@ -55,6 +56,31 @@ func (p *Parser) parseLinearModule() *ast.Module {
 
 func (p *Parser) parseLinearTopLevel() ast.TopLevel {
 	switch p.curToken.Type {
+	case token.PUB:
+		p.nextToken() // consome 'pub'
+		switch p.curToken.Type {
+		case token.STRUCT:
+			s := p.parseLinearStruct()
+			if s != nil {
+				s.IsPub = true
+			}
+			return s
+		case token.ENUM:
+			e := p.parseLinearEnum()
+			if e != nil {
+				e.IsPub = true
+			}
+			return e
+		case token.FN:
+			f := p.parseLinearFunc()
+			if f != nil {
+				f.IsPub = true
+			}
+			return f
+		default:
+			p.addError(fmt.Sprintf("Declaração inválida após 'pub': esperado 'struct', 'enum' ou 'fn', mas obteve %q", p.curToken.Literal), "E_INVALID_PUB_DECL")
+			return nil
+		}
 	case token.IMPORT:
 		return p.parseLinearImport()
 	case token.STRUCT:
@@ -1047,7 +1073,50 @@ func (p *Parser) parseLinearExpression(minPrec int) ast.Expr {
 	return left
 }
 
+func (p *Parser) parsePostfixFieldAccess(base ast.Expr) ast.Expr {
+	cur := base
+	for p.curTokenIs(token.DOT) {
+		p.nextToken() // consome '.'
+		if p.curTokenIs(token.PATH) {
+			segs := strings.Split(p.curToken.Literal, ".")
+			line, col := p.curToken.Line, p.curToken.Col
+			p.nextToken()
+			for _, seg := range segs {
+				cur = &ast.CallExpr{
+					Func: "field",
+					Args: []ast.Expr{cur, &ast.IdentExpr{Name: seg, Line: line, Col: col}},
+					Line: line,
+					Col:  col,
+				}
+			}
+			continue
+		}
+		if !p.curTokenIs(token.IDENT) && !token.IsName(p.curToken) {
+			p.addError(fmt.Sprintf("Esperado nome de campo após '.', recebido %q", p.curToken.Literal), "E_EXPECTED_FIELD_NAME")
+			return cur
+		}
+		fieldName := p.curToken.Literal
+		line, col := p.curToken.Line, p.curToken.Col
+		p.nextToken() // consome o identificador do campo
+		cur = &ast.CallExpr{
+			Func: "field",
+			Args: []ast.Expr{cur, &ast.IdentExpr{Name: fieldName, Line: line, Col: col}},
+			Line: line,
+			Col:  col,
+		}
+	}
+	return cur
+}
+
 func (p *Parser) parseLinearPrimary() ast.Expr {
+	expr := p.parseLinearPrimaryBase()
+	if expr == nil {
+		return nil
+	}
+	return p.parsePostfixFieldAccess(expr)
+}
+
+func (p *Parser) parseLinearPrimaryBase() ast.Expr {
 	line, col := p.curToken.Line, p.curToken.Col
 
 	switch p.curToken.Type {

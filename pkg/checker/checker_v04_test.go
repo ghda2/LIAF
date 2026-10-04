@@ -94,6 +94,17 @@ func TestCheckV04CountsPlaceholders(t *testing.T) {
 	}
 }
 
+func TestCheckV04NumberedQuestions(t *testing.T) {
+	codes := diagCodes(t, dbModule(`
+(fn roda (params (db DBConnection)) (returns (result bool str)) (effects db)
+  (body
+    (try (db-exec db "SELECT * FROM users WHERE (id = ?1 OR parent_id = ?1) AND tenant_id = ?2" 42 100))
+    (return (ok true))))`))
+	if hasCode(codes, "E_SQL_PARAM_COUNT") {
+		t.Fatalf("placeholders numerados ?1 do sqlite geraram erro de contagem: %v", codes)
+	}
+}
+
 // Os operadores JSONB do postgres (?, ?| e ?&) sao indistinguiveis de
 // marcadores numa varredura lexica, entao a contagem e abandonada em vez de
 // acusar um falso positivo do qual nao ha escapatoria.

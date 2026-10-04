@@ -89,7 +89,7 @@ func TestSQLitePragmasApplyToEveryConnection(t *testing.T) {
 }
 
 func TestSQLiteDefaultPragmasRespectDSN(t *testing.T) {
-	suffix := "&_pragma=mmap_size(30000000000)&_pragma=cache_size(-64000)&_pragma=temp_store(MEMORY)"
+	suffix := "&_pragma=mmap_size(268435456)&_pragma=cache_size(-64000)&_pragma=temp_store(MEMORY)"
 	for _, tc := range []struct{ in, want string }{
 		{"app.db", "app.db?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)" + suffix},
 		{"app.db?pool_max=4", "app.db?pool_max=4&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)" + suffix},

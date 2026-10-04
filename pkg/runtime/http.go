@@ -4,6 +4,7 @@ import (
 	"io"
 	"mime"
 	"mime/multipart"
+	"net/url"
 	"path/filepath"
 	"strings"
 
@@ -34,6 +35,21 @@ func RequestQuery(req web.Request, name string) Result[string, string] {
 		return Err[string, string]("query parameter not found: " + name)
 	}
 	return Ok[string, string](values[0])
+}
+
+// RequestForm le um campo de formulario application/x-www-form-urlencoded do
+// corpo (ja decodificado: '+' vira espaco e %XX vira o byte). Sem o campo no
+// corpo, tenta a query string, o que permite o mesmo handler servir GET e POST.
+func RequestForm(req web.Request, name string) Result[string, string] {
+	if form, err := url.ParseQuery(req.Body); err == nil {
+		if values, ok := form[name]; ok && len(values) > 0 {
+			return Ok[string, string](values[0])
+		}
+	}
+	if values, ok := req.Query[name]; ok && len(values) > 0 {
+		return Ok[string, string](values[0])
+	}
+	return Err[string, string]("form field not found: " + name)
 }
 
 func ResponseSetHeader(res web.Response, name, value string) web.Response {

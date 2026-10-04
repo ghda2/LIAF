@@ -1,7 +1,9 @@
 // API REST em Sintaxe Linear v0.6 com persistência atômica
 module api_rest_exemplo
 
-struct Item
+import "std/cli"
+
+pub struct Item
   id int
   nome str
   preco float
@@ -12,7 +14,7 @@ struct Estado
   itens (list Item)
 end
 
-struct CriarItemInput
+pub struct CriarItemInput
   nome str
   preco float
 end
@@ -34,7 +36,7 @@ end
 
 route GET "/api/itens" () Response effects(fs)
   on-err err_msg
-    json-response(500, err_msg)
+    json-error(500, err_msg)
   end
   let estado = try carregar_estado()
   json-response(200, try json-encode(estado.itens))
@@ -42,7 +44,7 @@ end
 
 route POST "/api/itens" (input CriarItemInput) Response effects(fs)
   on-err err_msg
-    json-response(500, err_msg)
+    json-error(400, err_msg)
   end
   let estado = try carregar_estado()
   let novo_item = new Item(estado.proximo_id, input.nome, input.preco)
@@ -54,7 +56,7 @@ route POST "/api/itens" (input CriarItemInput) Response effects(fs)
 end
 
 fn main() void effects(fs, io, net)
-  let porta = unwrap-or(list-get(args(), 0), "8080")
+  let porta = cli-get-arg(0, "8080")
   println(fmt("Servidor ouvindo em http://localhost:{}", porta))
-  unwrap-or(serve-hybrid("./public", porta), false)
+  let _ = serve-hybrid("./public", porta)
 end

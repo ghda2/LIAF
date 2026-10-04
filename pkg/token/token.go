@@ -11,6 +11,7 @@ const (
 	RPAREN TokenType = ")"
 	COMMA  TokenType = ","
 	COLON  TokenType = ":"
+	DOT    TokenType = "."
 	ASSIGN TokenType = "="
 	END    TokenType = "end"
 
@@ -25,6 +26,7 @@ const (
 	PATH TokenType = "PATH"
 
 	// Keywords
+	PUB     TokenType = "pub"
 	MODULE  TokenType = "module"
 	IMPORT  TokenType = "import"
 	STRUCT  TokenType = "struct"
@@ -92,6 +94,7 @@ var keywords = map[string]TokenType{
 	"on-err": ON_ERR, "route": ROUTE, "try": TRY,
 	"ws-route": WS_ROUTE, "on-open": ON_OPEN, "on-message": ON_MESSAGE, "on-close": ON_CLOSE,
 	"db-transaction": DB_TRANSACTION,
+	"pub":     PUB,
 	"module":  MODULE,
 	"import":  IMPORT,
 	"struct":  STRUCT,

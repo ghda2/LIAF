@@ -374,3 +374,147 @@ func TestParseLinearEnumAndMatch(t *testing.T) {
 	}
 }
 
+func TestParsePubVisibility(t *testing.T) {
+	// 1. Linear Syntax
+	linearInput := `
+	module auth
+
+	pub struct Usuario
+		id int
+	end
+
+	struct TokenInterno
+		hash str
+	end
+
+	pub enum Status
+		Ativo
+		Inativo
+	end
+
+	enum Privado
+		A
+		B
+	end
+
+	pub fn login(user str) bool
+		return true
+	end
+
+	fn helper() void
+	end
+	`
+	l := lexer.New(linearInput)
+	p := New(l, "auth.liaf")
+	mod := p.ParseModule()
+	if len(p.Diagnostics) > 0 {
+		t.Fatalf("linear diags: %+v", p.Diagnostics)
+	}
+	if len(mod.Decls) != 6 {
+		t.Fatalf("esperado 6 decls, obteve %d", len(mod.Decls))
+	}
+
+	stPub := mod.Decls[0].(*ast.StructDecl)
+	if !stPub.IsPub || stPub.Module != "auth" {
+		t.Errorf("Usuario devia ser IsPub=true e Module=auth, obteve %+v", stPub)
+	}
+
+	stPriv := mod.Decls[1].(*ast.StructDecl)
+	if stPriv.IsPub || stPriv.Module != "auth" {
+		t.Errorf("TokenInterno devia ser IsPub=false, obteve %+v", stPriv)
+	}
+
+	enPub := mod.Decls[2].(*ast.EnumDecl)
+	if !enPub.IsPub || enPub.Module != "auth" {
+		t.Errorf("Status devia ser IsPub=true, obteve %+v", enPub)
+	}
+
+	enPriv := mod.Decls[3].(*ast.EnumDecl)
+	if enPriv.IsPub || enPriv.Module != "auth" {
+		t.Errorf("Privado devia ser IsPub=false, obteve %+v", enPriv)
+	}
+
+	fnPub := mod.Decls[4].(*ast.FuncDecl)
+	if !fnPub.IsPub || fnPub.Module != "auth" {
+		t.Errorf("login devia ser IsPub=true, obteve %+v", fnPub)
+	}
+
+	fnPriv := mod.Decls[5].(*ast.FuncDecl)
+	if fnPriv.IsPub || fnPriv.Module != "auth" {
+		t.Errorf("helper devia ser IsPub=false, obteve %+v", fnPriv)
+	}
+
+	// 2. S-Expressions
+	sexprInput := `(module math
+		(pub struct Ponto (fields (x int) (y int)))
+		(struct Interno (fields (v int)))
+		(pub enum Cor Vermelho Verde)
+		(enum Modo A B)
+		(pub fn calc (params (p Ponto)) (returns int) (effects) (body (return 1)))
+		(fn aux (params) (returns void) (effects) (body))
+	)`
+	l2 := lexer.New(sexprInput)
+	p2 := New(l2, "math.liaf")
+	mod2 := p2.ParseModule()
+	if len(p2.Diagnostics) > 0 {
+		t.Fatalf("sexpr diags: %+v", p2.Diagnostics)
+	}
+	if len(mod2.Decls) != 6 {
+		t.Fatalf("esperado 6 decls no sexpr, obteve %d", len(mod2.Decls))
+	}
+	if !mod2.Decls[0].(*ast.StructDecl).IsPub || mod2.Decls[1].(*ast.StructDecl).IsPub {
+		t.Errorf("visibilidade de struct incorreta no sexpr")
+	}
+	if !mod2.Decls[2].(*ast.EnumDecl).IsPub || mod2.Decls[3].(*ast.EnumDecl).IsPub {
+		t.Errorf("visibilidade de enum incorreta no sexpr")
+	}
+	if !mod2.Decls[4].(*ast.FuncDecl).IsPub || mod2.Decls[5].(*ast.FuncDecl).IsPub {
+		t.Errorf("visibilidade de fn incorreta no sexpr")
+	}
+}
+
+func TestParseLinearPostfixFieldAccess(t *testing.T) {
+	input := `
+	fn test() void
+		let x = unwrap-or(list-get(l, 0), padrao).total
+		let y = pegar-usuario().conta.saldo
+	end
+	`
+	l := lexer.New(input)
+	p := New(l, "test.liaf")
+	mod := p.ParseModule()
+
+	if len(p.Diagnostics) > 0 {
+		t.Fatalf("diagnósticos inesperados: %+v", p.Diagnostics)
+	}
+
+	if mod == nil || len(mod.Decls) != 1 {
+		t.Fatalf("esperava 1 decl, obteve %+v", mod)
+	}
+
+	fnDecl := mod.Decls[0].(*ast.FuncDecl)
+	if len(fnDecl.Body) != 2 {
+		t.Fatalf("esperava 2 stmts no corpo, obteve %d", len(fnDecl.Body))
+	}
+
+	// 1. unwrap-or(...).total deve virar (field (unwrap-or ...) total)
+	let1 := fnDecl.Body[0].(*ast.LetStmt)
+	call1, ok := let1.Value.(*ast.CallExpr)
+	if !ok || call1.Func != "field" {
+		t.Fatalf("esperava CallExpr 'field', obteve %+v", let1.Value)
+	}
+	if call1.Args[1].(*ast.IdentExpr).Name != "total" {
+		t.Errorf("campo esperado 'total', obteve %s", call1.Args[1].(*ast.IdentExpr).Name)
+	}
+
+	// 2. pegar-usuario().conta.saldo deve virar (field (field (pegar-usuario) conta) saldo)
+	let2 := fnDecl.Body[1].(*ast.LetStmt)
+	call2, ok := let2.Value.(*ast.CallExpr)
+	if !ok || call2.Func != "field" {
+		t.Fatalf("esperava CallExpr 'field', obteve %+v", let2.Value)
+	}
+	if call2.Args[1].(*ast.IdentExpr).Name != "saldo" {
+		t.Errorf("campo esperado 'saldo', obteve %s", call2.Args[1].(*ast.IdentExpr).Name)
+	}
+}
+

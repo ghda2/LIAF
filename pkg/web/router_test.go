@@ -125,3 +125,44 @@ func TestListenAddr(t *testing.T) {
 		}
 	}
 }
+
+func TestRootRouteDoesNotCatchAll(t *testing.T) {
+	r := NewRouter()
+	r.Handle("GET", "/", func(req Request) Response {
+		return JSONResponse(200, `{"root":true}`)
+	})
+
+	handler := r.Handler(http.NotFoundHandler())
+
+	// Requisicao exata para "/"
+	req1 := httptest.NewRequest("GET", "/", nil)
+	w1 := httptest.NewRecorder()
+	handler.ServeHTTP(w1, req1)
+	if w1.Code != 200 || w1.Body.String() != `{"root":true}` {
+		t.Errorf("GET / deveria retornar 200, obteve %d: %s", w1.Code, w1.Body.String())
+	}
+
+	// Requisicao para caminho inexistente "/api/inexistente"
+	req2 := httptest.NewRequest("GET", "/api/inexistente", nil)
+	w2 := httptest.NewRecorder()
+	handler.ServeHTTP(w2, req2)
+	if w2.Code != 404 {
+		t.Errorf("GET /api/inexistente foi engolido pela rota raiz! status: %d", w2.Code)
+	}
+}
+
+func TestHTMLResponseAndEscape(t *testing.T) {
+	resp := HTMLResponse(200, "<h1>Olá</h1>")
+	if resp.ContentType != "text/html; charset=utf-8" {
+		t.Errorf("ContentType incorreto: %s", resp.ContentType)
+	}
+	if resp.Body != "<h1>Olá</h1>" {
+		t.Errorf("Body incorreto: %s", resp.Body)
+	}
+
+	escaped := HTMLEscape("<script>alert('xss')</script>")
+	if escaped != "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;" {
+		t.Errorf("HTMLEscape falhou: %s", escaped)
+	}
+}
+

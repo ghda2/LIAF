@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LIAF — Server-Driven UI</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="https://unpkg.com/htmx.org@2.0.2"></script>
+</head>
+<body>
+  <h1>⚡ LIAF Server-Driven UI</h1>
+  <p class="sub">HTML e CSS 100% separados. Dados renderizados no backend LIAF.</p>
+
+  <div class="card">
+    <form hx-post="/tarefas/nova" hx-target="#lista-tarefas" hx-swap="innerHTML" onsubmit="setTimeout(()=>this.reset(),50)">
+      <input type="text" name="titulo" placeholder="Digite uma nova tarefa..." required>
+      <button type="submit">Adicionar</button>
+    </form>
+
+    <!-- Lista carregada via Server-Driven UI ao abrir a página -->
+    <div id="lista-tarefas" hx-get="/tarefas" hx-trigger="load">
+      <p style="color: #64748b; padding: 10px;">Carregando tarefas...</p>
+    </div>
+  </div>
+</body>
+</html>

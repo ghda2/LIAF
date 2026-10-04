@@ -12,12 +12,10 @@ Como as pastas estão organizadas: [README.md](README.md).
 
 | Issue | Estado | O que falta de fato |
 |---|---|---|
-| [#010 Backend C](a-fazer/ISSUE_010_GO_INDEPENDENCE_NATIVE_BACKEND.md) | Parcial | Testes do emissor C passam; sem `--backend` na CLI, sem JSON/web, sem GC, nunca rodado sem Go |
 | [#007 Deploy](a-fazer/ISSUE_007_AUTONOMOUS_AI_DEPLOY_PIPELINE.md) | Implementada | Esta revisão não foi instalada em servidor |
 | [#001 SSG](a-fazer/ISSUE_001_SSG_EVOLUTION.md) | Implementada | Metas de desempenho (RAM <5 MB, reload <5 ms) nunca medidas sob carga definida |
 | [#006 Result](a-fazer/ISSUE_006_STRUCTURED_ERROR_HANDLING.md) | Implementada | Revisão de fluxo entre ramos e loops, sem registro de andamento desde 16/09 |
-| [#017 Tempo real](a-fazer/ISSUE_017_REALTIME_CHANNELS_RESILIENCY.md) | Proposta | Nada implementado |
-| [#011 Self-hosting](a-fazer/ISSUE_011_SELF_HOSTING_COMPILER.md) | Pendente | Depende de linguagem e backend estáveis |
+| [#017 Tempo real](a-fazer/ISSUE_017_REALTIME_CHANNELS_RESILIENCY.md) | Proposta | Resiliência e rate limit por conexão |
 | [#031 Guia](a-fazer/ISSUE_031_GUIA_PROXIMAS_ISSUES.md) | Aberta | Itens 0.1 e 0.2 feitos; faltam transformar as seções B e C em issues |
 | **#029** `std/storage` | Concluída / Pendente commit | Upload multipart/raw, compressão WebP sem perdas e serviço de imagens |
 
@@ -26,6 +24,10 @@ Como as pastas estão organizadas: [README.md](README.md).
 
 | Issue | Evidência |
 |---|---|
+| [**#042** Server-Driven UI e `std/html`](feito/ISSUE_042_SERVER_DRIVEN_UI_HTML.md) | Módulo `std/html`, builtins `html-response` e `html-escape` (anti-XSS), exemplo funcional `server_driven_ui.liaf` e teste de integração `TestCodegenServerDrivenUI` |
+| [**#041** Expansão Propósito Geral](feito/ISSUE_041_EXPANSAO_PROPOSITO_GERAL.md) | Módulos `std/cli`, `std/fs` e `std/csv`, builtins de argumentos de processo, subprocessos, CSV e filesystem; execução standalone sem servidor web validada em teste `TestCodegenGeneralPurposeStandaloneCLI` |
+| [**#040** Backlog Sua Cidade Online](feito/ISSUE_040_BACKLOG_MELHORIAS_SUA_CIDADE_ONLINE.md) | Todos os 18 itens (P0, P1 e P2) implementados, validados com testes automatizados e documentados |
+| [**#039** Funções privadas e `pub`](feito/ISSUE_039_FUNCOES_PRIVADAS_E_VISIBILIDADE.md) | Visibilidade explícita `pub` em `fn`, `struct` e `enum`, diagnóstico `E_PRIVATE_SYMBOL`, isolamento de colisões por arquivo no loader, mangling de símbolos privados no codegen e teste ponta a ponta `TestCodegenVisibilityPubAndPrivate` |
 | [#038 Tipos soma / Enums](feito/ISSUE_038_TIPOS_SOMA_ENUMS.md) | Declaração de enums lineares e S-exp, pattern matching com checagem de exaustividade (`E_NONEXHAUSTIVE_MATCH`), detecção de duplicadas e variantes inexistentes, codegen Go com switch exaustivo e testes de conformidade |
 | [#034 Motor de documentos](feito/ISSUE_034_DOCUMENTOS_PDF_NATIVOS.md) | Typst 0.15.1 em WASM embutido no compilador via wazero, builtins `pdf-typst*` e `png-typst*`, pacotes de fontes com gzip, determinação por SHA-256 e exemplos de ponta a ponta (`curriculo.liaf`, `cobranca.liaf`, `relatorio.liaf`) |
 | [#037 Qualidade e laço do agente](feito/ISSUE_037_QUALIDADE_E_LACO_DO_AGENTE.md) | Subcomandos `liafc doc check/preview/watch`, cálculo de métricas de ocupação de página, detecção e sugestão de correção automática para contraste WCAG AA e regressão visual testada |
@@ -53,3 +55,5 @@ Como as pastas estão organizadas: [README.md](README.md).
 | [#014 Modularização](arquivo/ISSUE_014_MODULARIZACAO_CODEBASE.md) | **Substituída** pela #030; está em `arquivo/` |
 | [#035 Declaração `doc`](arquivo/ISSUE_035_DECLARACAO_DOC.md) | **Descartada** em 30/09: substituída pelo uso direto de Typst (`pdf-typst`) com dados em JSON, sem sobretaxa de tokens |
 | [#036 Biblioteca de documentos](arquivo/ISSUE_036_BIBLIOTECA_DE_DOCUMENTOS.md) | **Descartada** em 30/09: sem modelos prontos, o documento é código; está em `arquivo/` |
+| [#010 Backend C nativo](arquivo/ISSUE_010_GO_INDEPENDENCE_NATIVE_BACKEND.md) | **Descartada** em 04/10: decisão de manter Go como runtime definitivo para usufruir de GC, scheduler e ecossistema sem reinvenção |
+| [#011 Self-hosting](arquivo/ISSUE_011_SELF_HOSTING_COMPILER.md) | **Descartada** em 04/10: foco em produtividade e estabilidade sobre o ecossistema Go |

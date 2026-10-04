@@ -47,28 +47,71 @@ type Checker struct {
 	fn     *ast.FuncDecl
 	loops  int
 	used   map[string]bool
+
+	currentModule   string
+	moduleFunctions map[string]map[string]*ast.FuncDecl
+	moduleStructs   map[string]map[string]*ast.StructDecl
+	moduleEnums     map[string]map[string]*ast.EnumDecl
 }
 
 func Check(mod *ast.Module, file string) (*Info, []diagnostic.Diagnostic) {
-	c := &Checker{file: file, Info: &Info{
-		Types:     map[ast.Expr]ast.Type{},
-		Functions: map[string]*ast.FuncDecl{},
-		Structs:   map[string]*ast.StructDecl{},
-		Enums:     map[string]*ast.EnumDecl{},
-	}}
-	seen := map[string]bool{}
+	c := &Checker{
+		file:            file,
+		currentModule:   mod.Name,
+		moduleFunctions: map[string]map[string]*ast.FuncDecl{},
+		moduleStructs:   map[string]map[string]*ast.StructDecl{},
+		moduleEnums:     map[string]map[string]*ast.EnumDecl{},
+		Info: &Info{
+			Types:     map[ast.Expr]ast.Type{},
+			Functions: map[string]*ast.FuncDecl{},
+			Structs:   map[string]*ast.StructDecl{},
+			Enums:     map[string]*ast.EnumDecl{},
+		},
+	}
+	seenInModule := map[string]map[string]bool{}
 	for _, d := range mod.Decls {
 		var id string
+		var declMod string
 		switch v := d.(type) {
 		case *ast.FuncDecl:
 			id = v.Name
-			c.Info.Functions[id] = v
+			declMod = v.Module
+			if declMod == "" {
+				declMod = mod.Name
+			}
+			if c.moduleFunctions[declMod] == nil {
+				c.moduleFunctions[declMod] = map[string]*ast.FuncDecl{}
+			}
+			c.moduleFunctions[declMod][id] = v
+			if v.IsPub || declMod == mod.Name {
+				c.Info.Functions[id] = v
+			}
 		case *ast.StructDecl:
 			id = v.Name
-			c.Info.Structs[id] = v
+			declMod = v.Module
+			if declMod == "" {
+				declMod = mod.Name
+			}
+			if c.moduleStructs[declMod] == nil {
+				c.moduleStructs[declMod] = map[string]*ast.StructDecl{}
+			}
+			c.moduleStructs[declMod][id] = v
+			if v.IsPub || declMod == mod.Name {
+				c.Info.Structs[id] = v
+			}
 		case *ast.EnumDecl:
 			id = v.Name
-			c.Info.Enums[id] = v
+			declMod = v.Module
+			if declMod == "" {
+				declMod = mod.Name
+			}
+			if c.moduleEnums[declMod] == nil {
+				c.moduleEnums[declMod] = map[string]*ast.EnumDecl{}
+			}
+			c.moduleEnums[declMod][id] = v
+			if v.IsPub || declMod == mod.Name {
+				c.Info.Enums[id] = v
+			}
 		case *ast.RouteDecl:
 			c.Info.Routes = append(c.Info.Routes, v)
 		case *ast.WSRouteDecl:
@@ -77,16 +120,23 @@ func Check(mod *ast.Module, file string) (*Info, []diagnostic.Diagnostic) {
 			c.error(v, "E_UNRESOLVED_IMPORT", "Imports must be resolved before checking")
 		}
 		if id != "" {
-			if seen[id] {
+			if seenInModule[declMod] == nil {
+				seenInModule[declMod] = map[string]bool{}
+			}
+			if seenInModule[declMod][id] {
 				c.error(d, "E_DUPLICATE_SYMBOL", id)
 			}
-			seen[id] = true
+			seenInModule[declMod][id] = true
 		}
 	}
 	for _, decl := range mod.Decls {
 		s, ok := decl.(*ast.StructDecl)
 		if !ok {
 			continue
+		}
+		c.currentModule = s.Module
+		if c.currentModule == "" {
+			c.currentModule = mod.Name
 		}
 		fields := map[string]bool{}
 		for _, f := range s.Fields {
@@ -101,6 +151,10 @@ func Check(mod *ast.Module, file string) (*Info, []diagnostic.Diagnostic) {
 		e, ok := decl.(*ast.EnumDecl)
 		if !ok {
 			continue
+		}
+		c.currentModule = e.Module
+		if c.currentModule == "" {
+			c.currentModule = mod.Name
 		}
 		varSeen := map[string]bool{}
 		for _, variant := range e.Variants {
@@ -117,6 +171,10 @@ func Check(mod *ast.Module, file string) (*Info, []diagnostic.Diagnostic) {
 		f, ok := d.(*ast.FuncDecl)
 		if !ok {
 			continue
+		}
+		c.currentModule = f.Module
+		if c.currentModule == "" {
+			c.currentModule = mod.Name
 		}
 		c.fn = f
 		c.scopes = nil
@@ -159,6 +217,7 @@ func Check(mod *ast.Module, file string) (*Info, []diagnostic.Diagnostic) {
 		if !ok {
 			continue
 		}
+		c.currentModule = mod.Name
 		c.fn = &ast.FuncDecl{
 			Name:       fmt.Sprintf("route_%s_%s", r.Method, r.Path),
 			Params:     r.Params,
@@ -229,8 +288,86 @@ func Check(mod *ast.Module, file string) (*Info, []diagnostic.Diagnostic) {
 }
 
 func (c *Checker) error(n ast.Node, code, msg string) {
-	l, col := n.Pos()
+	l, col := 1, 1
+	if n != nil {
+		l, col = n.Pos()
+	}
 	c.Errors = append(c.Errors, diagnostic.Diagnostic{Code: code, File: c.file, Line: l, Col: col, Message: msg})
+}
+
+func (c *Checker) findFunc(name string) *ast.FuncDecl {
+	if modFuncs, ok := c.moduleFunctions[c.currentModule]; ok {
+		if f, ok := modFuncs[name]; ok {
+			return f
+		}
+	}
+	if f, ok := c.Info.Functions[name]; ok {
+		return f
+	}
+	for _, modFuncs := range c.moduleFunctions {
+		if f, ok := modFuncs[name]; ok {
+			return f
+		}
+	}
+	return nil
+}
+
+func (c *Checker) findStruct(name string) *ast.StructDecl {
+	if modStructs, ok := c.moduleStructs[c.currentModule]; ok {
+		if s, ok := modStructs[name]; ok {
+			return s
+		}
+	}
+	if s, ok := c.Info.Structs[name]; ok {
+		return s
+	}
+	for _, modStructs := range c.moduleStructs {
+		if s, ok := modStructs[name]; ok {
+			return s
+		}
+	}
+	return nil
+}
+
+func (c *Checker) findEnum(name string) *ast.EnumDecl {
+	if modEnums, ok := c.moduleEnums[c.currentModule]; ok {
+		if e, ok := modEnums[name]; ok {
+			return e
+		}
+	}
+	if e, ok := c.Info.Enums[name]; ok {
+		return e
+	}
+	for _, modEnums := range c.moduleEnums {
+		if e, ok := modEnums[name]; ok {
+			return e
+		}
+	}
+	return nil
+}
+
+func (c *Checker) checkFuncVisibility(f *ast.FuncDecl, node ast.Node) bool {
+	if f.IsPub || f.Module == c.currentModule || f.Module == "" {
+		return true
+	}
+	c.error(node, "E_PRIVATE_SYMBOL", fmt.Sprintf("A função %q do módulo %q é privada; declare-a com 'pub fn' para exportá-la", f.Name, f.Module))
+	return false
+}
+
+func (c *Checker) checkStructVisibility(s *ast.StructDecl, node ast.Node) bool {
+	if s.IsPub || s.Module == c.currentModule || s.Module == "" {
+		return true
+	}
+	c.error(node, "E_PRIVATE_SYMBOL", fmt.Sprintf("A struct %q do módulo %q é privada; declare-a com 'pub struct' para exportá-la", s.Name, s.Module))
+	return false
+}
+
+func (c *Checker) checkEnumVisibility(e *ast.EnumDecl, node ast.Node) bool {
+	if e.IsPub || e.Module == c.currentModule || e.Module == "" {
+		return true
+	}
+	c.error(node, "E_PRIVATE_SYMBOL", fmt.Sprintf("O enum %q do módulo %q é privado; declare-o com 'pub enum' para exportá-lo", e.Name, e.Module))
+	return false
 }
 
 func (c *Checker) effect(n ast.Node, e string) {

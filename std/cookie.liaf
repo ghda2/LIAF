@@ -7,7 +7,7 @@
 (module cookie
   ;; cookie-make formata a diretiva Set-Cookie com atributos recomendados de seguranca.
   ;; same-site pode ser "Lax", "Strict" ou "None".
-  (fn cookie-make (params (name str) (value str) (max-age int) (path str) (secure bool) (http-only bool) (same-site str)) (returns str) (effects)
+  (pub fn cookie-make (params (name str) (value str) (max-age int) (path str) (secure bool) (http-only bool) (same-site str)) (returns str) (effects)
     (body
       (let base str (fmt "{}={}; Path={}; Max-Age={}" name value path max-age))
       (if http-only
@@ -19,17 +19,17 @@
       (return base)))
 
   ;; cookie-expire gera diretiva Set-Cookie com Max-Age=0 para remocao no cliente.
-  (fn cookie-expire (params (name str) (path str)) (returns str) (effects)
+  (pub fn cookie-expire (params (name str) (path str)) (returns str) (effects)
     (body
       (return (fmt "{}=; Path={}; Max-Age=0; HttpOnly; SameSite=Lax" name path))))
 
   ;; response-set-cookie acrescenta um cookie na resposta sem sobrescrever cookies existentes.
-  (fn response-set-cookie (params (res Response) (cookie-str str)) (returns Response) (effects)
+  (pub fn response-set-cookie (params (res Response) (cookie-str str)) (returns Response) (effects)
     (body
       (return (response-add-header res "Set-Cookie" cookie-str))))
 
   ;; response-delete-cookie instrui o navegador a apagar o cookie especificado.
-  (fn response-delete-cookie (params (res Response) (name str) (path str)) (returns Response) (effects)
+  (pub fn response-delete-cookie (params (res Response) (name str) (path str)) (returns Response) (effects)
     (body
       (return (response-set-cookie res (cookie-expire name path)))))
 )

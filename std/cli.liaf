@@ -1,0 +1,76 @@
+;; std/cli - Utilitários de linha de comando, flags e argumentos de processo.
+;;
+;;   (import "std/cli")
+;;   (let args (list str) (cli-args-list))
+;;   (if (cli-has-flag "--verbose") (println "Modo detalhado ativo"))
+;;   (let porta str (cli-get-flag "--port" "8080"))
+;;   (cli-exit 0)
+(module cli
+  ;; Devolve todos os argumentos passados na linha de comando (excluindo o binário).
+  (pub fn cli-args-list (params) (returns (list str)) (effects)
+    (body
+      (return (cli-args))))
+
+  ;; Devolve a quantidade de argumentos passados.
+  (pub fn cli-args-len (params) (returns int) (effects)
+    (body
+      (return (list-len (cli-args)))))
+
+  ;; Devolve o argumento na posição idx (0-indexado) ou o padrão se fora dos limites.
+  (pub fn cli-get-arg (params (idx int) (padrao str)) (returns str) (effects)
+    (body
+      (let args (list str) (cli-args))
+      (if (or (lt idx 0) (gte idx (list-len args)))
+        (then (return padrao)))
+      (match (list-get args idx)
+        (ok v (return v))
+        (err _ (return padrao)))))
+
+  ;; Verifica se uma flag específica (ex: "--help", "-v") foi fornecida.
+  (pub fn cli-has-flag (params (flag str)) (returns bool) (effects)
+    (body
+      (let args (list str) (cli-args))
+      (let total int (list-len args))
+      (let i int 0)
+      (while (lt i total)
+        (let arg str "")
+        (match (list-get args i)
+          (ok a (set arg a))
+          (err _ (return false)))
+        (if (str-eq arg flag)
+          (then (return true)))
+        (if (str-starts-with arg (concat flag "="))
+          (then (return true)))
+        (set i (add i 1)))
+      (return false)))
+
+  ;; Obtém o valor de uma flag (ex: "--porta=8080" ou "--porta" "8080"), retornando o padrão caso ausente.
+  (pub fn cli-get-flag (params (flag str) (padrao str)) (returns str) (effects)
+    (body
+      (let args (list str) (cli-args))
+      (let total int (list-len args))
+      (let i int 0)
+      (let prefixo str (concat flag "="))
+      (while (lt i total)
+        (let arg str "")
+        (match (list-get args i)
+          (ok a (set arg a))
+          (err _ (return padrao)))
+        (if (str-starts-with arg prefixo)
+          (then
+            (match (str-slice arg (str-len prefixo) (str-len arg))
+              (ok valor (return valor))
+              (err _ (return padrao)))))
+        (if (and (str-eq arg flag) (lt (add i 1) total))
+          (then
+            (match (list-get args (add i 1))
+              (ok v (return v))
+              (err _ (return padrao)))))
+        (set i (add i 1)))
+      (return padrao)))
+
+  ;; Termina a execução do processo imediatamente com o código especificado.
+  (pub fn cli-exit (params (code int)) (returns void) (effects io)
+    (body
+      (exit-process code)))
+)

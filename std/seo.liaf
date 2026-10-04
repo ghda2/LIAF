@@ -5,7 +5,7 @@
 ;;   (let tags str (seo-meta-tags meta))
 ;;
 (module seo
-  (struct MetaTags (fields
+  (pub struct MetaTags (fields
     (title str)
     (description str)
     (canonical str)
@@ -17,7 +17,7 @@
     (locale str)))
 
   ;; seo-meta-tags gera o bloco completo de tags HTML para SEO, OpenGraph e Twitter Cards.
-  (fn seo-meta-tags (params (meta MetaTags)) (returns str) (effects)
+  (pub fn seo-meta-tags (params (meta MetaTags)) (returns str) (effects)
     (body
       (let out str (fmt "<title>{}</title>\n" (field meta title)))
       (if (not (str-eq (field meta description) ""))
@@ -54,7 +54,7 @@
       (return out)))
 
   ;; seo-jsonld-article gera o JSON-LD estruturado Schema.org para artigos/noticias
-  (fn seo-jsonld-article (params (meta MetaTags) (publisher_name str) (publisher_logo str)) (returns str) (effects)
+  (pub fn seo-jsonld-article (params (meta MetaTags) (publisher_name str) (publisher_logo str)) (returns str) (effects)
     (body
       (let json str (fmt "<script type=\"application/ld+json\">{{\"@context\":\"https://schema.org\",\"@type\":\"NewsArticle\",\"headline\":\"{}\",\"description\":\"{}\",\"image\":\"{}\",\"datePublished\":\"{}\",\"author\":{{\"@type\":\"Person\",\"name\":\"{}\"}},\"publisher\":{{\"@type\":\"Organization\",\"name\":\"{}\",\"logo\":{{\"@type\":\"ImageObject\",\"url\":\"{}\"}}}}}}</script>\n"
         (field meta title)
@@ -67,7 +67,7 @@
       (return json)))
 
   ;; seo-jsonld-website gera o JSON-LD estruturado Schema.org para o site geral
-  (fn seo-jsonld-website (params (site_name str) (site_url str)) (returns str) (effects)
+  (pub fn seo-jsonld-website (params (site_name str) (site_url str)) (returns str) (effects)
     (body
       (let json str (fmt "<script type=\"application/ld+json\">{{\"@context\":\"https://schema.org\",\"@type\":\"WebSite\",\"name\":\"{}\",\"url\":\"{}\"}}</script>\n"
         site_name
@@ -75,7 +75,7 @@
       (return json)))
 
   ;; seo-robots-txt gera o conteudo padrao para /robots.txt
-  (fn seo-robots-txt (params (sitemap_url str) (allow bool)) (returns str) (effects)
+  (pub fn seo-robots-txt (params (sitemap_url str) (allow bool)) (returns str) (effects)
     (body
       (let rule str "Allow: /\n")
       (if (not allow)
@@ -84,35 +84,35 @@
       (return out)))
 
   ;; seo-sitemap-start inicia documento XML de sitemap
-  (fn seo-sitemap-start (params) (returns str) (effects)
+  (pub fn seo-sitemap-start (params) (returns str) (effects)
     (body
       (return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n")))
 
   ;; seo-sitemap-url gera uma entrada <url> para o sitemap.xml
-  (fn seo-sitemap-url (params (loc str) (lastmod str) (changefreq str) (priority str)) (returns str) (effects)
+  (pub fn seo-sitemap-url (params (loc str) (lastmod str) (changefreq str) (priority str)) (returns str) (effects)
     (body
       (return (fmt "  <url>\n    <loc>{}</loc>\n    <lastmod>{}</lastmod>\n    <changefreq>{}</changefreq>\n    <priority>{}</priority>\n  </url>\n"
         loc lastmod changefreq priority))))
 
   ;; seo-sitemap-end encerra o sitemap.xml
-  (fn seo-sitemap-end (params) (returns str) (effects)
+  (pub fn seo-sitemap-end (params) (returns str) (effects)
     (body
       (return "</urlset>\n")))
 
   ;; seo-rss-start inicia um feed RSS 2.0
-  (fn seo-rss-start (params (title str) (description str) (link str)) (returns str) (effects)
+  (pub fn seo-rss-start (params (title str) (description str) (link str)) (returns str) (effects)
     (body
       (return (fmt "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rss version=\"2.0\">\n  <channel>\n    <title>{}</title>\n    <description>{}</description>\n    <link>{}</link>\n"
         title description link))))
 
   ;; seo-rss-item adiciona um artigo ao feed RSS
-  (fn seo-rss-item (params (title str) (link str) (description str) (pub_date str)) (returns str) (effects)
+  (pub fn seo-rss-item (params (title str) (link str) (description str) (pub_date str)) (returns str) (effects)
     (body
       (return (fmt "    <item>\n      <title>{}</title>\n      <link>{}</link>\n      <description>{}</description>\n      <pubDate>{}</pubDate>\n    </item>\n"
         title link description pub_date))))
 
   ;; seo-rss-end encerra o feed RSS 2.0
-  (fn seo-rss-end (params) (returns str) (effects)
+  (pub fn seo-rss-end (params) (returns str) (effects)
     (body
       (return "  </channel>\n</rss>\n")))
 )

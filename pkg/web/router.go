@@ -1,12 +1,16 @@
 package web
 
 import (
+	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Request struct {
@@ -99,8 +103,19 @@ func NewRouter() *Router { return &Router{mux: http.NewServeMux()} }
 // MaxRequestBodySize define o limite máximo padrão do corpo da requisição (padrão: 32MB).
 var MaxRequestBodySize int64 = 32 << 20
 
+func normalizePattern(method, path string) string {
+	if path == "/" {
+		return method + " /{$}"
+	}
+	if path == "/*" {
+		return method + " /"
+	}
+	return method + " " + path
+}
+
 func (r *Router) Handle(method, path string, handler Handler) {
-	r.mux.HandleFunc(method+" "+path, func(w http.ResponseWriter, req *http.Request) {
+	r.mux.HandleFunc(normalizePattern(method, path), func(w http.ResponseWriter, req *http.Request) {
+		start := time.Now()
 		body, err := io.ReadAll(http.MaxBytesReader(w, req.Body, MaxRequestBodySize))
 		if err != nil {
 			http.Error(w, "Request body too large or unreadable", http.StatusRequestEntityTooLarge)
@@ -120,6 +135,24 @@ func (r *Router) Handle(method, path string, handler Handler) {
 		}
 		w.WriteHeader(res.Status)
 		_, _ = io.WriteString(w, res.Body)
+
+		logMode := os.Getenv("LIAF_LOG_HTTP")
+		if logMode != "" {
+			durMs := float64(time.Since(start).Microseconds()) / 1000.0
+			if logMode == "json" {
+				logData, _ := json.Marshal(map[string]any{
+					"method":      req.Method,
+					"path":        req.URL.Path,
+					"status":      res.Status,
+					"duration_ms": durMs,
+					"bytes":       len(res.Body),
+					"ip":          ClientIP(newRequest(req, "")),
+				})
+				fmt.Println(string(logData))
+			} else {
+				fmt.Printf("HTTP %s %s -> %d (%.2fms, %d bytes)\n", req.Method, req.URL.Path, res.Status, durMs, len(res.Body))
+			}
+		}
 	})
 }
 
@@ -127,7 +160,7 @@ func (r *Router) Handle(method, path string, handler Handler) {
 // precisa disso: o upgrade toma posse da conexao TCP, e Handle acima ja teria
 // lido o corpo e se comprometido a escrever uma Response.
 func (r *Router) HandleRaw(method, path string, handler http.Handler) {
-	r.mux.Handle(method+" "+path, handler)
+	r.mux.Handle(normalizePattern(method, path), handler)
 }
 
 func (r *Router) Handler(fallback http.Handler) http.Handler {
@@ -151,6 +184,19 @@ func (r *Router) Handler(fallback http.Handler) http.Handler {
 }
 func JSONResponse(status int64, body string) Response {
 	return Response{Status: int(status), Body: body, ContentType: "application/json; charset=utf-8"}
+}
+
+func JSONError(status int64, message string) Response {
+	b, _ := json.Marshal(map[string]string{"error": message})
+	return Response{Status: int(status), Body: string(b), ContentType: "application/json; charset=utf-8"}
+}
+
+func HTMLResponse(status int64, body string) Response {
+	return Response{Status: int(status), Body: body, ContentType: "text/html; charset=utf-8"}
+}
+
+func HTMLEscape(s string) string {
+	return html.EscapeString(s)
 }
 
 func RawResponse(status int64, contentType, body string) Response {
@@ -187,9 +233,15 @@ func RegisterWS(path string, h WSHandler) {
 	}))
 }
 func ServeHybrid(dir, port string) error {
+	addr := ListenAddr(port)
 	s, err := NewServer(ServerOptions{Dir: dir, Port: port})
 	if err != nil {
 		return err
 	}
-	return http.ListenAndServe(ListenAddr(port), defaultRouter.Handler(s))
+	fmt.Printf("🚀 [LIAF] Servidor HTTP/WS pronto em %s (estáticos: '%s')\n", addr, dir)
+	if err := http.ListenAndServe(addr, defaultRouter.Handler(s)); err != nil {
+		fmt.Printf("❌ [LIAF] Falha ao escutar na porta/endereço '%s': %v\n", addr, err)
+		return err
+	}
+	return nil
 }

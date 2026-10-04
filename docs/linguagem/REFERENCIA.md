@@ -584,18 +584,20 @@ Mensagens de erro citam método e host, nunca a URL.
 |---|---|---|---|
 | `(db-connect "postgres" dsn)` | `(result DBConnection str)` | `db` | Drivers: `"postgres"`, `"mysql"`, `"sqlite"`, `"redis"` (literal) |
 | `(db-close conn)` | `(result void str)` | `db` | Opcional num servidor |
-| `(db-query conn "SQL" Linha arg ...)` | `(result (list Linha) str)` | `db` | `Linha` é uma struct |
+| `(db-query conn "SQL" Linha arg ...)` | `(result (list Linha) str)` | `db` | `Linha` é uma struct; suporta `RETURNING` e `ON CONFLICT` no SQLite/Postgres |
 | `(db-exec conn "SQL" arg ...)` | `(result int str)` | `db` | Linhas afetadas |
+| `db-transaction conn ... end` | `(result T str)` | `db` | Executa bloco atomicamente com BEGIN/COMMIT e rollback automático em erro |
 | `(redis-get conn chave)` | `(result str str)` | `db` | Chave ausente é `err` |
 | `(redis-set conn chave valor ttl)` | `(result void str)` | `db` | `ttl` em segundos (`int`) |
 
-- **O SQL é sempre um literal escrito no fonte.** Variável ou `concat` é `E_SQL_INTERPOLATION`. Todo
-  valor entra como argumento (`int`, `float`, `str` ou `bool`), enviado fora do texto do comando.
-- Marcadores: `$1, $2...` no PostgreSQL; `?` no MySQL. O número de marcadores tem de bater com o de
+- **O SQL é um literal escrito no fonte ou composto estaticamente por `concat` de literais.** Todo
+  valor dinâmico entra como argumento (`int`, `float`, `str` ou `bool`), enviado fora do texto do comando.
+- Marcadores: `$1, $2...` no PostgreSQL; `?` no MySQL; `?` ou `?1, ?2...` no SQLite. O número de marcadores tem de bater com o de
   argumentos (`E_SQL_PARAM_COUNT`).
+- Comandos com cláusula `RETURNING` (como `INSERT ... RETURNING *`) devem ser executados via `db-query` para mapear os registros inseridos para structs.
 - Cada coluna preenche o campo de mesmo nome; `snake_case` na coluna também preenche o campo
   `kebab-case`. `NULL` vira o valor zero.
-- DSN em URL (`postgres://u:s@host:5432/banco?sslmode=require`); no SQLite, o caminho do arquivo.
+- DSN em URL (`postgres://u:s@host:5432/banco?sslmode=require`); no SQLite, o caminho do arquivo (padrão mmap_size de 256MB).
   `pool_max=N` limita o pool (padrão 16). Chamar `db-connect` em cada rota é barato: o mesmo DSN
   reaproveita o pool.
 

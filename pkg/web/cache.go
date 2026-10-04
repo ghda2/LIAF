@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"sync"
@@ -60,7 +61,18 @@ func (ac *AssetCache) LoadDirectory(dirPath string) error {
 
 	root, err := os.OpenRoot(dirPath)
 	if err != nil {
-		return err
+		if os.IsNotExist(err) {
+			if mkErr := os.MkdirAll(dirPath, 0755); mkErr == nil {
+				root, err = os.OpenRoot(dirPath)
+			}
+		}
+		if err != nil {
+			fmt.Printf("⚠️  [LIAF VFS] Diretório estático '%s' não pôde ser aberto (%v); servindo sem arquivos estáticos.\n", dirPath, err)
+			ac.mu.Lock()
+			ac.assets = make(map[string]*CachedAsset)
+			ac.mu.Unlock()
+			return nil
+		}
 	}
 	defer root.Close()
 

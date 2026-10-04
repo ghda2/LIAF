@@ -1,0 +1,49 @@
+// Backend Server-Driven UI em LIAF v0.6
+module demo_app
+
+import "std/html"
+import "std/cli"
+
+pub struct Tarefa
+  id int
+  titulo str
+  concluida bool
+end
+
+// Rota dinâmica: Devolve a lista de tarefas renderizada em HTML no backend
+route GET "/tarefas" () Response
+  let t1 = new Tarefa(1, "Criar backend ultra-rápido com LIAF", true)
+  let t2 = new Tarefa(2, "Separar HTML e CSS na pasta public/", true)
+  let t3 = new Tarefa(3, "Renderizar Server-Driven UI com HTMX", true)
+
+  let html_itens = fmt("<div class=\"item\"><span>✓ {}</span><span class=\"tag-pronto\">Pronto</span></div><div class=\"item\"><span>✓ {}</span><span class=\"tag-pronto\">Pronto</span></div><div class=\"item\"><span>✓ {}</span><span class=\"tag-pronto\">Pronto</span></div>",
+    html-safe(t1.titulo),
+    html-safe(t2.titulo),
+    html-safe(t3.titulo)
+  )
+  html-render(200, html_itens)
+end
+
+// Rota dinâmica: Recebe a nova tarefa e devolve a lista atualizada
+route POST "/tarefas/nova" (req Request) Response
+  let titulo = match request-form(req, "titulo")
+    case ok(t)
+      t
+    case err(_)
+      "Nova Tarefa"
+  end
+
+  let novo_bloco = fmt("<div class=\"item\"><span>✓ {}</span><span class=\"tag-pronto\">Criado agora</span></div><div class=\"item\"><span>✓ Criar backend ultra-rápido com LIAF</span><span class=\"tag-pronto\">Pronto</span></div><div class=\"item\"><span>✓ Separar HTML e CSS na pasta public/</span><span class=\"tag-pronto\">Pronto</span></div>",
+    html-safe(titulo)
+  )
+  html-render(200, novo_bloco)
+end
+
+fn main() void effects(fs, io, net)
+  let porta = cli-get-flag("--porta", "8080")
+  println("==================================================")
+  println("🚀 Demo LIAF — HTML/CSS Separados + Server-Driven UI")
+  println(fmt("👉 Acesse no navegador: http://localhost:{}", porta))
+  println("==================================================")
+  let _ = serve-hybrid("./public", porta)
+end

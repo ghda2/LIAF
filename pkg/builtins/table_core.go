@@ -36,6 +36,30 @@ func init() {
 	})
 
 	Register(&Builtin{
+		Name:       "log-info",
+		Category:   "log",
+		Arity:      MinArity(1),
+		Effects:    nil,
+		Return:     "void",
+		GoTemplate: "fmt.Println(\"[INFO]\", %s)",
+		CEmit: func(ctx CContext, call *ast.CallExpr, args []string) (string, bool) {
+			return ctx.Value(fmt.Sprintf("vprint(%d,%s,1)", len(args), ctx.Array(args))), true
+		},
+	})
+
+	Register(&Builtin{
+		Name:       "log-error",
+		Category:   "log",
+		Arity:      MinArity(1),
+		Effects:    nil,
+		Return:     "void",
+		GoTemplate: "fmt.Println(\"[ERROR]\", %s)",
+		CEmit: func(ctx CContext, call *ast.CallExpr, args []string) (string, bool) {
+			return ctx.Value(fmt.Sprintf("vprint(%d,%s,1)", len(args), ctx.Array(args))), true
+		},
+	})
+
+	Register(&Builtin{
 		Name:     "not",
 		Category: "core",
 		Arity:    ExactArity(1),

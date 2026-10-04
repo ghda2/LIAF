@@ -10,23 +10,49 @@ import (
 )
 
 type Generator struct {
-	mod         *ast.Module
-	sb          strings.Builder
-	indent      int
-	info        *checker.Info
-	serial      int
-	curOnErrVar string
-	curRetType  ast.Type
-	// extraImports são imports pedidos por builtins usados (Builtin.GoImport).
-	extraImports map[string]bool
+	mod            *ast.Module
+	sb             strings.Builder
+	indent         int
+	info           *checker.Info
+	serial         int
+	curModule      string
+	curOnErrVar    string
+	curRetType     ast.Type
+	extraImports   map[string]bool
+	privateFuncs   map[string]string
+	privateStructs map[string]string
 }
 
 const extraImportsMarker = "\t// liaf:extra-imports\n"
 
+func (g *Generator) isRootModule(modName string) bool {
+	if modName == "" {
+		return true
+	}
+	if g.mod != nil && (g.mod.Name == modName || (g.mod.Name == "" && modName == "main")) {
+		return true
+	}
+	return false
+}
 
 func New(mod *ast.Module) *Generator {
 	info, _ := checker.Check(mod, "")
-	return &Generator{mod: mod, info: info, extraImports: map[string]bool{}}
+	g := &Generator{
+		mod:            mod,
+		info:           info,
+		extraImports:   map[string]bool{},
+		privateFuncs:   map[string]string{},
+		privateStructs: map[string]string{},
+	}
+	for _, d := range mod.Decls {
+		switch v := d.(type) {
+		case *ast.FuncDecl:
+			if !v.IsPub && v.Name != "main" && !g.isRootModule(v.Module) {
+				g.privateFuncs[v.Module+":"+v.Name] = sanitizeIdent(v.Module + "__" + v.Name)
+			}
+		}
+	}
+	return g
 }
 
 func (g *Generator) Generate() string {
@@ -156,14 +182,20 @@ func (g *Generator) genStruct(s *ast.StructDecl) {
 func (g *Generator) genFunc(f *ast.FuncDecl) {
 	oldOnErr := g.curOnErrVar
 	oldRet := g.curRetType
+	oldMod := g.curModule
 	g.curOnErrVar = f.OnErrVar
 	g.curRetType = f.ReturnType
+	g.curModule = f.Module
 	defer func() {
 		g.curOnErrVar = oldOnErr
 		g.curRetType = oldRet
+		g.curModule = oldMod
 	}()
 
 	fnName := sanitizeIdent(f.Name)
+	if !f.IsPub && f.Name != "main" && !g.isRootModule(f.Module) {
+		fnName = sanitizeIdent(f.Module + "__" + f.Name)
+	}
 	ret := mapType(f.ReturnType)
 	if ret != "" {
 		ret = " " + ret

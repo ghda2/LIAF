@@ -147,17 +147,36 @@ func (c *Checker) dbParams(v *ast.CallExpr, args []ast.Expr) {
 	}
 }
 
-// sqlLiteral e a barreira contra injecao: o texto da consulta tem de estar
-// escrito no fonte. Com isso nenhum valor de runtime consegue virar sintaxe
-// SQL, porque o unico caminho para o banco e a lista de parametros.
-func (c *Checker) sqlLiteral(v *ast.CallExpr, i int) (string, bool) {
-	if lit, ok := v.Args[i].(*ast.StringLiteral); ok {
-		c.Info.Types[v.Args[i]] = primitive("str")
+func (c *Checker) evalStaticString(expr ast.Expr) (string, bool) {
+	if lit, ok := expr.(*ast.StringLiteral); ok {
+		c.Info.Types[expr] = primitive("str")
 		return lit.Value, true
+	}
+	if call, ok := expr.(*ast.CallExpr); ok && call.Func == "concat" {
+		var sb strings.Builder
+		for _, arg := range call.Args {
+			s, ok := c.evalStaticString(arg)
+			if !ok {
+				return "", false
+			}
+			sb.WriteString(s)
+		}
+		c.Info.Types[expr] = primitive("str")
+		return sb.String(), true
+	}
+	return "", false
+}
+
+// sqlLiteral e a barreira contra injecao: o texto da consulta tem de estar
+// escrito no fonte ou composto por literais constantes. Com isso nenhum valor
+// de runtime consegue virar sintaxe SQL.
+func (c *Checker) sqlLiteral(v *ast.CallExpr, i int) (string, bool) {
+	if str, ok := c.evalStaticString(v.Args[i]); ok {
+		return str, true
 	}
 	c.expr(v.Args[i], nil)
 	c.error(v, "E_SQL_INTERPOLATION", fmt.Sprintf(
-		"the %s query must be a string literal; pass every value as an argument ($1, $2 ... on postgres, ? on mysql) instead of building the SQL with concat", v.Func))
+		"the %s query must be a string literal or composed of static string literals; pass dynamic values as placeholder arguments ($1, ?)", v.Func))
 	return "", false
 }
 
@@ -188,8 +207,12 @@ func (c *Checker) sqlPlaceholders(v *ast.CallExpr, sql string, supplied int) {
 
 // countPlaceholders varre o SQL ignorando literais, identificadores entre
 // aspas e comentarios — um "?" dentro de 'texto?' nao e marcador. Devolve o
-// maior $n encontrado, a contagem de ?, e se a contagem de ? e confiavel.
+// maior $n encontrado, a contagem de ? (incluindo ?NNN do SQLite), e se a contagem de ? e confiavel.
 func countPlaceholders(sql string) (dollars, questions int, ambiguous bool) {
+	maxQuestion := 0
+	numberedQuestion := false
+	rawQuestions := 0
+
 	for i := 0; i < len(sql); i++ {
 		switch sql[i] {
 		case '\'':
@@ -236,8 +259,29 @@ func countPlaceholders(sql string) (dollars, questions int, ambiguous bool) {
 				i++
 				continue
 			}
-			questions++
+			j := i + 1
+			for j < len(sql) && sql[j] >= '0' && sql[j] <= '9' {
+				j++
+			}
+			if j > i+1 {
+				numberedQuestion = true
+				if n := atoiSafe(sql[i+1 : j]); n > maxQuestion {
+					maxQuestion = n
+				}
+				i = j - 1
+				continue
+			}
+			rawQuestions++
 		}
+	}
+	if numberedQuestion {
+		if maxQuestion > rawQuestions {
+			questions = maxQuestion
+		} else {
+			questions = rawQuestions
+		}
+	} else {
+		questions = rawQuestions
 	}
 	return dollars, questions, ambiguous
 }

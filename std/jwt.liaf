@@ -27,14 +27,14 @@
         (then (return (err "jwt: secret must have at least 32 bytes"))))
       (return (ok segredo))))
 
-  (fn jwt-sign (params (segredo str) (payload str)) (returns (result str str)) (effects)
+  (pub fn jwt-sign (params (segredo str) (payload str)) (returns (result str str)) (effects)
     (body
       (try (jwt-segredo-valido segredo))
       (let dados str (concat (base64url-encode "{\"alg\":\"HS256\",\"typ\":\"JWT\"}") "." (base64url-encode payload)))
       (return (ok (concat dados "." (hmac-sha256 segredo dados "base64url"))))))
 
   ;; Devolve o payload (JSON) de um token valido e dentro da validade.
-  (fn jwt-verify (params (segredo str) (token str)) (returns (result str str)) (effects clock)
+  (pub fn jwt-verify (params (segredo str) (token str)) (returns (result str str)) (effects clock)
     (body
       (try (jwt-segredo-valido segredo))
       (let partes (list str) (str-split token "."))

@@ -193,7 +193,7 @@ func TestExecuteV03TaskAPI(t *testing.T) {
 		{"json invalido", "POST", "/tasks", `{nao e json`, 400, `{"error":"Invalid JSON body"}`},
 		{"buscar por id", "GET", "/tasks/1", "", 200, `{"id":1,"title":"primeira","done":false}`},
 		{"id inexistente", "GET", "/tasks/999", "", 404, `{"error":"Task not found"}`},
-		{"id nao numerico", "GET", "/tasks/abc", "", 400, `{"error":"ID must be positive"}`},
+		{"id nao numerico", "GET", "/tasks/abc", "", 400, `{"error":"Invalid parameter id"}`},
 		{"atualizar", "PUT", "/tasks/1", `{"title":"editada","done":true}`, 200, `{"id":1,"title":"editada","done":true}`},
 		{"remover", "DELETE", "/tasks/2", "", 200, `{"deleted":true}`},
 		{"remover inexistente", "DELETE", "/tasks/2", "", 404, `{"error":"Task not found"}`},

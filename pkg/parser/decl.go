@@ -15,6 +15,31 @@ func (p *Parser) parseTopLevel() ast.TopLevel {
 	p.nextToken() // consome '('
 
 	switch p.curToken.Type {
+	case token.PUB:
+		p.nextToken() // consome 'pub'
+		switch p.curToken.Type {
+		case token.STRUCT:
+			s := p.parseStruct()
+			if s != nil {
+				s.IsPub = true
+			}
+			return s
+		case token.ENUM:
+			e := p.parseEnum()
+			if e != nil {
+				e.IsPub = true
+			}
+			return e
+		case token.FN:
+			f := p.parseFunc()
+			if f != nil {
+				f.IsPub = true
+			}
+			return f
+		default:
+			p.addError(fmt.Sprintf("Declaração inválida após 'pub': esperado 'struct', 'enum' ou 'fn', mas obteve %q", p.curToken.Literal), "E_INVALID_PUB_DECL")
+			return nil
+		}
 	case token.IMPORT:
 		return p.parseImport()
 	case token.STRUCT:

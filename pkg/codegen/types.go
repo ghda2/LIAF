@@ -46,7 +46,11 @@ func mapType(t ast.Type) string {
 		switch ty.Constructor {
 		case "chan":
 			if len(ty.Args) > 0 {
-				return fmt.Sprintf("chan %s", mapType(ty.Args[0]))
+				t0 := mapType(ty.Args[0])
+				if t0 == "" {
+					t0 = "struct{}"
+				}
+				return fmt.Sprintf("chan %s", t0)
 			}
 			return "chan interface{}"
 		case "list":
@@ -60,10 +64,22 @@ func mapType(t ast.Type) string {
 			}
 			return "map[string]interface{}"
 		case "result":
-			return fmt.Sprintf("rt.Result[%s,%s]", mapType(ty.Args[0]), mapType(ty.Args[1]))
+			t0 := mapType(ty.Args[0])
+			if t0 == "" {
+				t0 = "bool"
+			}
+			t1 := mapType(ty.Args[1])
+			if t1 == "" {
+				t1 = "string"
+			}
+			return fmt.Sprintf("rt.Result[%s,%s]", t0, t1)
 		case "option":
 			if len(ty.Args) > 0 {
-				return fmt.Sprintf("rt.Option[%s]", mapType(ty.Args[0]))
+				t0 := mapType(ty.Args[0])
+				if t0 == "" {
+					t0 = "bool"
+				}
+				return fmt.Sprintf("rt.Option[%s]", t0)
 			}
 			return "rt.Option[interface{}]"
 		default:

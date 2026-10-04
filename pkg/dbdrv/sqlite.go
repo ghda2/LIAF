@@ -40,7 +40,7 @@ var sqliteDefaultPragmas = []struct{ name, value string }{
 	{"busy_timeout", "5000"},
 	{"journal_mode", "WAL"},
 	{"synchronous", "NORMAL"},
-	{"mmap_size", "30000000000"},
+	{"mmap_size", "268435456"},
 	{"cache_size", "-64000"},
 	{"temp_store", "MEMORY"},
 }

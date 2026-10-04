@@ -129,7 +129,11 @@ func (p *printer) printWSRoute(w *WSRouteDecl, suffix string) {
 }
 
 func (p *printer) printStruct(s *StructDecl, suffix string) {
-	p.sb.WriteString("(struct " + s.Name)
+	if s.IsPub {
+		p.sb.WriteString("(pub struct " + s.Name)
+	} else {
+		p.sb.WriteString("(struct " + s.Name)
+	}
 	if len(s.Fields) == 0 {
 		p.sb.WriteString(")" + suffix)
 		return
@@ -141,7 +145,11 @@ func (p *printer) printStruct(s *StructDecl, suffix string) {
 }
 
 func (p *printer) printEnum(e *EnumDecl, suffix string) {
-	p.sb.WriteString("(enum " + e.Name)
+	if e.IsPub {
+		p.sb.WriteString("(pub enum " + e.Name)
+	} else {
+		p.sb.WriteString("(enum " + e.Name)
+	}
 	for _, v := range e.Variants {
 		if len(v.Fields) == 0 {
 			p.sb.WriteString(" " + v.Name)
@@ -171,7 +179,11 @@ func isParenExpr(expr Expr) bool {
 }
 
 func (p *printer) printFunc(f *FuncDecl, suffix string) {
-	p.sb.WriteString("(fn " + f.Name + " ")
+	if f.IsPub {
+		p.sb.WriteString("(pub fn " + f.Name + " ")
+	} else {
+		p.sb.WriteString("(fn " + f.Name + " ")
+	}
 
 	// Params
 	if len(f.Params) == 0 {

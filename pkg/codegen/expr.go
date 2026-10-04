@@ -136,7 +136,11 @@ func (g *Generator) genCall(c *ast.CallExpr) string {
 	for _, a := range c.Args {
 		args = append(args, g.genExpr(a))
 	}
-	return fmt.Sprintf("%s(%s)", sanitizeIdent(c.Func), strings.Join(args, ", "))
+	funcName := sanitizeIdent(c.Func)
+	if mangled, ok := g.privateFuncs[g.curModule+":"+c.Func]; ok {
+		funcName = mangled
+	}
+	return fmt.Sprintf("%s(%s)", funcName, strings.Join(args, ", "))
 }
 
 func (g *Generator) genBinaryOp(b *ast.BinaryOpExpr) string {

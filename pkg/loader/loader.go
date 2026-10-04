@@ -301,15 +301,31 @@ func (l *Loader) loadDirectory(dirPath string) (*ast.Module, []diagnostic.Diagno
 // Nomes repetidos no mesmo arquivo ficam para o checker (E_DUPLICATE_SYMBOL).
 // Rotas repetidas sao pegas aqui mesmo no mesmo arquivo, porque ninguem mais
 // as pega: o ServeMux do Go daria panic na subida do binario.
+func isExported(d ast.TopLevel) bool {
+	switch v := d.(type) {
+	case *ast.FuncDecl:
+		return v.IsPub
+	case *ast.StructDecl:
+		return v.IsPub
+	case *ast.EnumDecl:
+		return v.IsPub
+	}
+	return false
+}
+
 func (l *Loader) checkCollisions(decls []ast.TopLevel) {
-	symbols := map[string]ast.TopLevel{}
+	pubSymbols := map[string]ast.TopLevel{}
+	fileSymbols := map[string]map[string]ast.TopLevel{}
 	routes := map[string]ast.TopLevel{}
+
 	for _, d := range decls {
 		switch v := d.(type) {
 		case *ast.FuncDecl:
-			l.collide(symbols, v.Name, "fn "+v.Name, d, false)
+			l.checkSymbolCollision(pubSymbols, fileSymbols, v.Name, "fn "+v.Name, d)
 		case *ast.StructDecl:
-			l.collide(symbols, v.Name, "struct "+v.Name, d, false)
+			l.checkSymbolCollision(pubSymbols, fileSymbols, v.Name, "struct "+v.Name, d)
+		case *ast.EnumDecl:
+			l.checkSymbolCollision(pubSymbols, fileSymbols, v.Name, "enum "+v.Name, d)
 		case *ast.RouteDecl:
 			pattern := strings.ToUpper(v.Method) + " " + v.Path
 			l.collide(routes, pattern, "route "+pattern, d, true)
@@ -317,6 +333,75 @@ func (l *Loader) checkCollisions(decls []ast.TopLevel) {
 			l.collide(routes, "GET "+v.Path, "ws-route "+v.Path, d, true)
 		}
 	}
+}
+
+func moduleName(d ast.TopLevel) string {
+	switch v := d.(type) {
+	case *ast.FuncDecl:
+		return v.Module
+	case *ast.StructDecl:
+		return v.Module
+	case *ast.EnumDecl:
+		return v.Module
+	}
+	return ""
+}
+
+func (l *Loader) checkSymbolCollision(pubSymbols map[string]ast.TopLevel, fileSymbols map[string]map[string]ast.TopLevel, key, what string, d ast.TopLevel) {
+	file := l.origin[d]
+	if fileSymbols[file] == nil {
+		fileSymbols[file] = map[string]ast.TopLevel{}
+	}
+
+	// Mesmo arquivo: deixado para o checker (E_DUPLICATE_SYMBOL).
+	if _, existsInSameFile := fileSymbols[file][key]; !existsInSameFile {
+		fileSymbols[file][key] = d
+	}
+
+	modName := moduleName(d)
+
+	if isExported(d) {
+		if prevPub, ok := pubSymbols[key]; ok {
+			l.reportCollision(prevPub, d, what)
+			return
+		}
+		for otherFile, symbols := range fileSymbols {
+			if otherFile != file {
+				if prev, ok := symbols[key]; ok {
+					l.reportCollision(prev, d, what)
+					return
+				}
+			}
+		}
+		pubSymbols[key] = d
+	} else {
+		if prevPub, ok := pubSymbols[key]; ok {
+			l.reportCollision(prevPub, d, what)
+			return
+		}
+		// Símbolo privado: colide apenas com outros símbolos privados declarados dentro do MESMO módulo
+		for otherFile, symbols := range fileSymbols {
+			if otherFile != file {
+				if prev, ok := symbols[key]; ok {
+					if moduleName(prev) == modName {
+						l.reportCollision(prev, d, what)
+						return
+					}
+				}
+			}
+		}
+	}
+}
+
+func (l *Loader) reportCollision(first, d ast.TopLevel, what string) {
+	firstFile, file := l.origin[first], l.origin[d]
+	fl, fc := first.Pos()
+	line, col := d.Pos()
+	code, hint := "E_DUPLICATE_DECL", "renomeie uma das duas"
+	if strings.HasPrefix(firstFile, stdPrefix) || strings.HasPrefix(file, stdPrefix) {
+		hint = "o nome já pertence à biblioteca padrão; renomeie a sua"
+	}
+	l.addError(file, line, col, fmt.Sprintf("%s já declarado em %s:%d:%d; %s", what, firstFile, fl, fc, hint), code)
 }
 
 func (l *Loader) collide(seen map[string]ast.TopLevel, key, what string, d ast.TopLevel, sameFileToo bool) {

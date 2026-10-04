@@ -91,17 +91,47 @@ func (g *Generator) genRoute(r *ast.RouteDecl) {
 			g.writeIndent()
 			g.sb.WriteString(fmt.Sprintf("var %s %s\n", pName, pTypeStr))
 			g.writeIndent()
-			g.sb.WriteString(fmt.Sprintf("if len(parts) > %d {\n", idx))
+			g.sb.WriteString(fmt.Sprintf("if len(parts) <= %d {\n", idx))
 			g.indent++
 			g.writeIndent()
-			if pTypeStr == "int64" {
-				g.sb.WriteString(fmt.Sprintf("%s, _ = strconv.ParseInt(parts[%d], 10, 64)\n", pName, idx))
-			} else {
-				g.sb.WriteString(fmt.Sprintf("%s = parts[%d]\n", pName, idx))
-			}
+			g.sb.WriteString(fmt.Sprintf("return web.JSONResponse(400, `{\"error\":\"Missing parameter %s\"}`)\n", p.Name))
 			g.indent--
 			g.writeIndent()
 			g.sb.WriteString("}\n")
+			if pTypeStr == "int64" {
+				g.writeIndent()
+				g.sb.WriteString(fmt.Sprintf("if parsed, err := strconv.ParseInt(parts[%d], 10, 64); err == nil {\n", idx))
+				g.indent++
+				g.writeIndent()
+				g.sb.WriteString(fmt.Sprintf("%s = parsed\n", pName))
+				g.indent--
+				g.writeIndent()
+				g.sb.WriteString("} else {\n")
+				g.indent++
+				g.writeIndent()
+				g.sb.WriteString(fmt.Sprintf("return web.JSONResponse(400, `{\"error\":\"Invalid parameter %s\"}`)\n", p.Name))
+				g.indent--
+				g.writeIndent()
+				g.sb.WriteString("}\n")
+			} else if pTypeStr == "float64" {
+				g.writeIndent()
+				g.sb.WriteString(fmt.Sprintf("if parsed, err := strconv.ParseFloat(parts[%d], 64); err == nil {\n", idx))
+				g.indent++
+				g.writeIndent()
+				g.sb.WriteString(fmt.Sprintf("%s = parsed\n", pName))
+				g.indent--
+				g.writeIndent()
+				g.sb.WriteString("} else {\n")
+				g.indent++
+				g.writeIndent()
+				g.sb.WriteString(fmt.Sprintf("return web.JSONResponse(400, `{\"error\":\"Invalid parameter %s\"}`)\n", p.Name))
+				g.indent--
+				g.writeIndent()
+				g.sb.WriteString("}\n")
+			} else {
+				g.writeIndent()
+				g.sb.WriteString(fmt.Sprintf("%s = parts[%d]\n", pName, idx))
+			}
 			callArgs = append(callArgs, pName)
 			continue
 		}

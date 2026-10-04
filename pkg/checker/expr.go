@@ -248,7 +248,10 @@ func (c *Checker) call(v *ast.CallExpr, want ast.Type) ast.Type {
 	for i, a := range v.Args {
 		args[i] = c.expr(a, nil)
 	}
-	if f := c.Info.Functions[v.Func]; f != nil {
+	if f := c.findFunc(v.Func); f != nil {
+		if !c.checkFuncVisibility(f, v) {
+			return nil
+		}
 		if c.arity(v, len(f.Params)) {
 			for i, p := range f.Params {
 				c.require(v, args[i], p.Type)
@@ -268,7 +271,7 @@ func (c *Checker) checkMatchExprCases(v *ast.MatchExpr, valType ast.Type, want a
 	typeName := name(valType)
 	var retType ast.Type
 
-	if enumDecl := c.Info.Enums[typeName]; enumDecl != nil {
+	if enumDecl := c.findEnum(typeName); enumDecl != nil {
 		variantsMap := map[string]ast.EnumVariant{}
 		unhandled := map[string]bool{}
 		for _, varItem := range enumDecl.Variants {

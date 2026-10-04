@@ -211,7 +211,7 @@ func (c *Checker) checkMatchStmtCases(s *ast.MatchStmt, valType ast.Type) {
 	c.consume(s.Value)
 	typeName := name(valType)
 
-	if enumDecl := c.Info.Enums[typeName]; enumDecl != nil {
+	if enumDecl := c.findEnum(typeName); enumDecl != nil {
 		variantsMap := map[string]ast.EnumVariant{}
 		unhandled := map[string]bool{}
 		for _, v := range enumDecl.Variants {

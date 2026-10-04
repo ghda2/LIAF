@@ -20,7 +20,7 @@ end
 
 route GET "/info" () Response
   on-err err_msg
-    json-response(500, err_msg)
+    json-error(500, err_msg)
   end
   let msg = new Mensagem("LIAF v0.6", "liafc")
   json-response(200, try json-encode(msg))
@@ -29,7 +29,10 @@ end
 fn main() void effects(fs, io, net)
   let porta = "8080"
   println(fmt("Servidor LIAF rodando em http://localhost:{}", porta))
-  unwrap-or(serve-hybrid("./public", porta), false)
+  match serve-hybrid("./public", porta)
+    ok _ (return)
+    err e (println(fmt("Erro ao iniciar servidor: {}", e)))
+  end
 end
 `
 
@@ -88,5 +91,5 @@ func createProject(targetDir string, isNew bool) {
 }
 
 func runVersion() {
-	fmt.Println("LIAF Compiler & Toolchain (liafc) v0.6.0")
+	fmt.Println("LIAF Compiler & Toolchain (liafc) v0.7.0")
 }

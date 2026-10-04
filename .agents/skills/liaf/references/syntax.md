@@ -1,98 +1,206 @@
-# Referência de Sintaxe da LIAF
+# Referência de Sintaxe da LIAF (v0.6 Canônica)
 
-## 1. Sintaxe Linear (LIAF v0.6 — Canônica)
+A LIAF v0.6 adota sintaxe linear baseada em linhas, operadores infixos naturais e delimitadores explícitos (`end`).
 
-### 1.1 Declaração de Tipos (`struct`)
+---
+
+## 1. Módulos e Visibilidade (`pub`)
+
+Todo arquivo LIAF inicia com a declaração do seu módulo.
+- **Privado por padrão:** Todas as declarações (`fn`, `struct`, `enum`) são privadas ao arquivo/módulo.
+- **Exportação explícita com `pub`:** Apenas o que tiver `pub` na frente é exposto para outros módulos que importarem este arquivo.
+
 ```liaf
-struct Usuario
+module loja
+
+// Importações
+import "std/auth"
+import "std/cli"
+import "./database"
+
+// Struct pública (visível fora deste módulo)
+pub struct Produto
   id int
   nome str
-  email str
+  preco float
   ativo bool
-  tags (list str)
+end
+
+// Struct privada (helper interno deste módulo)
+struct ItemInterno
+  chave str
+  hash str
+end
+
+// Enum público
+pub enum StatusPedido
+  Pendente
+  Processando
+  Entregue
+  Cancelado
 end
 ```
 
-### 1.2 Construtor de Struct
-```liaf
-let u = new Usuario(1, "Gabriel", "gabriel@exemplo.com", true, make-list(str))
-```
+---
 
-### 1.3 Funções (`fn`)
+## 2. Funções (`fn` e `pub fn`)
+
 ```liaf
-// Pura com tipos explícitos e retorno implícito
-fn calcular_total(preco float, qtd int) float
-  preco * qtd
+// 1. Função pública pura (sem efeitos colaterais) com retorno implícito
+pub fn somar(a int, b int) int
+  a + b
 end
 
-// Função com efeitos e sem retorno (void)
-fn notificar(msg str) void effects(io)
-  println(fmt("Notificação: {}", msg))
+// 2. Função privada com efeitos e sem retorno (void)
+fn registrar_log(msg str) void effects(io)
+  println(fmt("[LOG] {}", msg))
 end
-```
 
-### 1.4 Rotas HTTP Declarativas (`route`)
-```liaf
-route GET "/itens/{id}" (id int) Response effects(db)
+// 3. Função com tratamento de erros integrado (on-err e try)
+pub fn carregar_produto(id int) (result Produto str) effects(fs, db)
   on-err err_msg
-    json-response(500, err_msg)
+    return err(concat("falha ao carregar produto: ", err_msg))
   end
-  let item = try buscar_item_no_banco(id)
+  let dados = try db-query-one("SELECT id, nome, preco, ativo FROM produtos WHERE id = ?1", Produto, id)
+  ok(dados)
+end
+```
+
+---
+
+## 3. Rotas HTTP Declarativas (`route`)
+
+```liaf
+// Rota GET com parâmetro tipado na URL
+route GET "/produtos/{id}" (id int) Response effects(db)
+  on-err msg
+    json-error(400, msg)
+  end
+  let item = try buscar_produto_por_id(id)
   json-response(200, try json-encode(item))
 end
+
+// Rota POST com corpo JSON e guarda de autenticação
+route POST "/produtos" (req Request) Response effects(db, clock)
+  on-err msg
+    json-error(401, msg)
+  end
+  // Guarda declarativa JWT (retorna 401 automático se inválido/expirado)
+  let claims = try auth-guard-jwt(req, "segredo-militar-32-bytes-minimo!")
+  let novo = try json-decode(request-body(req), Produto)
+  try salvar_produto(novo)
+  json-response(201, "{\"ok\":true}")
+end
 ```
 
-### 1.5 WebSocket (`ws-route`)
+---
+
+## 4. WebSockets em Tempo Real (`ws-route`)
+
 ```liaf
-ws-route "/ws/canal" (req Request, conn WSConn) effects(io, net)
+ws-route "/ws/chat" (req Request, conn WSConn) effects(io, net)
   on-open
-    ws-join(conn, "sala_principal")
+    ws-join(conn, "sala_geral")
+    ws-send(conn, "Conectado ao chat")
   end
 
   on-message texto
-    try ws-broadcast("sala_principal", texto)
+    try ws-broadcast("sala_geral", texto)
   end
 
   on-close
-    println("Conexão encerrada")
+    println("Conexão encerrada pelo cliente")
   end
 end
 ```
 
-### 1.6 Estruturas de Controle
+---
+
+## 5. Estruturas de Controle
+
+### 5.1 Condicionais (`if` / `else`)
 ```liaf
-// Condicional if / else
-if total > 100
-  println("Frete grátis")
+if total > 100 && cliente_vip
+  println("Desconto de 20% aplicado")
+else if total > 50
+  println("Desconto de 10% aplicado")
 else
-  println("Cobrar frete")
+  println("Sem desconto")
+end
+```
+
+### 5.2 Pattern Matching (`match`)
+```liaf
+// 1. Match em Enum (checagem de exaustividade estrita)
+match pedido.status
+  case StatusPedido.Pendente
+    "Aguardando confirmação"
+  case StatusPedido.Processando
+    "Preparando pacote"
+  case StatusPedido.Entregue
+    "Finalizado"
+  case StatusPedido.Cancelado
+    "Cancelado"
 end
 
-// Loop while
-while contador < limite
+// 2. Match em Result (ok / err)
+match list-get(itens, 0)
+  case ok primeiro
+    println(primeiro)
+  case err _
+    println("Lista vazia")
+end
+```
+
+### 5.3 Loops (`while`, `for-range`, `for-each`)
+```liaf
+// While
+while contador < 10
   set contador = contador + 1
 end
 
-// Loop for-range (exclusivo no limite superior)
+// For-range (exclusivo no limite superior: 0 até 9)
 for-range i 0 10
   println(i)
 end
 
-// Loop for-each
-for-each item lista_de_itens
+// For-each em coleções
+for-each item lista_de_produtos
   println(item.nome)
 end
 ```
 
 ---
 
-## 2. Tabela de Equivalência: v0.5 S-expr vs v0.6 Linear
+## 6. Operadores Infixos e Precedência
 
-| Conceito | LIAF v0.5 (S-expression) | LIAF v0.6 (Linear) |
+| Operador | Tipo | Descrição |
 |---|---|---|
-| Struct | `(struct Item (id int) (nome str))` | `struct Item \n id int \n nome str \n end` |
-| Função | `(fn soma ((a int) (b int)) int (add a b))` | `fn soma(a int, b int) int \n a + b \n end` |
-| Rota | `(route GET "/x" () Response (texto 200 "ok"))` | `route GET "/x" () Response \n texto(200, "ok") \n end` |
-| Let | `(let x int 10)` | `let x = 10` ou `let x int = 10` |
-| Operadores | `(add a (mul b c))` | `a + b * c` |
-| Comentários | `; comentário` | `// comentário` ou `; comentário` |
+| `+`, `-`, `*`, `/` | Aritmético | Operações matemáticas naturais |
+| `==`, `!=`, `<`, `<=`, `>`, `>=` | Comparação | Comparações escalares |
+| `&&`, `||`, `!` | Lógico | Operadores booleanos de curto-circuito |
+| `objeto.campo` | Acesso | Acesso a campos e encadeamento pós-fixo (`f().campo`) |
+| `<-canal` | Concorrência | Leitura de canal Go embutido |
+
+---
+
+## 7. Ponto de Entrada Standalone / CLI (`main`)
+
+Para programas não-web (utilitários de terminal, scripts de dados, workers locais):
+
+```liaf
+module main
+
+import "std/cli"
+import "std/fs"
+
+fn main() void effects(io, fs)
+  let args = cli-args-list()
+  if (cli-has-flag "--ajuda")
+    println("Uso: app --entrada=arquivo.txt")
+    cli-exit(0)
+  end
+  let entrada = cli-get-flag "--entrada" "dados.txt"
+  println(fmt("Processando {}", entrada))
+end
+```

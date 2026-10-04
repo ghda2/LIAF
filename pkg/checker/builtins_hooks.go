@@ -11,6 +11,6 @@ func (c *Checker) Error(n ast.Node, code, msg string) { c.error(n, code, msg) }
 func (c *Checker) Arity(v *ast.CallExpr, n int) bool { return c.arity(v, n) }
 func (c *Checker) Effect(n ast.Node, eff string) { c.effect(n, eff) }
 func (c *Checker) TypeArg(e ast.Expr) ast.Type { return c.typeArg(e) }
-func (c *Checker) FindStruct(name string) *ast.StructDecl { return c.Info.Structs[name] }
-func (c *Checker) FindFunc(name string) *ast.FuncDecl { return c.Info.Functions[name] }
+func (c *Checker) FindStruct(name string) *ast.StructDecl { return c.findStruct(name) }
+func (c *Checker) FindFunc(name string) *ast.FuncDecl { return c.findFunc(name) }
 func (c *Checker) TypeAt(e ast.Expr) ast.Type { return c.Info.Types[e] }

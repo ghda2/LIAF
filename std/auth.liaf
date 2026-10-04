@@ -14,12 +14,12 @@
 
   ;; --- Basic Auth -------------------------------------------------------------
 
-  (struct BasicAuth (fields (user str) (password str)))
+  (pub struct BasicAuth (fields (user str) (password str)))
 
   ;; Extrai e decodifica credenciais de "Authorization: Basic <base64>".
   ;; Devolve erro para cabecalho ausente, esquema divergente, base64 invalido
   ;; ou credenciais sem separador ":".
-  (fn auth-basic (params (req Request)) (returns (result BasicAuth str)) (effects)
+  (pub fn auth-basic (params (req Request)) (returns (result BasicAuth str)) (effects)
     (body
       (let header str "")
       (match (request-header req "Authorization")
@@ -47,7 +47,7 @@
 
   ;; Valida credenciais BasicAuth contra valores esperados usando comparacao
   ;; em tempo constante em ambas as partes para fechar timing attacks.
-  (fn auth-validate-basic (params (creds BasicAuth) (expected_user str) (expected_pass str)) (returns bool) (effects)
+  (pub fn auth-validate-basic (params (creds BasicAuth) (expected_user str) (expected_pass str)) (returns bool) (effects)
     (body
       (let u bool (secure-eq creds.user expected_user))
       (let p bool (secure-eq creds.password expected_pass))
@@ -58,7 +58,7 @@
   ;; Le "Authorization: Bearer <token>". Ausente, com outro esquema ou com o
   ;; token vazio, devolve (err ...) com o motivo. O nome do esquema nao diferencia
   ;; maiusculas (RFC 7235).
-  (fn auth-bearer-token (params (req Request)) (returns (result str str)) (effects)
+  (pub fn auth-bearer-token (params (req Request)) (returns (result str str)) (effects)
     (body
       (let header str "")
       (match (request-header req "Authorization")
@@ -79,7 +79,7 @@
 
   ;; Le uma API Key enviada pelo cliente. Se header_name for "", o padrao
   ;; "X-API-Key" e utilizado.
-  (fn auth-api-key (params (req Request) (header_name str)) (returns (result str str)) (effects)
+  (pub fn auth-api-key (params (req Request) (header_name str)) (returns (result str str)) (effects)
     (body
       (let hname str header_name)
       (if (str-eq (str-trim hname) "")
@@ -93,7 +93,7 @@
       (return (ok chave))))
 
   ;; Valida uma API Key em tempo constante contra uma chave esperada.
-  (fn auth-validate-api-key (params (provided str) (expected str)) (returns bool) (effects)
+  (pub fn auth-validate-api-key (params (provided str) (expected str)) (returns bool) (effects)
     (body
       (if (or (str-eq provided "") (str-eq expected ""))
         (then (return false)))
@@ -101,11 +101,11 @@
 
   ;; --- Cookies Web ------------------------------------------------------------
 
-  (struct Cookie (fields (name str) (value str) (max_age int) (path str) (domain str) (secure bool) (http_only bool) (same_site str)))
+  (pub struct Cookie (fields (name str) (value str) (max_age int) (path str) (domain str) (secure bool) (http_only bool) (same_site str)))
 
   ;; Extrai o valor de um cookie especifico do cabecalho "Cookie".
   ;; Tolera espacos e remove aspas opcionais do valor.
-  (fn auth-cookie (params (req Request) (cookie_name str)) (returns (result str str)) (effects)
+  (pub fn auth-cookie (params (req Request) (cookie_name str)) (returns (result str str)) (effects)
     (body
       (if (str-eq (str-trim cookie_name) "")
         (then (return (err "cookie name cannot be empty"))))
@@ -134,7 +134,7 @@
   ;; Formata um cookie seguro para o cabecalho "Set-Cookie".
   ;; max_age < 0 emite Max-Age=0 (exclusao imediata do cookie).
   ;; Se path for vazio, atribui padrao seguro "/".
-  (fn auth-format-cookie (params (c Cookie)) (returns str) (effects)
+  (pub fn auth-format-cookie (params (c Cookie)) (returns str) (effects)
     (body
       (let out str (concat c.name "=" c.value))
       (if (gt c.max_age 0)
@@ -158,14 +158,14 @@
   ;; --- Senhas Fortes (Argon2id) ----------------------------------------------
 
   ;; Gera um hash Argon2id (formato PHC). Exige senha com pelo menos 8 caracteres.
-  (fn auth-hash-password (params (password str)) (returns (result str str)) (effects rand)
+  (pub fn auth-hash-password (params (password str)) (returns (result str str)) (effects rand)
     (body
       (if (lt (str-len password) 8)
         (then (return (err "password must have at least 8 characters"))))
       (return (ok (password-hash password)))))
 
   ;; Verifica uma senha contra um hash Argon2id.
-  (fn auth-verify-password (params (password str) (hash str)) (returns bool) (effects)
+  (pub fn auth-verify-password (params (password str) (hash str)) (returns bool) (effects)
     (body
       (if (or (str-eq password "") (str-eq hash ""))
         (then (return false)))
@@ -175,8 +175,16 @@
 
   ;; Extrai o Bearer token do cabecalho e verifica sua assinatura e validade
   ;; utilizando a std/jwt. Devolve o payload JSON se valido.
-  (fn auth-jwt-bearer (params (req Request) (segredo str)) (returns (result str str)) (effects clock)
+  (pub fn auth-jwt-bearer (params (req Request) (segredo str)) (returns (result str str)) (effects clock)
     (body
       (let token str (try (auth-bearer-token req)))
       (return (jwt-verify segredo token))))
+
+  ;; Guarda declarativa de autenticacao: devolve o payload JSON se valido, ou uma Response
+  ;; 401 Unauthorized pronta se faltar token/estiver expirado, propagavel diretamente com try.
+  (pub fn auth-guard-jwt (params (req Request) (segredo str)) (returns (result str Response)) (effects clock)
+    (body
+      (match (auth-jwt-bearer req segredo)
+        (ok payload (return (ok payload)))
+        (err msg (return (err (json-error 401 (concat "Unauthorized: " msg))))))))
 )

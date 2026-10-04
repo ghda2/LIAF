@@ -107,8 +107,8 @@ func fakeStd(files map[string]string) *loader.Loader {
 
 func TestStdModuleImportsStd(t *testing.T) {
 	l := fakeStd(map[string]string{
-		"base.liaf": `(module base (fn base-um (params) (returns int) (effects) (body (return 1))))`,
-		"soma.liaf": `(module soma (import "std/base") (fn soma-dois (params) (returns int) (effects) (body (return (add (base-um) (base-um))))))`,
+		"base.liaf": `(module base (pub fn base-um (params) (returns int) (effects) (body (return 1))))`,
+		"soma.liaf": `(module soma (import "std/base") (pub fn soma-dois (params) (returns int) (effects) (body (return (add (base-um) (base-um))))))`,
 	})
 	loadOK(t, write(t, map[string]string{"main.liaf": `(module main
   (import "std/soma")
@@ -137,7 +137,7 @@ func TestStdDiamondIsNotACollision(t *testing.T) {
   (fn main (params) (returns void) (effects) (body)))`,
 		"painel.liaf": `(module painel
   (import "std/auth")
-  (fn painel-token (params (req Request)) (returns (result str str)) (effects)
+  (pub fn painel-token (params (req Request)) (returns (result str str)) (effects)
     (body (return (auth-bearer-token req)))))`,
 	}, "main.liaf"), nil)
 }
@@ -146,7 +146,7 @@ func TestStdDiamondIsNotACollision(t *testing.T) {
 func TestLocalStdFolderNeedsDotSlash(t *testing.T) {
 	loadOK(t, write(t, map[string]string{
 		"main.liaf":     `(module main (import "./std/util") (fn main (params) (returns void) (effects io) (body (println (util-x)))))`,
-		"std/util.liaf": `(module util (fn util-x (params) (returns int) (effects) (body (return 1))))`,
+		"std/util.liaf": `(module util (pub fn util-x (params) (returns int) (effects) (body (return 1))))`,
 	}, "main.liaf"), nil)
 }
 
@@ -169,12 +169,12 @@ func TestCollisionBetweenUserFiles(t *testing.T) {
 	for name, files := range map[string]map[string]string{
 		"fn com fn": {
 			"main.liaf": `(module main (import "./a.liaf") (fn dobrar (params (n int)) (returns int) (effects) (body (return n))) (fn main (params) (returns void) (effects) (body)))`,
-			"a.liaf":    `(module a (fn dobrar (params (n int)) (returns int) (effects) (body (return (add n n)))))`,
+			"a.liaf":    `(module a (pub fn dobrar (params (n int)) (returns int) (effects) (body (return (add n n)))))`,
 		},
 		// fn e struct dividem o espaco de nomes, como no checker.
 		"struct com fn": {
 			"main.liaf": `(module main (import "./a.liaf") (fn User (params) (returns int) (effects) (body (return 1))) (fn main (params) (returns void) (effects) (body)))`,
-			"a.liaf":    `(module a (struct User (fields (name str))))`,
+			"a.liaf":    `(module a (pub struct User (fields (name str))))`,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

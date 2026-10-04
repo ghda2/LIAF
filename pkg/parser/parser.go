@@ -113,6 +113,7 @@ func (p *Parser) parseSExprModule() *ast.Module {
 	for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
 		decl := p.parseTopLevel()
 		if decl != nil {
+			setDeclModule(decl, modName)
 			mod.Decls = append(mod.Decls, decl)
 		} else {
 			p.nextToken()
@@ -124,4 +125,15 @@ func (p *Parser) parseSExprModule() *ast.Module {
 	}
 
 	return mod
+}
+
+func setDeclModule(decl ast.TopLevel, modName string) {
+	switch d := decl.(type) {
+	case *ast.FuncDecl:
+		d.Module = modName
+	case *ast.StructDecl:
+		d.Module = modName
+	case *ast.EnumDecl:
+		d.Module = modName
+	}
 }

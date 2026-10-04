@@ -14,7 +14,7 @@ func TestLoaderBasicImport(t *testing.T) {
 
 	mathFile := filepath.Join(dir, "math.liaf")
 	mathContent := `(module math
-  (fn dobrar (params (n int)) (returns int) (effects)
+  (pub fn dobrar (params (n int)) (returns int) (effects)
     (body (return (add n n)))))`
 	if err := os.WriteFile(mathFile, []byte(mathContent), 0600); err != nil {
 		t.Fatal(err)
@@ -101,7 +101,7 @@ func TestLoaderDirectory(t *testing.T) {
 
 	typesFile := filepath.Join(dir, "types.liaf")
 	typesContent := `(module types
-  (struct User (fields (name str) (age int))))`
+  (pub struct User (fields (name str) (age int))))`
 	_ = os.WriteFile(typesFile, []byte(typesContent), 0600)
 
 	mainFile := filepath.Join(dir, "main.liaf")

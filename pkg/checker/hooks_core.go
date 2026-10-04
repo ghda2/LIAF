@@ -2,6 +2,7 @@ package checker
 
 import (
 	"fmt"
+	"strings"
 
 	"liaf/pkg/ast"
 	"liaf/pkg/builtins"
@@ -23,6 +24,8 @@ func init() {
 	}
 	registerScalarVariadic("println", "void")
 	registerScalarVariadic("print", "void")
+	registerScalarVariadic("log-info", "void")
+	registerScalarVariadic("log-error", "void")
 	registerScalarVariadic("concat", "str")
 
 	// make-chan
@@ -82,9 +85,12 @@ func init() {
 			return nil
 		}
 		t := c.typeArg(v.Args[0])
-		s := c.Info.Structs[name(t)]
+		s := c.findStruct(name(t))
 		if s == nil {
 			c.error(v, "E_INVALID_TYPE", "new requires struct")
+			return nil
+		}
+		if !c.checkStructVisibility(s, v) {
 			return nil
 		}
 		if !c.arity(v, len(s.Fields)+1) {
@@ -104,7 +110,10 @@ func init() {
 		}
 		// Se a base for um enum diretamente (ex: Status.Pendente)
 		if id0, ok := v.Args[0].(*ast.IdentExpr); ok {
-			if enumDecl := c.Info.Enums[id0.Name]; enumDecl != nil {
+			if enumDecl := c.findEnum(id0.Name); enumDecl != nil {
+				if !c.checkEnumVisibility(enumDecl, v) {
+					return nil
+				}
 				id1, ok1 := v.Args[1].(*ast.IdentExpr)
 				if !ok1 {
 					c.error(v, "E_UNKNOWN_FIELD", "Expected variant name")
@@ -126,7 +135,7 @@ func init() {
 			c.error(v, "E_UNKNOWN_FIELD", "Expected field name")
 			return nil
 		}
-		if s := c.Info.Structs[name(t)]; s != nil {
+		if s := c.findStruct(name(t)); s != nil {
 			for _, f := range s.Fields {
 				if f.Name == id.Name {
 					return f.Type
@@ -152,9 +161,12 @@ func init() {
 		if !ok0 || !ok1 {
 			return nil
 		}
-		enumDecl := c.Info.Enums[id0.Name]
+		enumDecl := c.findEnum(id0.Name)
 		if enumDecl == nil {
 			c.error(v, "E_UNKNOWN_TYPE", id0.Name)
+			return nil
+		}
+		if !c.checkEnumVisibility(enumDecl, v) {
 			return nil
 		}
 		var targetVariant *ast.EnumVariant
@@ -243,6 +255,12 @@ func init() {
 		}
 		t0 := c.expr(v.Args[0], primitive("str"))
 		c.require(v.Args[0], t0, primitive("str"))
+		if lit, ok := v.Args[0].(*ast.StringLiteral); ok {
+			trimmed := strings.TrimSpace(lit.Value)
+			if (strings.HasPrefix(trimmed, "{\"") || strings.HasPrefix(trimmed, "[{\"")) && len(v.Args) > 1 {
+				c.error(v.Args[0], "W_MANUAL_JSON_FMT", "do not build JSON strings using fmt; use json-encode with a struct to avoid injection attacks")
+			}
+		}
 		for i := 1; i < len(v.Args); i++ {
 			c.expr(v.Args[i], nil)
 		}

@@ -65,6 +65,8 @@ func (s *MatchStmt) stmtNode()       {}
 // end
 type EnumDecl struct {
 	Name     string
+	IsPub    bool
+	Module   string
 	Variants []EnumVariant
 	Line     int
 	Col      int
@@ -125,6 +127,8 @@ func (i *ImportDecl) topLevelNode()   {}
 // StructDecl representa (struct Nome (fields (f1 T1) ...))
 type StructDecl struct {
 	Name   string
+	IsPub  bool
+	Module string
 	Fields []Field
 	Line   int
 	Col    int
@@ -145,6 +149,8 @@ func (f *Field) Pos() (int, int) { return f.Line, f.Col }
 // FuncDecl representa (fn nome (params ...) (returns T) (effects ...) [(on-err var ...)] (body ...))
 type FuncDecl struct {
 	Name       string
+	IsPub      bool
+	Module     string
 	Params     []Param
 	ReturnType Type
 	Effects    []string

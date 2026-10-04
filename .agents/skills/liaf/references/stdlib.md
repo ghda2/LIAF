@@ -46,11 +46,13 @@ let ok = auth-verify-password("minha-senha", hash)
 ```liaf
 import "std/jwt"
 
-// Assinar JWT (segredo deve ter no mínimo 32 bytes)
-let token = try jwt-sign("{\"sub\":\"123\",\"role\":\"admin\"}", "chave-secreta-militar-32-bytes-ok!", 3600)
+// Assinar JWT (segredo deve ter no mínimo 32 bytes; payload JSON deve conter "exp" em segundos unix)
+// Assinatura: (jwt-sign segredo payload-json)
+let token = try jwt-sign("chave-secreta-militar-32-bytes-ok!", "{\"sub\":\"123\",\"role\":\"admin\",\"exp\":4102444800}")
 
-// Validar assinatura e expiração
-let payload = try jwt-verify(token, "chave-secreta-militar-32-bytes-ok!")
+// Validar assinatura e expiração (efeito: clock)
+// Assinatura: (jwt-verify segredo token)
+let payload = try jwt-verify("chave-secreta-militar-32-bytes-ok!", token)
 ```
 
 ---
@@ -114,4 +116,150 @@ let robots = seo-robots-txt("https://meusite.com/sitemap.xml", true)
 ```
 
 > **Dica SEO Automático:** Servidores `serve-hybrid` geram `/sitemap.xml` e `/robots.txt` automaticamente a partir dos arquivos HTML e posts Markdown caso não sejam definidos manualmente em `public/`.
+
+---
+
+## 7. Rate Limiting e Client IP
+Proteção contra ataques de força bruta (ex: login) e extração de IP ciente de proxy reverso (`X-Forwarded-For`):
+
+```liaf
+// 1. Extrair IP do cliente
+let ip = req-client-ip(req)
+
+// 2. Limitar requisições (chave, max_requisicoes, janela_em_segundos)
+// Retorna false se o limite foi excedido
+if not rate-limit(concat("login:", ip), 5, 60)
+  return json-error(429, "Muitas tentativas de login. Tente novamente em 1 minuto.")
+end
+```
+
+---
+
+## 8. Transações Atômicas de Banco de Dados (`db-transaction`)
+Bloco atômico com `BEGIN`, `COMMIT` e rollback automático caso ocorra qualquer erro:
+
+```liaf
+let resultado = db-transaction conn
+  db-exec(conn, "UPDATE contas SET saldo = saldo - 100 WHERE id = ?1", origem_id)
+  db-exec(conn, "UPDATE contas SET saldo = saldo + 100 WHERE id = ?1", destino_id)
+  "Transferência concluída"
+end
+```
+
+---
+
+## 9. Guardas Declarativas de Autenticação
+Retorno imediato de 401 Unauthorized via `try`:
+
+```liaf
+import "std/auth"
+
+route GET "/api/perfil" (req Request) Response
+  // Se o token for ausente, inválido ou expirado, retorna 401 JSON automaticamente
+  let payload = try auth-guard-jwt(req, "chave-secreta-militar-32-bytes-ok!")
+  let usuario = try json-decode(payload, UsuarioClaims)
+  json-response(200, try json-encode(usuario))
+end
+```
+
+---
+
+## 10. `std/cli` — Argumentos e Linha de Comando
+Criação de utilitários de terminal e processamento de flags:
+
+```liaf
+import "std/cli"
+
+// Listar argumentos passados ao processo (excluindo o executável)
+let args = cli-args-list()
+let total = cli-args-len()
+
+// Checar flag booleana (ex: "--verbose" ou "-v")
+if (cli-has-flag "--verbose")
+  println "Modo detalhado ativo"
+
+// Obter valor de flag com fallback (ex: "--porta=8080" ou "--porta" "8080")
+let porta = cli-get-flag "--porta" "8080"
+
+// Sair do processo com código de status
+cli-exit 0
+```
+
+---
+
+## 11. `std/fs` — Sistema de Arquivos e Pastas
+Manipulação de diretórios e arquivos locais:
+
+```liaf
+import "std/fs"
+
+// Criar árvore de diretórios (mkdir -p)
+try fs-make-dir "dados/backups"
+
+// Listar arquivos dentro de uma pasta
+let arquivos = try fs-read-dir "dados"
+
+// Checar se caminho é diretório
+if (fs-is-directory "dados/backups")
+  println "É uma pasta"
+
+// Tamanho de arquivo em bytes
+let bytes = try fs-size "dados/relatorio.pdf"
+
+// Remover arquivo ou pasta recursivamente (rm -rf)
+try fs-delete "dados/backups"
+```
+
+---
+
+## 12. `std/csv` — Manipulação de Dados CSV
+Parser e gerador nativo de CSV:
+
+```liaf
+import "std/csv"
+
+// Ler e decodificar CSV em lista de linhas e colunas
+let linhas = try csv-decode "nome,preco\nCafe,10\nLeite,5"
+
+// Serializar lista de linhas para texto CSV
+let texto = csv-serialize linhas
+```
+
+---
+
+## 13. `std/html` — Server-Driven UI e HTML Seguro
+Construção declarativa de HTML, fragmentos para swap (HTMX), proteção contra XSS e integração com formulários:
+
+```liaf
+import "std/html"
+
+// 1. Criar resposta HTML completa ou parcial
+route GET "/componente/hora" () Response
+  let seguro = html-safe "<script>alert('xss')</script>"
+  let card = html-elem "div" "class=\"card\"" (concat "Horário: " (str-from-int now-ms()))
+  html-render(200, card)
+end
+
+// 2. Manipulação de formulários (Server-Driven UI com HTMX)
+route POST "/tarefas/nova" (req Request) Response
+  let titulo = match request-form(req, "titulo")
+    case ok(t)
+      t
+    case err(_)
+      "Sem título"
+  end
+
+  let fragmento = fmt("<div class=\"item\">✓ {}</div>", html-safe(titulo))
+  html-render(200, fragmento)
+end
+```
+
+### Arquitetura Recomendada com Arquivos Separados:
+* `app.liaf`: Backend com rotas de API e endpoints que devolvem fragmentos HTML renderizados.
+* `public/index.html`: Casca inicial da aplicação, carregando HTMX (`htmx.min.js`) e disparando requisições com `hx-get`, `hx-post`, `hx-target` e `hx-swap`.
+* `public/style.css`: Estilização pura e desacoplada.
+* Inicialização com `serve-hybrid("./public", porta)` para servir arquivos estáticos em alta velocidade via RAM cache e despachar rotas dinâmicas.
+* Veja exemplos completos e funcionais em `examples/demo_app` (básico) e `examples/demo_pro` (avançado com SQLite, WebSockets e SVG).
+
+
 

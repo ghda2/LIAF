@@ -21,6 +21,56 @@ func init() {
 		UnsupportedC: true,
 	})
 
+	Register(&Builtin{
+		Name:         "json-error",
+		Category:     "web",
+		Arity:        ExactArity(2),
+		Params:       []string{"int", "str"},
+		Return:       "Response",
+		GoCall:       "web.JSONError",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "html-response",
+		Category:     "web",
+		Arity:        ExactArity(2),
+		Params:       []string{"int", "str"},
+		Return:       "Response",
+		GoCall:       "web.HTMLResponse",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "html-escape",
+		Category:     "web",
+		Arity:        ExactArity(1),
+		Params:       []string{"str"},
+		Return:       "str",
+		GoCall:       "web.HTMLEscape",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "rate-limit",
+		Category:     "web",
+		Arity:        ExactArity(3),
+		Params:       []string{"str", "int", "int"},
+		Return:       "bool",
+		GoCall:       "web.RateLimit",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "req-client-ip",
+		Category:     "web",
+		Arity:        ExactArity(1),
+		Params:       []string{"Request"},
+		Return:       "str",
+		GoCall:       "web.ClientIP",
+		UnsupportedC: true,
+	})
+
 	for _, m := range []string{"http-get", "http-post", "http-put", "http-delete"} {
 		method := strings.ToUpper(strings.TrimPrefix(m, "http-"))
 		Register(&Builtin{
@@ -107,6 +157,16 @@ func init() {
 		Params:       []string{"Request", "str"},
 		Return:       "(result str str)",
 		GoCall:       "rt.RequestQuery",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "request-form",
+		Category:     "web",
+		Arity:        ExactArity(2),
+		Params:       []string{"Request", "str"},
+		Return:       "(result str str)",
+		GoCall:       "rt.RequestForm",
 		UnsupportedC: true,
 	})
 

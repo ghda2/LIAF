@@ -73,10 +73,12 @@ O executável `liafc` é a ferramenta central:
 
 | Ação | Comando | Descrição |
 |---|---|---|
-| **Checar** | `liafc check app.liaf --json` | Valida sintaxe e tipos emitindo JSON para auto-cura |
-| **Formatar** | `liafc fmt app.liaf -w` | Normaliza a indentação e o layout canônico |
-| **Executar** | `liafc run app.liaf` | Executa o programa diretamente |
-| **Compilar** | `liafc build app.liaf -o server.exe` | Compila executável nativo autônomo |
+| **Checar** | `liafc check app.liaf --json` | Valida sintaxe e tipos emitindo JSON para auto-cura mecânica |
+| **Testar** | `liafc test [caminho]` | Executa a suíte de testes LIAF nativos do projeto |
+| **Novo Projeto** | `liafc new meu_app` | Cria um novo projeto LIAF com estrutura padrão pronta |
+| **Formatar** | `liafc fmt app.liaf -w` | Normaliza a indentação e o layout canônico do código |
+| **Executar** | `liafc run app.liaf` | Compila em memória e executa diretamente |
+| **Compilar** | `liafc build app.liaf -o server.exe` | Compila executável binário autônomo |
 | **Cross-compilar** | `$env:GOOS="linux"; liafc build app.liaf -o app_linux` | Gera binário para servidor Linux x86_64 |
 
 ---
@@ -84,10 +86,15 @@ O executável `liafc` é a ferramenta central:
 ## 4. Biblioteca de Referência
 
 Consulte os guias especializados da skill conforme sua necessidade:
-- [references/builtins.md](references/builtins.md): Catálogo completo de todas as 128 funções nativas (Web, DB, FS, Cripto, Coleções, Strings).
-- [references/syntax.md](references/syntax.md): Especificação completa da gramática v0.6 e v0.5.
-- [references/stdlib.md](references/stdlib.md): Guia de `std/cookie`, `std/auth`, `std/jwt`, `std/cors` e `std/storage`.
-- [references/auto_healing.md](references/auto_healing.md): Tabela de códigos de erro e estratégias de correção.
+- [references/builtins.md](references/builtins.md): Catálogo completo de todas as funções nativas (Web, DB, FS, Cripto, Coleções, Strings, CLI, Subprocessos, CSV, Typst PDF).
+- [references/syntax.md](references/syntax.md): Especificação completa da gramática linear v0.6, visibilidade (`pub` vs privado), enums e pattern matching.
+- [references/stdlib.md](references/stdlib.md): Guia de `std/auth`, `std/jwt`, `std/cli`, `std/fs`, `std/csv`, `std/storage`, `std/cookie`, `std/cors` e `std/seo`.
+- [references/auto_healing.md](references/auto_healing.md): Tabela de códigos de erro (`E_...`, `W_...`) e estratégias mecânicas de correção.
 - [examples/rest_api.liaf](examples/rest_api.liaf): Exemplo canônico de API REST com persistência atômica.
-- [examples/websocket.liaf](examples/websocket.liaf): Exemplo canônico de WebSockets e pub/sub.
+- [examples/auth_jwt.liaf](examples/auth_jwt.liaf): Exemplo canônico de autenticação JWT, Argon2id e rotas protegidas.
+- [examples/cli_tool.liaf](examples/cli_tool.liaf): Exemplo de utilitário CLI standalone com `std/cli`, `std/fs` e `std/csv`.
+- [examples/websocket.liaf](examples/websocket.liaf): Exemplo canônico de WebSockets e pub/sub em tempo real.
 - [examples/auth_cookies.liaf](examples/auth_cookies.liaf): Exemplo canônico de autenticação por Cookies e rotas seguras.
+- [examples/demo_app](examples/demo_app): Aplicação Server-Driven UI desacoplada (HTML/CSS em `public/`, HTMX e `serve-hybrid`).
+- [examples/demo_pro](examples/demo_pro): Aplicação Mission Control profissional (Server-Driven UI, SQLite, WebSockets em tempo real multiusuário, SVG dinâmico gerado no backend e rate limiting).
+

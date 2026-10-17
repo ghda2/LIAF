@@ -12,6 +12,10 @@ Como as pastas estão organizadas: [README.md](README.md).
 
 | Issue | Estado | O que falta de fato |
 |---|---|---|
+| [#043 Data e Hora](a-fazer/ISSUE_043_DATA_E_HORA_STD_TIME.md) | Aberta | ISO 8601, fuso horário, manipulação temporal em `std/time` |
+| [#044 Testes Nativos](a-fazer/ISSUE_044_TESTES_NATIVOS_LIAFC_TEST.md) | Aberta | Blocos `test "..."` e executor `liafc test [--json]` |
+| [#045 Middlewares HTTP](a-fazer/ISSUE_045_MIDDLEWARES_HTTP.md) | Aberta | Interceptadores declarativos de requisições web |
+| [#046 Regex](a-fazer/ISSUE_046_EXPRESSOES_REGULARES_REGEX.md) | Aberta | Motor RE2 seguro integrado e helpers em `std/regex` |
 | [#001 SSG](a-fazer/ISSUE_001_SSG_EVOLUTION.md) | Implementada | Metas de desempenho (RAM <5 MB, reload <5 ms) nunca medidas sob carga definida |
 | [#006 Result](a-fazer/ISSUE_006_STRUCTURED_ERROR_HANDLING.md) | Implementada | Revisão de fluxo entre ramos e loops, sem registro de andamento desde 16/09 |
 | [#031 Guia](a-fazer/ISSUE_031_GUIA_PROXIMAS_ISSUES.md) | Aberta | Itens 0.1 e 0.2 feitos; faltam transformar as seções B e C em issues |

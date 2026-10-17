@@ -14,6 +14,9 @@ func (p *Parser) parseTopLevel() ast.TopLevel {
 	}
 	p.nextToken() // consome '('
 
+	if isMiddlewareKeyword(p.curToken) || (p.curTokenIs(token.PUB) && isMiddlewareKeyword(p.peekToken)) {
+		return p.parseMiddleware()
+	}
 	switch p.curToken.Type {
 	case token.PUB:
 		p.nextToken() // consome 'pub'
@@ -304,6 +307,7 @@ func (p *Parser) parseRoute() *ast.RouteDecl {
 	path := p.curToken.Literal
 	p.nextToken()
 
+	middlewares := p.parseWith()
 	params := p.parseParams()
 	retType := p.parseReturns()
 	effects := p.parseEffects()
@@ -364,16 +368,17 @@ func (p *Parser) parseRoute() *ast.RouteDecl {
 	}
 
 	return &ast.RouteDecl{
-		Method:     method,
-		Path:       path,
-		Params:     params,
-		ReturnType: retType,
-		Effects:    effects,
-		OnErrVar:   onErrVar,
-		OnErrBody:  onErrBody,
-		Body:       body,
-		Line:       line,
-		Col:        col,
+		Method:      method,
+		Path:        path,
+		Params:      params,
+		ReturnType:  retType,
+		Effects:     effects,
+		OnErrVar:    onErrVar,
+		OnErrBody:   onErrBody,
+		Body:        body,
+		Line:        line,
+		Col:         col,
+		Middlewares: middlewares,
 	}
 }
 

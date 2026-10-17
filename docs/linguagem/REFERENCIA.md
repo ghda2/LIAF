@@ -61,7 +61,7 @@ Nomes de campo podem coincidir com palavras reservadas (`sub`, `return`, `add`..
 
 ### 1.2 Nível superior
 
-Dentro de `(module nome ...)` só podem aparecer: `import`, `struct`, `fn`, `route`, `ws-route`
+Dentro de `(module nome ...)` só podem aparecer: `import`, `struct`, `fn`, `middleware`, `route`, `ws-route`
 (`E_INVALID_TOPLEVEL`). A ordem entre eles não importa: uma função pode chamar outra declarada
 depois.
 
@@ -162,6 +162,45 @@ Forma canônica (compacta):
 - Um parâmetro **struct** recebe o corpo JSON desserializado; corpo inválido responde `400`.
 - Um parâmetro **`Request`** dá acesso a headers, query e corpo cru (§10.2).
 - A rota se registra sozinha. Ela só atende depois que `main` chama `serve-hybrid`.
+- `(with mw ...)` logo depois do caminho roda middlewares antes da rota (§2.4.1).
+
+### 2.4.1 `middleware` — interceptação de rotas
+
+```
+(middleware nome ((req Request)) (result Request Response) [(effects ...)] [(on-err var ...)]
+  instrução...)
+```
+
+Na sintaxe linear: `middleware nome(req Request) (result Request Response) ... end`, e na rota
+`route GET "/painel" with(exigir_token, outro) (...) Response ... end`.
+
+```liaf
+(module painel
+  (middleware exigir_token ((req Request)) (result Request Response)
+    (let token (unwrap-or (request-header req "Authorization") ""))
+    (if (eq token "")
+      (then (return (err (json-error 401 "token obrigatorio")))))
+    (ok (request-set-header req "X-Usuario" "ana")))
+
+  (route GET "/painel" (with exigir_token) ((req Request)) Response
+    (json-response 200 (fmt "{{\"usuario\":\"{}\"}}" (unwrap-or (request-header req "X-Usuario") ""))))
+
+  (fn main () void (effects fs net)
+    (unwrap-or (serve-hybrid "./public" "8080") false)))
+```
+
+- Assinatura fixa: um único parâmetro `Request` e retorno `(result Request Response)`
+  (`E_MIDDLEWARE_SIGNATURE`).
+- `(ok req)` segue para o próximo middleware e depois para a rota, com a `Request` devolvida.
+  `(err resposta)` encerra a cadeia: a rota não roda e o cliente recebe essa resposta.
+- Os middlewares rodam na ordem do `with`, antes de qualquer parâmetro ser extraído.
+- Para passar contexto à rota, devolva `(request-set-header req "Nome" "valor")`. Esse valor
+  substitui o header que o cliente tenha enviado com o mesmo nome.
+- O `with` só aceita nomes declarados com `middleware`, sem repetir (`E_UNKNOWN_MIDDLEWARE`,
+  `E_DUPLICATE_MIDDLEWARE`). Os efeitos do middleware ficam na assinatura dele: a rota declara
+  só os do próprio corpo.
+- `pub middleware` exporta o middleware para quem importa o arquivo, como `pub fn`.
+- `ws-route` não aceita `with`.
 
 ### 2.5 `ws-route` — WebSocket
 
@@ -548,6 +587,7 @@ Nenhum parâmetro de segurança é configurável: o caminho fácil é o seguro.
 | `(request-path req)` | `str` | — | |
 | `(request-method req)` | `str` | — | |
 | `(request-header req "Nome")` | `(result str str)` | — | Ausente é `err`; presente e vazio é `(ok "")` |
+| `(request-set-header req "Nome" "valor")` | `Request` | — | Devolve **nova** requisição com o header substituído. Usado por middlewares (§2.4.1) |
 | `(request-query req "chave")` | `(result str str)` | — | |
 | `(request-file-data req "campo")` | `(result str str)` | — | Bytes do arquivo enviado (multipart, ou o corpo inteiro num upload direto) |
 | `(request-file-name req "campo")` | `(result str str)` | — | Nome do arquivo (multipart, header `X-Filename` ou query) |
@@ -876,6 +916,10 @@ mensagem, usando a tabela abaixo.
 |---|---|---|
 | `E_ROUTE_PARAM` | `{nome}` sem parâmetro homônimo, ou parâmetro de caminho que não é `int`/`str` | |
 | `E_WS_PARAM` | `ws-route` sem exatamente um `WSConn`, com dois `Request`, ou parâmetro fora do caminho | |
+| `E_MIDDLEWARE_SIGNATURE` | `middleware` sem exatamente um parâmetro `Request` ou sem retorno `(result Request Response)` | |
+| `E_UNKNOWN_MIDDLEWARE` | Nome no `with` não declarado, ou declarado com `fn` | Declare com `middleware` |
+| `E_DUPLICATE_MIDDLEWARE` | Mesmo middleware duas vezes no `with` | |
+| `E_EXPECTED_MIDDLEWARE_NAME` | `with()` vazio ou com algo que não é nome | `with(exigir_token)` |
 | `E_SQL_INTERPOLATION` | SQL não literal | Escreva o SQL inteiro no fonte e passe valores como argumentos |
 | `E_SQL_PARAM_COUNT` | Marcadores ≠ argumentos, ou `$1` e `?` misturados | |
 | `E_UNKNOWN_DRIVER` | Driver fora da lista, ou não literal | `"postgres"`, `"mysql"`, `"sqlite"`, `"redis"` |

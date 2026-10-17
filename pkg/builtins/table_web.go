@@ -150,6 +150,18 @@ func init() {
 		UnsupportedC: true,
 	})
 
+	// Devolve uma copia da Request com o header definido: e assim que um
+	// middleware entrega contexto (ex.: o usuario autenticado) a rota (#045).
+	Register(&Builtin{
+		Name:         "request-set-header",
+		Category:     "web",
+		Arity:        ExactArity(3),
+		Params:       []string{"Request", "str", "str"},
+		Return:       "Request",
+		GoCall:       "rt.RequestSetHeader",
+		UnsupportedC: true,
+	})
+
 	Register(&Builtin{
 		Name:         "request-query",
 		Category:     "web",

@@ -210,6 +210,9 @@ func Check(mod *ast.Module, file string) (*Info, []diagnostic.Diagnostic) {
 			c.error(f, "E_MISSING_RETURN", f.Name)
 		}
 		c.unusedEffects(f, f.Effects, "function "+f.Name)
+		if f.IsMiddleware {
+			c.middlewareSignature(f)
+		}
 		c.pop()
 	}
 	for _, d := range mod.Decls {
@@ -274,6 +277,7 @@ func Check(mod *ast.Module, file string) (*Info, []diagnostic.Diagnostic) {
 			c.error(r, "E_MISSING_RETURN", fmt.Sprintf("route %s %s", r.Method, r.Path))
 		}
 		c.unusedEffects(r, r.Effects, fmt.Sprintf("route %s %s", r.Method, r.Path))
+		c.routeMiddlewares(r)
 		c.pop()
 	}
 	for _, d := range mod.Decls {

@@ -159,12 +159,16 @@ type FuncDecl struct {
 	Body       []Stmt
 	Line       int
 	Col        int
+	// IsMiddleware marca uma declaracao (middleware ...): uma funcao de
+	// assinatura fixa (req Request) (result Request Response) que pode ser
+	// listada no with(...) de uma rota (issue #045).
+	IsMiddleware bool
 }
 
 func (f *FuncDecl) Pos() (int, int) { return f.Line, f.Col }
 func (f *FuncDecl) topLevelNode()   {}
 
-// RouteDecl representa (route METHOD PATH (params ...) (returns T) (effects ...) [(on-err var ...)] (body ...))
+// RouteDecl representa (route METHOD PATH [(with mw ...)] (params ...) (returns T) (effects ...) [(on-err var ...)] (body ...))
 type RouteDecl struct {
 	Method     string
 	Path       string
@@ -176,6 +180,8 @@ type RouteDecl struct {
 	Body       []Stmt
 	Line       int
 	Col        int
+	// Middlewares sao os nomes do with(...), na ordem em que rodam.
+	Middlewares []string
 }
 
 func (r *RouteDecl) Pos() (int, int) { return r.Line, r.Col }

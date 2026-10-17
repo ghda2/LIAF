@@ -1,4 +1,4 @@
-# Guia para agentes — LIAF v0.7
+# Guia para agentes — LIAF v1.0
 
 Escreva LIAF na **sintaxe linear**: blocos fechados por `end`, chamadas `f(a, b)` e operadores
 infixos. O compilador ainda aceita S-expressions (`(fn ...)`) por compatibilidade, mas não
@@ -8,7 +8,9 @@ Todo bloco `liaf` deste guia é um programa completo, e um teste (`cmd/liafc/rea
 passa pelo `liafc check` a cada `go test`. Se algum exemplo daqui não compilar, o defeito está
 no guia.
 
-Para a lista completa de builtins, tipos e códigos de erro, veja a
+A versão completa deste guia, com exemplos testados de todas as funções, é a skill que o
+`liafc agents` grava nos projetos: [.agents/skills/liaf](../../.agents/skills/liaf/SKILL.md).
+Para a lista completa de builtins, tipos e códigos de erro, veja também a
 [referência](REFERENCIA.md). Ela está escrita em S-expression, mas os nomes, argumentos e
 retornos valem igual na sintaxe linear: `(json-response 200 corpo)` vira
 `json-response(200, corpo)`.

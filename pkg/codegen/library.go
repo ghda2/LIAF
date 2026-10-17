@@ -25,7 +25,9 @@ func (g *Generator) libraryCall(c *ast.CallExpr) (string, bool) {
 		return b.GoEmit(g, c, args)
 	}
 	if b.GoTemplate != "" {
-		if (b.Arity.Max == -1 || len(args) != 1) && (b.Name == "println" || b.Name == "print" || b.Name == "concat" || b.Name == "fmt") {
+		// Variadico com um unico %s no molde: os argumentos entram todos ali, separados
+		// por virgula (println, concat, log-info...).
+		if b.Arity.Max == -1 && strings.Count(b.GoTemplate, "%s") == 1 {
 			return fmt.Sprintf(b.GoTemplate, strings.Join(args, ", ")), true
 		}
 		anyArgs := make([]any, len(args))

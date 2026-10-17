@@ -44,6 +44,9 @@ func (g *Generator) writeIndent() {
 
 func (g *Generator) genStmt(stmt ast.Stmt) {
 	g.writeIndent()
+	if g.hoistStmtTries(stmt) {
+		g.writeIndent()
+	}
 	switch s := stmt.(type) {
 	case *ast.LoopControl:
 		g.sb.WriteString(s.Kind + "\n")
@@ -102,6 +105,11 @@ func (g *Generator) genStmt(stmt ast.Stmt) {
 						if isLast := i == len(c.Body)-1; isLast && g.curRetType != nil && g.MapType(g.curRetType) != "void" {
 							if es, ok := st.(*ast.ExprStmt); ok {
 								g.writeIndent()
+								wrote := false
+								g.hoistTries(es.Expr, &wrote)
+								if wrote {
+									g.writeIndent()
+								}
 								g.sb.WriteString(fmt.Sprintf("return %s\n", g.genExpr(es.Expr)))
 								continue
 							}
@@ -169,9 +177,19 @@ func (g *Generator) genStmt(stmt ast.Stmt) {
 			g.sb.WriteString(fmt.Sprintf("%s := %s\n", resID, g.genExpr(tryExpr.Expr)))
 			g.failGuard(resID)
 			g.writeIndent()
+			if s.Name == "_" {
+				g.sb.WriteString(fmt.Sprintf("_ = %s.Value\n", resID))
+				return
+			}
 			g.sb.WriteString(fmt.Sprintf("var %s %s = %s.Value\n", sanitizeIdent(s.Name), varType, resID))
 			g.writeIndent()
 			g.sb.WriteString("_ = " + sanitizeIdent(s.Name) + "\n")
+			return
+		}
+		// `let _ = expr` descarta o valor. Declarar uma variavel Go aqui quebraria o
+		// segundo descarte do mesmo bloco ("_u_ redeclared").
+		if s.Name == "_" {
+			g.sb.WriteString(fmt.Sprintf("_ = %s\n", g.genExpr(s.Value)))
 			return
 		}
 		val := g.genExpr(s.Value)

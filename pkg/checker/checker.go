@@ -294,7 +294,7 @@ func Check(mod *ast.Module, file string) (*Info, []diagnostic.Diagnostic) {
 			c.fn = &ast.FuncDecl{
 				Name:       t.Name,
 				ReturnType: &ast.PrimitiveType{Name: "void"},
-				Effects:    []string{"io", "clock", "net", "fs", "db", "rand", "env"},
+				Effects:    []string{"io", "clock", "net", "fs", "db", "rand", "env", "spawn"},
 			}
 			c.scopes = nil
 			c.push()

@@ -29,6 +29,9 @@ func (g *Generator) genExpr(expr ast.Expr) string {
 	case *ast.RecvExpr:
 		return fmt.Sprintf("<-%s", g.genExpr(e.Channel))
 	case *ast.TryExpr:
+		if id, ok := g.hoisted[e]; ok {
+			return id + ".Value"
+		}
 		return fmt.Sprintf("(%s).Value", g.genExpr(e.Expr))
 	case *ast.IfExpr:
 		retType := g.MapType(g.TypeOf(e))

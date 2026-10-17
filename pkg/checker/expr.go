@@ -75,6 +75,18 @@ func (c *Checker) expr(e ast.Expr, want ast.Type) (t ast.Type) {
 		if c.fn != nil {
 			if c.fn.OnErrVar == "" && !IsResult(c.fn.ReturnType) {
 				c.error(e, "E_UNHANDLED_RESULT", "try requires either an (on-err ...) block or a function returning (result ...)")
+			} else if errType := a[1]; errType != nil {
+				// O erro do try precisa caber no destino: a variavel do on-err e
+				// sempre str; sem on-err, o erro sobe no result da propria funcao.
+				// Sem esta conferencia, um (result str Response) passava pelo
+				// checker e quebrava so na compilacao do Go.
+				if c.fn.OnErrVar != "" {
+					if errType.String() != "str" {
+						c.error(e, "E_TYPE_MISMATCH", fmt.Sprintf("try inside a function with on-err needs a str error, received %s; use match or unwrap-or", errType.String()))
+					}
+				} else if fr := parts(c.fn.ReturnType, "result", 2); fr != nil && fr[1] != nil && fr[1].String() != errType.String() {
+					c.error(e, "E_TYPE_MISMATCH", fmt.Sprintf("try propagates a %s error, but the function returns %s errors; use match or unwrap-or", errType.String(), fr[1].String()))
+				}
 			}
 		}
 		return a[0]

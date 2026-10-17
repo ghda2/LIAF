@@ -27,7 +27,7 @@
       (match (request-file-data req field)
         (ok d (set data d))
         (err e (return (err e))))
-      (if (and (gt max-bytes 0) (gt (str-len data) max-bytes))
+      (if (and (gt max-bytes 0) (gt (str-byte-len data) max-bytes))
         (then (return (err "file exceeds maximum allowed size"))))
       (let orig-name str "auto")
       (match (request-file-name req field)

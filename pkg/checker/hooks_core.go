@@ -256,7 +256,9 @@ func init() {
 		t0 := c.expr(v.Args[0], primitive("str"))
 		c.require(v.Args[0], t0, primitive("str"))
 		if lit, ok := v.Args[0].(*ast.StringLiteral); ok {
-			trimmed := strings.TrimSpace(lit.Value)
+			// "{{" e a chave literal do fmt: fmt("{{\"id\":{}}}", x) monta o mesmo
+			// JSON que "{\"id\":...}" e tem de cair na mesma regra.
+			trimmed := strings.ReplaceAll(strings.TrimSpace(lit.Value), "{{", "{")
 			if (strings.HasPrefix(trimmed, "{\"") || strings.HasPrefix(trimmed, "[{\"")) && len(v.Args) > 1 {
 				c.error(v.Args[0], "W_MANUAL_JSON_FMT", "do not build JSON strings using fmt; use json-encode with a struct to avoid injection attacks")
 			}

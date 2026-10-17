@@ -1,0 +1,43 @@
+module try_aninhado
+
+// Regressoes do codegen: try aninhado numa expressao precisa desviar para o
+// on-err (antes virava so .Value e o erro sumia); dois `let _` no mesmo bloco;
+// log-info com varios argumentos.
+
+fn dobro(s str) (result int str)
+  on-err e
+    err(fmt("tratado: {}", e))
+  end
+  ok(2 * try int-from-str(s))
+end
+
+fn direto(s str) str
+  on-err e
+    fmt("padrao ({})", e)
+  end
+  return str-from-int(try int-from-str(s))
+end
+
+fn par(s str) (result str str)
+  let n = try int-from-str(s)
+  ok(fmt("{} {}", n, try int-from-str(s)))
+end
+
+fn mostrar(r (result int str)) void effects(io)
+  match r
+    case ok(v)
+      println(fmt("ok {}", v))
+    case err(e)
+      println(e)
+  end
+end
+
+fn main() void effects(io)
+  mostrar(dobro("21"))
+  mostrar(dobro("abc"))
+  println(direto("x"))
+  println(unwrap-or(par("3"), "falhou"))
+  let _ = int-from-str("1")
+  let _ = int-from-str("2")
+  log-info("varios", "argumentos")
+end

@@ -143,12 +143,15 @@ Forma canônica (compacta):
 ```liaf
 (module api
   (struct NovaTarefa (titulo str))
+  (struct Tarefa (id int) (titulo str))
 
   (route GET "/tarefas/{id}" ((id int)) Response
-    (json-response 200 (fmt "{{\"id\":{}}}" id)))
+    (on-err e (json-error 500 e))
+    (json-response 200 (try (json-encode (new Tarefa id "exemplo")))))
 
   (route POST "/tarefas" ((entrada NovaTarefa)) Response
-    (json-response 201 (fmt "{{\"titulo\":\"{}\"}}" (field entrada titulo))))
+    (on-err e (json-error 500 e))
+    (json-response 201 (try (json-encode (new Tarefa 1 (field entrada titulo))))))
 
   (fn main () void (effects fs io net)
     (match (serve-hybrid "./public" "8080")
@@ -176,6 +179,8 @@ Na sintaxe linear: `middleware nome(req Request) (result Request Response) ... e
 
 ```liaf
 (module painel
+  (struct Usuario (usuario str))
+
   (middleware exigir_token ((req Request)) (result Request Response)
     (let token (unwrap-or (request-header req "Authorization") ""))
     (if (eq token "")
@@ -183,7 +188,9 @@ Na sintaxe linear: `middleware nome(req Request) (result Request Response) ... e
     (ok (request-set-header req "X-Usuario" "ana")))
 
   (route GET "/painel" (with exigir_token) ((req Request)) Response
-    (json-response 200 (fmt "{{\"usuario\":\"{}\"}}" (unwrap-or (request-header req "X-Usuario") ""))))
+    (on-err e (json-error 500 e))
+    (let usuario (unwrap-or (request-header req "X-Usuario") ""))
+    (json-response 200 (try (json-encode (new Usuario usuario)))))
 
   (fn main () void (effects fs net)
     (unwrap-or (serve-hybrid "./public" "8080") false)))
@@ -793,13 +800,14 @@ Com `liafc build --embed`, a pasta vai dentro do executável; sem ele, é lida d
 ```liaf
 (module api
   (import "std/auth")
+  (struct Perfil (token str) (ordem str))
 
   (route GET "/perfil" ((req Request)) Response
     (on-err motivo (response-set-header (json-response 401 "{}") "WWW-Authenticate" "Bearer"))
     (let token str (try (auth-bearer-token req)))
     (let ordem str (unwrap-or (request-query req "ordem") "recentes"))
     (response-set-header
-      (json-response 200 (fmt "{{\"token\":\"{}\",\"ordem\":\"{}\"}}" token ordem))
+      (json-response 200 (try (json-encode (new Perfil token ordem))))
       "Cache-Control" "no-store"))
 
   (fn main () void (effects fs io net)

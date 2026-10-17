@@ -15,7 +15,7 @@ end
 
 route GET "/tarefas/{id}" (id int) Response
   on-err e
-    json-response(500, e)
+    json-error(500, e)
   end
   let tarefa = new Tarefa(id, "Aprender LIAF", true)
   json-response(200, try json-encode(tarefa))

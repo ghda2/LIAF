@@ -39,6 +39,8 @@ Siga nesta ordem. Não pule o passo 4.
 ## 2. O programa LIAF
 
 ```liaf
+module recibo
+
 struct Item
   nome str
   qtd int
@@ -64,17 +66,36 @@ fn main() void effects(fs, io)
 end
 ```
 
-Numa API, devolva direto:
+Numa API, devolva direto. O `{id}` ocupa um segmento inteiro do caminho: `/recibos/{id}/pdf`
+funciona, `/recibos/{id}.pdf` não.
 
 ```liaf
-route GET "/recibos/{id}.pdf" (id int) Response effects(fs, db)
+module recibos_api
+
+struct Recibo
+  numero int
+  cliente str
+end
+
+fn buscar_recibo(id int) (result Recibo str)
+  if id <= 0
+    return err("recibo inexistente")
+  end
+  ok(new Recibo(id, "Ana"))
+end
+
+route GET "/recibos/{id}/pdf" (id int) Response effects(fs)
   on-err e
-    json-response(500, e)
+    json-error(500, e)
   end
   let r = try buscar_recibo(id)
   let layout = try fs-read-file("recibo.typ")
   let pdf = try pdf-typst(layout, try json-encode(r))
-  pdf-response(pdf, "recibo.pdf")
+  pdf-response(pdf, fmt("recibo-{}.pdf", id))
+end
+
+fn main() void effects(fs, net)
+  unwrap-or(serve-hybrid("./public", "8080"), false)
 end
 ```
 

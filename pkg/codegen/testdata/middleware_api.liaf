@@ -20,10 +20,19 @@ route GET "/health" () Response
   json-response(200, "{\"status\":\"healthy\"}")
 end
 
+struct Painel
+  id int
+  usuario str
+  visto str
+end
+
 route GET "/painel/{id}" with(exigir_token, marcar) (id int, req Request) Response
+  on-err motivo
+    json-error(500, motivo)
+  end
   let usuario = unwrap-or(request-header(req, "X-Usuario"), "")
   let visto = unwrap-or(request-header(req, "X-Visto-Por-Marcar"), "")
-  json-response(200, fmt("{{\"id\":{},\"usuario\":\"{}\",\"visto\":\"{}\"}}", id, usuario, visto))
+  json-response(200, try json-encode(new Painel(id, usuario, visto)))
 end
 
 fn main() void effects(fs, io, net)

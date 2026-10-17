@@ -22,6 +22,9 @@ type Generator struct {
 	privateFuncs   map[string]string
 	privateStructs map[string]string
 	testCases      []liafTestCase
+	// hoisted guarda, para cada try aninhado ja conferido antes da instrucao, o
+	// nome da variavel que tem o resultado (ver try.go).
+	hoisted map[*ast.TryExpr]string
 }
 
 const extraImportsMarker = "\t// liaf:extra-imports\n"

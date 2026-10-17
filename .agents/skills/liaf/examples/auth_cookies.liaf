@@ -1,6 +1,7 @@
-// Autenticação com Cookies Seguros em Sintaxe Linear v0.6
+// Autenticação por cookie de sessão (HttpOnly, Secure, SameSite).
 module auth_cookies_exemplo
 
+import "std/auth"
 import "std/cookie"
 
 struct LoginInput
@@ -8,27 +9,43 @@ struct LoginInput
   senha str
 end
 
+struct Status
+  status str
+end
+
+struct Perfil
+  usuario str
+  sessao str
+end
+
+// Em produção, o hash vem do banco e as sessões ficam num store (banco ou Redis).
 route POST "/login" (input LoginInput) Response effects(rand)
-  if str-eq(input.usuario, "admin") && str-eq(input.senha, "123456")
-    let token = random-token()
-    let c = cookie-make("sid", token, 86400, "/", true, true, "Lax")
-    let r = json-response(200, "{\"status\":\"logado\"}")
-    return response-set-cookie(r, c)
+  on-err msg
+    json-error(500, msg)
   end
-  json-response(401, "{\"error\":\"Credenciais inválidas\"}")
+  let hash = try auth-hash-password("senha-de-exemplo")
+  let usuario_ok = secure-eq(input.usuario, "admin")
+  if !usuario_ok || !auth-verify-password(input.senha, hash)
+    return json-error(401, "credenciais invalidas")
+  end
+  let sid = random-token()
+  let c = cookie-make("sid", sid, 86400, "/", true, true, "Lax")
+  response-set-cookie(json-response(200, try json-encode(new Status("logado"))), c)
 end
 
 route GET "/perfil" (req Request) Response
   on-err _
-    json-response(401, "{\"error\":\"Não autenticado\"}")
+    json-error(401, "nao autenticado")
   end
-  let sid = try request-cookie(req, "sid")
-  json-response(200, fmt("{{\"usuario\":\"admin\",\"sessao\":\"{}\"}}", sid))
+  let sid = try auth-cookie(req, "sid")
+  json-response(200, try json-encode(new Perfil("admin", sid)))
 end
 
 route POST "/logout" () Response
-  let r = json-response(200, "{\"status\":\"deslogado\"}")
-  response-delete-cookie(r, "sid", "/")
+  on-err msg
+    json-error(500, msg)
+  end
+  response-delete-cookie(json-response(200, try json-encode(new Status("deslogado"))), "sid", "/")
 end
 
 fn main() void effects(fs, io, net)

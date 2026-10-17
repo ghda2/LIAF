@@ -12,7 +12,6 @@ Como as pastas estão organizadas: [README.md](README.md).
 
 | Issue | Estado | O que falta de fato |
 |---|---|---|
-| [#043 Data e Hora](a-fazer/ISSUE_043_DATA_E_HORA_STD_TIME.md) | Aberta | ISO 8601, fuso horário, manipulação temporal em `std/time` |
 | [#044 Testes Nativos](a-fazer/ISSUE_044_TESTES_NATIVOS_LIAFC_TEST.md) | Aberta | Blocos `test "..."` e executor `liafc test [--json]` |
 | [#045 Middlewares HTTP](a-fazer/ISSUE_045_MIDDLEWARES_HTTP.md) | Aberta | Interceptadores declarativos de requisições web |
 | [#046 Regex](a-fazer/ISSUE_046_EXPRESSOES_REGULARES_REGEX.md) | Aberta | Motor RE2 seguro integrado e helpers em `std/regex` |
@@ -25,6 +24,7 @@ Como as pastas estão organizadas: [README.md](README.md).
 
 | Issue | Evidência |
 |---|---|
+| [**#043** Data e Hora (`std/time`)](feito/ISSUE_043_DATA_E_HORA_STD_TIME.md) | Módulo `std/time`, builtins `time-*`, testes unitários `pkg/runtime/time_test.go`, conformidade `043_time_operations.liaf` e execução via `liafc run` |
 | [**#029** `std/storage` e WebP](feito/ISSUE_029_STDLIB_STORAGE_AND_WEBP.md) | Módulo `std/storage`, upload multipart/raw, compressão WebP sem perdas (lossless VP8L), sanitização anti-traversal e testes `TestStorageLifecycle`, `TestImageToWebPLossless` |
 | [**#007** Pipeline de Deploy Autônomo](feito/ISSUE_007_AUTONOMOUS_AI_DEPLOY_PIPELINE.md) | HTTP Publish API (`POST /_liaf/publish`), `liafc publish`, gerador systemd `liafc service install` e conector Caddy Admin API `liafc deploy caddy-bind` |
 | [**#017** Tempo real, resiliência e cluster](feito/ISSUE_017_REALTIME_CHANNELS_RESILIENCY.md) | Bounded buffer (`sendQueue`), desconexão/drop de slow clients, rate limiting nativo, pub/sub escalável Redis multi-instância e builtins `ws-enable-redis` / `ws-disable-redis` |

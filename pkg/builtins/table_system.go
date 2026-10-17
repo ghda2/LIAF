@@ -49,6 +49,156 @@ func init() {
 	})
 
 	Register(&Builtin{
+		Name:         "time-now",
+		Category:     "system",
+		Arity:        ExactArity(0),
+		Effects:      []string{"clock"},
+		Return:       "str",
+		GoCall:       "rt.TimeNowISO",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "time-now-unix",
+		Category:     "system",
+		Arity:        ExactArity(0),
+		Effects:      []string{"clock"},
+		Return:       "int",
+		GoCall:       "rt.TimeNowUnix",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "time-now-ms",
+		Category:     "system",
+		Arity:        ExactArity(0),
+		Effects:      []string{"clock"},
+		Return:       "int",
+		GoCall:       "rt.TimeNowMs",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "time-format-iso",
+		Category:     "system",
+		Arity:        ExactArity(1),
+		Params:       []string{"int"},
+		Return:       "str",
+		GoCall:       "rt.TimeFormatISO",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "time-parse-iso",
+		Category:     "system",
+		Arity:        ExactArity(1),
+		Params:       []string{"str"},
+		Return:       "(result int str)",
+		GoCall:       "rt.TimeParseISO",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "time-format",
+		Category:     "system",
+		Arity:        ExactArity(2),
+		Params:       []string{"int", "str"},
+		Return:       "str",
+		GoCall:       "rt.TimeFormat",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "time-add-seconds",
+		Category:     "system",
+		Arity:        ExactArity(2),
+		Params:       []string{"int", "int"},
+		Return:       "int",
+		GoCall:       "rt.TimeAddSeconds",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "time-diff-seconds",
+		Category:     "system",
+		Arity:        ExactArity(2),
+		Params:       []string{"int", "int"},
+		Return:       "int",
+		GoCall:       "rt.TimeDiffSeconds",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "time-year",
+		Category:     "system",
+		Arity:        ExactArity(1),
+		Params:       []string{"int"},
+		Return:       "int",
+		GoCall:       "rt.TimeYear",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "time-month",
+		Category:     "system",
+		Arity:        ExactArity(1),
+		Params:       []string{"int"},
+		Return:       "int",
+		GoCall:       "rt.TimeMonth",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "time-day",
+		Category:     "system",
+		Arity:        ExactArity(1),
+		Params:       []string{"int"},
+		Return:       "int",
+		GoCall:       "rt.TimeDay",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "time-hour",
+		Category:     "system",
+		Arity:        ExactArity(1),
+		Params:       []string{"int"},
+		Return:       "int",
+		GoCall:       "rt.TimeHour",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "time-minute",
+		Category:     "system",
+		Arity:        ExactArity(1),
+		Params:       []string{"int"},
+		Return:       "int",
+		GoCall:       "rt.TimeMinute",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "time-second",
+		Category:     "system",
+		Arity:        ExactArity(1),
+		Params:       []string{"int"},
+		Return:       "int",
+		GoCall:       "rt.TimeSecond",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "time-weekday",
+		Category:     "system",
+		Arity:        ExactArity(1),
+		Params:       []string{"int"},
+		Return:       "int",
+		GoCall:       "rt.TimeWeekday",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
 		Name:         "rand-int",
 		Category:     "system",
 		Arity:        ExactArity(1),

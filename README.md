@@ -13,13 +13,17 @@ struct Tarefa
   concluida bool
 end
 
-route GET "/tarefas/{id}" (id int) Response effects(io)
+route GET "/tarefas/{id}" (id int) Response
+  on-err e
+    json-response(500, e)
+  end
   let tarefa = new Tarefa(id, "Aprender LIAF", true)
-  json-response(200, tarefa)
+  json-response(200, try json-encode(tarefa))
 end
 
-fn main() void effects(io)
+fn main() void effects(fs, io, net)
   println("Servidor LIAF rodando em http://127.0.0.1:8080")
+  unwrap-or(serve-hybrid("./public", "8080"), false)
 end
 ```
 

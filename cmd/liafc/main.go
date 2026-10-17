@@ -43,6 +43,8 @@ func main() {
 		runTest(args)
 	case "agents":
 		runAgents(args)
+	case "lsp":
+		runLSP(args)
 	default:
 		fmt.Fprintf(os.Stderr, "Comando desconhecido: %s\n", cmd)
 		printUsage()
@@ -57,6 +59,7 @@ func printUsage() {
 	fmt.Println("  liafc new <nome>                                   Cria um novo projeto LIAF em uma nova pasta")
 	fmt.Println("  liafc check <arquivo.liaf> [--json]                Valida sintaxe e tipos")
 	fmt.Println("  liafc test [caminho] [--json]                      Executa suíte de testes LIAF nativos")
+	fmt.Println("  liafc lsp                                          Inicia o Language Server Protocol (stdin/stdout)")
 	fmt.Println("  liafc build <arquivo.liaf> [-o saida] [--embed]    Compila para executável binário autônomo")
 	fmt.Println("  liafc run <arquivo.liaf>                           Compila e executa diretamente")
 	fmt.Println("  liafc emit <arquivo.liaf>                          Emite o código fonte Go intermediário")

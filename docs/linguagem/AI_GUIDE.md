@@ -1,268 +1,355 @@
-# Guia para agentes — LIAF v0.5
+# Guia para agentes — LIAF v0.7
 
-Use S-expressions. As tags `[fn ... /fn ...]` pertencem à v0.1 e não são aceitas pelo compilador atual.
+Escreva LIAF na **sintaxe linear**: blocos fechados por `end`, chamadas `f(a, b)` e operadores
+infixos. O compilador ainda aceita S-expressions (`(fn ...)`) por compatibilidade, mas não
+escreva código novo nelas e não misture as duas formas no mesmo arquivo.
 
-```liaf
-(module exemplo
-  (fn main () void (effects io)
-    (println "Olá")))
-```
+Todo bloco `liaf` deste guia é um programa completo, e um teste (`cmd/liafc/readme_test.go`) os
+passa pelo `liafc check` a cada `go test`. Se algum exemplo daqui não compilar, o defeito está
+no guia.
 
-## O que muda na v0.5 (Sintaxe Compacta, Expressões e Redução de Tokens)
-
-A v0.5 foi projetada primariamente para **modelos de linguagem (LLMs)**: reduz em até 35% o consumo de tokens BPE, elimina palavras-chave gramaticais redundantes e introduz combinadores funcionais para evitar mutabilidade imperativa com `set`.
-
-**1. `struct` compacta sem a tag `fields`.**
-```liaf
-;; Forma canônica v0.5
-(struct User (id int) (name str) (email str))
-
-;; Forma v0.4 (ainda aceita para retrocompatibilidade)
-(struct User (fields (id int) (name str) (email str)))
-```
-
-**2. `fn` e `route` compactas sem `params`, `returns` e `body`.**
-A assinatura segue a ordem fixa canônica: `[nome] [params] [retorno] [efeitos] [expressões...]`.
-```liaf
-;; Função sem parâmetros
-(fn get-db () (result DBConnection str) (effects db)
-  (let db DBConnection (try (db-connect "sqlite" "chat.db")))
-  (ok db))
-
-;; Função com parâmetros tipados
-(fn somar ((a int) (b int)) int
-  (add a b))
-
-;; Rota HTTP declarativa compacta
-(route GET "/api/users/{id}" ((id int)) Response (effects db)
-  (let db DBConnection (try (get-db)))
-  (let user User (try (db-query db "SELECT id, name, email FROM users WHERE id = ?" User id)))
-  (json-response 200 (try (json-encode user))))
-```
-
-**3. Retorno implícito.**
-Em funções e rotas com retorno diferente de `void`, a **última expressão do corpo é o retorno implícito** (como em Rust e Clojure). Não use `(return ...)` no final de um bloco quando uma expressão direta for suficiente.
-
-**4. `match` como expressão de valor (Elimina `set` e mutabilidade).**
-`match` pode ser avaliado diretamente como valor atribuível a um `let`, sem precisar declarar variáveis mutáveis com `(let x str "")` e alterá-las com `set`. Além disso, o caractere `_` é aceito como identificador wildcard para ignorar erros ou valores não utilizados:
-```liaf
-(let token str
-  (match (request-header req "X-Admin-Token")
-    (ok t t)
-    (err _
-      (match (request-header req "Authorization")
-        (ok auth auth)
-        (err _ "")))))
-```
-
-**5. Combinador `unwrap-or`.**
-Desempacota `(result T E)` ou `(option T)` diretamente com valor de fallback em 1 linha, eliminando blocos inteiros de `match` com mutação:
-```liaf
-;; Result com valor padrão
-(let nome str (unwrap-or (request-query req "name") "Anônimo"))
-
-;; Option com valor padrão
-(let porta int (unwrap-or opt-port 8080))
-```
-
-**6. Interpolação de Strings (`fmt`).**
-Substitui pirâmides aninhadas de `(concat ...)` por interpolação limpa com `{}`. Use `{{` e `}}` para emitir chaves literais:
-```liaf
-(println (fmt "Usuário {} ({}) conectado na porta {}" nome estado porta))
-(println (fmt "{{\"online\":{}}}" count))
-```
-
-## O que muda na v0.3
-
-A v0.3 existe para reduzir a carga cognitiva de escrever LIAF corretamente na primeira tentativa. São três mudanças, e todas as formas da v0.2 continuam aceitas.
-
-**1. Chamadas diretas.** Escreva `(json-encode x)` em vez de `(call json-encode x)`. `call` continua válido, mas não é a forma canônica.
-
-**2. `try` e `on-err` no lugar da pirâmide de `match`.** `(try expr)` desempacota um `(result T E)`: devolve `T` no sucesso e, no erro, sai da função na hora. O destino desse desvio é o bloco `(on-err var ...)`, que vem antes de `(body ...)`:
-
-```liaf
-(fn salvar (params (estado Estado)) (returns Response) (effects fs io)
-  (on-err message (return (json-response 500 message)))
-  (body
-    (let texto str (try (json-encode estado)))
-    (try (fs-write-atomic "estado.json" texto))
-    (return (json-response 200 "{\"ok\":true}"))))
-```
-
-`try` só é permitido onde o erro tem para onde ir: uma função com `(on-err ...)` ou que retorne `(result ...)`. Sem isso o checker emite `E_UNHANDLED_RESULT`. Quando você precisa tratar os dois lados de forma diferente, `match` continua sendo a ferramenta certa.
-
-**3. Rotas declarativas.** `(route MÉTODO "/caminho" ...)` é uma declaração de topo, irmã de `fn`:
-
-```liaf
-(route PUT "/tasks/{id}" (params (id int) (input UpdateInput)) (returns Response) (effects fs io)
-  (on-err message (return (json-response 500 message)))
-  (body
-    (let estado Estado (try (carregar-estado)))
-    (return (atualizar estado id input))))
-```
-
-Cada `{nome}` no caminho precisa de um parâmetro de mesmo nome, do tipo `int` ou `str` — caso contrário o checker emite `E_ROUTE_PARAM`. Esse parâmetro chega convertido, extraído da posição correta do caminho. Um parâmetro de struct recebe o corpo JSON já desserializado, e corpo malformado vira `400` sem nenhuma linha sua. Rotas se registram sozinhas: não chame `http-get` para elas.
-
-## O que a v0.4 acrescenta
-
-Banco de dados externo e WebSocket. Nenhuma forma da v0.3 mudou.
-
-**1. Banco de dados, com o SQL sempre literal.** Drivers `"postgres"`, `"mysql"` e `"redis"`, e um efeito próprio, `db`:
-
-```liaf
-(fn buscar (params (db DBConnection) (id int)) (returns (result bool str)) (effects db io)
-  (body
-    (let achados (list User)
-      (try (db-query db "SELECT id, name FROM users WHERE id = $1" User id)))
-    (for-each u achados (println (field u name)))
-    (return (ok true))))
-```
-
-**O texto da consulta tem de ser um literal escrito no fonte.** Montá-lo com `(concat ...)`, ou passar uma variável, é `E_SQL_INTERPOLATION` — não compila. Todo valor vai como argumento depois do tipo de linha (`db-query`) ou do SQL (`db-exec`), e o driver o envia fora do texto do comando. Essa é a forma segura *e* a única que existe.
-
-O checker também confere quantos marcadores (`$1`, `$2`, ou `?` no MySQL) o SQL tem contra quantos argumentos você passou: divergir é `E_SQL_PARAM_COUNT`.
-
-`db-query` exige uma struct como tipo de linha, e casa cada coluna com o campo de mesmo nome — `snake_case` no banco alimenta `kebab-case` na LIAF. Selecione as colunas que existem na struct.
-
-**2. Transações que se desfazem sozinhas.**
-
-```liaf
-(db-transaction db
-  (try (db-exec db "INSERT INTO users (id, name) VALUES ($1, $2)" 1 "alice"))
-  (try (db-exec db "INSERT INTO users (id, name) VALUES ($1, $2)" 2 "bruno")))
-```
-
-Dentro do bloco, `db` passa a ser a transação — as consultas não mudam de forma. Confirma ao chegar ao fim; se o segundo `try` falhar e sair da função, o rollback já está garantido. Exige `(on-err ...)` ou uma função que retorne `(result ...)`.
-
-**3. Rotas WebSocket.** `ws-route` é declaração de topo, como `route`, e não tem `(returns ...)` nem `(body ...)`:
-
-```liaf
-(ws-route "/ws/chat/{room}" (params (room str) (conn WSConn)) (effects io net)
-  (on-err message (println message))
-  (on-open
-    (ws-join conn room))
-  (on-message text
-    (try (ws-broadcast room text)))
-  (on-close
-    (println "saiu")))
-```
-
-Exatamente um parâmetro `WSConn`; os demais vêm de `{nome}` no caminho, como nas rotas HTTP (`E_WS_PARAM` se fugir disso). `(effects ...)` tem de incluir `net`.
-
-A inscrição no tópico é explícita: sem `ws-join`, a conexão não recebe broadcast. Fechar desinscreve de tudo, então `on-close` não precisa de `ws-leave`. `on-close` roda tanto no fechamento limpo quanto na queda da conexão.
-
-Os três blocos devolvem `void`, então `try` dentro deles precisa de `(on-err ...)`. O handshake é `GET`, então a rota convive com suas rotas HTTP no mesmo `serve-hybrid`.
-
-`ws-send`, `ws-send-json`, `ws-close` e `ws-broadcast` devolvem `result`; `ws-join`, `ws-leave` e `ws-topic-size` não, porque não podem falhar.
-
-## Regras que o checker impõe
-
-- **Declare exatamente os efeitos que usa.** `io`, `fs`, `net`, `clock`, `spawn`, `db`, incluindo os efeitos transitivos das funções que você chama. Faltando, é `E_UNDECLARED_EFFECT`; sobrando, é `E_UNUSED_EFFECT`. Uma assinatura que promete `fs` sem tocar o disco engana quem a lê.
-- **Resultado não pode ser ignorado.** Toda operação falível devolve `(result T E)` e precisa de `try`, `match` ou propagação.
-- **`fs-write-file`, `fs-rename`, `fs-write-atomic` e `fs-remove` retornam `(result void str)`.** O sucesso não carrega valor: `ok` já significa que a operação terminou. Não teste o conteúdo.
-- **`json-encode` e `json-decode` são puras.** Não declare `io` por causa delas — serializam em memória. `json-decode` aceita tipos compostos: `(json-decode texto (list Task))`.
-- **`(list T)` serializa como array JSON nativo** `[...]`. Devolva a lista direto; não monte colchetes com `concat`.
-- **Campos com nomes de palavras reservadas:** Nomes de campos de struct podem coincidir com operadores ou palavras reservadas (ex: `sub`, `return`, `add`), sendo acessados normalmente com `(field s sub)` (essencial para decodificar claims padrão de JWT como `sub`).
+Para a lista completa de builtins, tipos e códigos de erro, veja a
+[referência](REFERENCIA.md). Ela está escrita em S-expression, mas os nomes, argumentos e
+retornos valem igual na sintaxe linear: `(json-response 200 corpo)` vira
+`json-response(200, corpo)`.
 
 ## Ciclo de trabalho
 
-1. `liafc check arquivo.liaf --json` após cada alteração.
-2. Leia `status` e `errors`. Corrija a causa e revalide. O diagnóstico traz código, arquivo, linha, coluna e mensagem.
-3. `liafc fmt arquivo.liaf` mostra a forma canônica. `-w` grava, `-l` lista o que está fora do formato. O formatador ainda não preserva comentários, então `-w` se recusa a gravar em arquivo comentado a menos que você passe `--drop-comments`.
-4. Rode testes de comportamento. Passar no checker não prova que o algoritmo está correto.
-5. `liafc build arquivo.liaf -o programa`. Use `--embed` para assets imutáveis dentro do executável.
+1. `liafc check app.liaf --json` após cada alteração. Leia `status` e `errors`: cada erro traz
+   `code`, `line`, `col` e `message`. Corrija a causa e rode de novo.
+2. `liafc test app.liaf` (ou uma pasta) roda os blocos `test`. Passar no checker não prova que
+   o algoritmo está certo.
+3. `liafc run app.liaf` compila e executa. `liafc build app.liaf -o app` gera o binário
+   autônomo; `--embed` embute os arquivos estáticos.
+4. **Não rode `liafc fmt -w` num arquivo linear:** o formatador ainda imprime a forma
+   canônica em S-expression e reescreveria o arquivo inteiro nela.
 
-Programas completos em `pkg/codegen/testdata/`: `task_api_v03.liaf` (API completa), `chat_ws.liaf`, `db_postgres.liaf` e `db_redis.liaf` (banco de dados), `loops.liaf`, `collections.liaf`, `fs_json.liaf` e `result.liaf`.
+## O núcleo
 
-## Aritmética e Funções Numéricas (#020, #022)
+```liaf
+module loja
 
-- `add`, `mul`, `and` e `or` são variádicos (mínimo 2 operandos): `(add 1 2 3)`, `(mul 2 3 4)`, `(and true true false)`, `(or false false true)`. `sub` e `div` permanecem estritamente binários.
-- Funções matemáticas básicas: `(mod a b)`, `(neg x)`, `(abs x)`, `(min a b)`, `(max a b)`, `(pow a b)`, `(sqrt x)`, `(floor x)`, `(ceil x)`, `(round x)`.
-- Literais: notação científica (`1e3`, `2.5e-3`) é avaliada como `float`; hexadecimal (`0xff`) como `int`.
-- Conversões de tipo (#021): `int-from-float`, `str-from-float`, `float-from-str`, `str-from-bool`, `bool-from-str`, `str-from-int`, `float-from-int`, `int-from-str`. Conversões falíveis retornam `(result T str)`.
-- Semântica numérica segura (#022):
-  - `div` e `mod` com operandos `int` retornam `(result int str)`. Se o divisor for zero, produzem `(err "div: divisao por zero")` ou `(err "mod: divisao por zero")`. Trate com `match` ou `try`.
-  - `div` de `float` segue o padrão IEEE 754 e retorna `float` (`+Inf`, `-Inf`, `NaN`).
-  - Operações aritméticas inteiras (`add`, `sub`, `mul`, `neg`, `abs`) abortam imediatamente com código de saída `1` caso ocorra overflow/underflow, impedindo corrupção silenciosa de dados.
+enum Status
+  Pendente
+  Pago
+end
 
-## Strings e UTF-8 (#023)
+struct Pedido
+  id int
+  cliente str
+  total float
+  status Status
+  itens (list str)
+end
 
-- `str-len(s)` retorna a quantidade de caracteres Unicode (runes UTF-8). Ex: `(str-len "ação")` retorna `4`.
-- `str-byte-len(s)` retorna o tamanho em bytes para protocolos e buffers binários.
-- `str-slice(s, start, end)` fatia a string em índices de runes e retorna `(result str str)`.
-- `str-get(s, i)` retorna o caractere na posição `i` (índice de rune) como `(result str str)`.
-- Busca e verificação: `(str-contains s sub)`, `(str-starts-with s prefix)`, `(str-ends-with s suffix)` retornam `bool`. `(str-index s sub)` retorna o índice da rune ou `-1`.
-- Manipulação: `(str-trim s)`, `(str-upper s)`, `(str-lower s)` (com suporte a acentos/UTF-8), `(str-replace s old new)`.
-- Listas: `(str-split s sep)` retorna `(list str)`; `(str-join l sep)` junta uma `(list str)` em `str`.
-- Comparações: `lt`, `gt`, `lte`, `gte` aceitam strings e realizam comparação lexicográfica.
+fn rotulo(s Status) str
+  match s
+    case Status.Pendente
+      "aguardando pagamento"
+    case Status.Pago
+      "pago"
+  end
+end
 
-## Headers e query string
+fn desconto(total float) float
+  if total > 100.0
+    return total * 0.1
+  end
+  0.0
+end
 
-Declare `((req Request))` na rota para ler a requisição:
+fn main() void effects(io)
+  let p = new Pedido(1, "Ana", 150.0, Status.Pago, list("cafe", "pao"))
+  println(fmt("pedido {} de {}: {}", p.id, p.cliente, rotulo(p.status)))
+  println(fmt("desconto: {}", desconto(p.total)))
 
-- `(request-header req "Authorization")` e `(request-query req "status")` retornam `(result str str)`: use `(unwrap-or ... padrao)` para extrair diretamente com valor padrão em 1 linha, ou trate com `try`/`match`.
-- `(response-set-header res "Nome" "valor")` retorna uma nova `Response`. Não existe `set-header` que altere a resposta no lugar.
-- `Set-Cookie` repetido acumula; os demais headers substituem.
-- Numa `ws-route`, declare `((req Request) (conn WSConn))` para ler o handshake. O navegador não manda `Authorization` em WebSocket: leia o token com `(unwrap-or (request-query req "token") "")` em `on-open` e recuse com `(ws-close conn 4401 "motivo")`.
+  for-each item p.itens
+    println(item)
+  end
 
-Exemplo completo: `pkg/codegen/testdata/pedidos_api.liaf` (Bearer, filtro por query, CORS, cookie, painel WebSocket por restaurante).
+  let contador = 0
+  while contador < 3
+    set contador = contador + 1
+  end
 
-## Criptografia
+  for-range i 0 3
+    println(str-from-int(i))
+  end
 
-- Senha: grave `(password-hash senha)` (efeito `rand`) e confira com `(password-verify senha hash)`. Nunca grave a senha nem um `sha256` dela.
-- Token de sessão: `(random-token)` (efeito `rand`).
-- Assinatura: `(hmac-sha256 chave texto "hex")` ou `"base64url"`; a codificação é literal. Compare com `(secure-eq recebida calculada)`, não com `str-eq`.
-- `(base64url-decode s)` retorna `(result str str)`.
+  if contador == 3 && !false
+    println("terminou")
+  else
+    println("nunca")
+  end
+end
+```
 
-## Módulos e biblioteca padrão
+- **Declarações:** `module` primeiro; depois, em qualquer ordem, `import`, `struct`, `enum`,
+  `fn`, `middleware`, `route`, `ws-route` e `test`. Tudo é privado ao arquivo; `pub` na frente
+  de `fn`, `struct`, `enum` ou `middleware` exporta para quem o importar.
+- **Funções:** `fn nome(a int, b str) Tipo effects(...)`. Sem tipo de retorno, é `void`.
+- **Retorno implícito:** num bloco não-`void`, a última expressão é o retorno. Use `return` só
+  para sair antes do fim.
+- **Variáveis:** `let x = expr` infere o tipo; `let x int = 10` o declara. Reatribuir exige
+  `set x = expr`.
+- **Structs:** `new Tipo(campo1, campo2, ...)`, com os campos na ordem da declaração; leia com
+  `p.campo`.
+- **Enums:** a variante se escreve `Status.Pago`. Um `match` num enum precisa cobrir todas as
+  variantes (`E_NONEXHAUSTIVE_MATCH`).
+- **Laços:** `for-range i 0 3` vai de 0 a 2. `break` e `continue` funcionam nos três laços.
+- **Operadores:** `+ - * /`, `== != < <= > >=`, `&& ||` e `!` (ou `not(x)`).
+- **Texto:** `fmt("{} e {}", a, b)` interpola. Para juntar, use `concat(a, b, ...)`: `+` só
+  aceita números.
 
-- `(import "std/auth")` usa a biblioteca padrão embutida; `(import "./arquivo.liaf")` usa um arquivo seu.
-- Não declare funções com o prefixo de um módulo da std que você importou (`auth-...`): é `E_DUPLICATE_DECL`.
-- `std/auth`: `(auth-bearer-token req)` retorna o token Bearer como `(result str str)`. Aceita `bearer` minúsculo.
-- `std/jwt`: `(jwt-sign segredo payload-json)` e `(jwt-verify segredo token)` (efeito `clock`) retornam `(result str str)`: use `try` nos dois. O segredo precisa de pelo menos 32 bytes. O payload precisa de `exp` em segundos; o verify retorna o payload JSON para `json-decode`.
-- `std/cors`: `(cors-origin req (list "https://site"))`, `(cors-headers res origem)`, `(cors-preflight origem "GET, POST" "Authorization")`. Uma `(route OPTIONS ...)` por caminho. Com cookie, use `cors-headers-credentials` e `cors-preflight-credentials`.
-- `std/storage`: `(storage-init dir)` (efeito `fs`), `(storage-upload-image req "campo" dir)` (converte para WebP lossless e salva em disco, retornando o nome do arquivo), `(storage-serve-image dir filename)` (serve com headers de cache HTTP), `(storage-delete-image dir filename)` e `(storage-image-exists dir filename)`.
+## Erros: `result`, `option`, `try`, `on-err`
 
-## Upload, Imagens e Storage (`std/storage`)
+```liaf
+module erros
 
-Para upload, compressão e entrega de arquivos e imagens estilo MinIO:
+fn dividir(a int, b int) (result int str)
+  on-err motivo
+    err(fmt("dividir: {}", motivo))
+  end
+  let q = try (a / b)
+  ok(q)
+end
 
-- **Upload e conversão automática:** `(storage-upload-image req "file" "uploads")` (efeito `fs`) aceita requisições `multipart/form-data` ou corpo binário direto. Converte imagens (PNG, JPEG, GIF, BMP) para WebP com algoritmo estritamente sem perdas (lossless VP8L), mantendo 100% da fidelidade visual e reduzindo o consumo de disco.
-- **Upload com redimensionamento e limites:** `(storage-upload-image-opt req "file" "uploads" max-w max-h max-bytes level)` permite definir largura máxima, altura máxima (mantendo o aspect ratio via interpolação bicúbica Catmull-Rom), limite máximo em bytes e nível de compressão WebP de 0 a 9.
-- **Serviço de imagem:** `(storage-serve-image "uploads" filename)` (efeito `fs`) retorna `Response` com `Content-Type: image/webp` e headers de cache HTTP (`Cache-Control: public, max-age=31536000, immutable`).
-- **Builtins de suporte:**
-  - `(image-to-webp data)`: converte bytes de imagem em WebP lossless em memória.
-  - `(image-to-webp-quality data level)`: define o nível de esforço de compressão sem perdas (0 a 9).
-  - `(image-resize data max-w max-h)`: redimensiona proporcionalmente mantendo o aspect ratio.
-  - `(image-process data max-w max-h level)`: redimensiona e comprime no nível desejado.
-  - `(image-dimensions data)`: retorna as dimensões `"LARGURAxALTURA"` (ex: `"1920x1080"`).
-  - `(raw-response status contentType body)`: constrói `Response` com Content-Type e dados binários arbitrários.
-  - `(file-response path contentType)`: serve arquivo estático direto de disco.
+fn achar(xs (list int), alvo int) (option int)
+  for-each x xs
+    if x == alvo
+      return some(x)
+    end
+  end
+  none(int)
+end
 
-## Cliente HTTP
+fn main() void effects(io)
+  match dividir(10, 0)
+    case ok(v)
+      println(str-from-int(v))
+    case err(msg)
+      println(msg)
+  end
 
-- `(http-fetch "POST" url (list "Authorization: Bearer x") corpo)` (efeito `net`) retorna `(result HttpReply str)`.
-- `err` só quando não houve resposta. Confira `(reply-status r)`: um 422 chega como `ok`. Leia `(reply-body r)` e `(reply-header r "Nome")`.
-- Headers são `(list "Nome: valor")`; `(list)` para nenhum. Corpo sem `Content-Type` vai como JSON.
-- `http-get`/`http-post` NÃO são cliente: registram rotas (forma antiga).
+  match achar(list(1, 2, 3), 2)
+    case some(v)
+      println(fmt("achou {}", v))
+    case none
+      println("nada")
+  end
 
-## Web e deploy
+  let n = unwrap-or(int-from-str("42"), 0)
+  let resto = unwrap-or(mod(n, 5), 0)
+  println(str-from-int(resto))
+end
+```
 
-Para sites, `serve-site` recebe pasta, domínio, porta e auto-TLS. `serve-hybrid` oferece rotas dinâmicas junto aos arquivos estáticos e retorna um resultado tratável.
+- **Toda operação falível devolve `(result T E)`,** e o resultado não pode ser ignorado: trate
+  com `try`, `match` ou `unwrap-or`.
+- **`try expr`** devolve o valor em caso de sucesso. Em caso de erro, desvia para o bloco
+  `on-err` ou devolve o erro, se a função retornar `result` com o mesmo tipo de erro. Sem
+  nenhum dos dois, o checker acusa `E_UNHANDLED_RESULT`.
+- **O `try` pega só o termo seguinte:** `try a / b` aplica o `try` em `a`. Use parênteses:
+  `try (a / b)`.
+- **O bloco `on-err var ... end`** vem logo depois da assinatura. A última expressão dele é o
+  que a função devolve quando um `try` falha.
+- **Os casos do `match` vão entre parênteses:** `case ok(v)`, `case err(msg)`, `case some(v)` e
+  `case none`. Para descartar o valor, use `_`: `case err(_)`.
+- **`unwrap-or(expr, padrao)`** desempacota `result` ou `option` com valor padrão.
+- **Conta inteira que pode falhar:** `/` entre inteiros e `mod(a, b)` devolvem
+  `(result int str)` (divisão por zero vira `err`). `+`, `-` e `*` abortam o programa em caso
+  de overflow. `/` entre `float` segue o IEEE 754 e devolve `float`.
+- **Ignorar um resultado:** quando o erro realmente não importa, `let _ = expr`.
 
-Por padrão o servidor escuta em todas as interfaces. `LIAF_HOST=127.0.0.1` restringe ao loopback: use atrás de um proxy reverso (Caddy/Nginx) na mesma máquina e em testes locais. No Windows, escutar só no loopback evita o aviso do firewall. As portas 80/443 do auto-TLS não são afetadas.
+## Efeitos
 
-Publicação: `liafc publish pagina.md --url https://HOST/_liaf/publish --path blog/pagina.md`. Defina `LIAF_DEPLOY_TOKEN` no cliente e no servidor. Reload também exige POST autenticado. Não coloque credenciais em código ou documentação.
+A assinatura declara exatamente o que a função toca: `effects(io, fs)`. Os efeitos são `io`,
+`fs`, `net`, `clock`, `spawn`, `db`, `rand` e `env`, incluindo os herdados das funções que ela
+chama.
 
-Deploy: inspecione a unidade com `liafc service install --name site --bin /opt/site/server --dry-run`. Para Caddy: `liafc deploy caddy-bind --domain HOST --upstream HOST:PORT --server srv0`.
+- **Efeito faltando** é `E_UNDECLARED_EFFECT`; **efeito sobrando**, `E_UNUSED_EFFECT`.
+- **`json-encode` e `json-decode` são puras:** não declare `io` por causa delas.
+- **`serve-hybrid` exige `fs` e `net`;** `println`, `io`.
 
-## Documentos e PDF (#034)
+## Rotas HTTP e middlewares
 
-- Não há modelo pronto: escreva o documento em **Typst** (arquivo `.typ` ao lado do `.liaf`, lido com `fs-read-file`, ou string no código). O layout é todo seu.
-- Dados: passe uma struct com `json-encode`; o documento lê com `#let d = json("/dados.json")` e acessa `d.campo` (nomes iguais aos da struct).
-- `pdf-typst(fonte, json)` → `(result str str)` com os bytes do PDF. Com imagens: `pdf-typst-files(fonte, json, arquivos)`, onde `arquivos` é `(map str str)` de nome para bytes, lido no documento como `/nome`.
-- Em rota: `pdf-response(pdf, "nome.pdf")`. Para gravar: `fs-write-file("x.pdf", pdf)`. Para medir, use `str-byte-len`, nunca `str-len`.
-- Fontes disponíveis: `"Inter"`, `"Libertinus Serif"`, `"DejaVu Sans Mono"` e a matemática (fórmulas `$ ... $` funcionam). Não invente outra família: ela cai na fonte padrão com aviso.
-- Pacotes: `#import "@preview/tiaoma:0.3.0": qrcode` funciona. O `liafc build` embute o pacote e grava `liaf-typst.lock`.
-- Texto para copiar (Pix copia e cola, chaves, códigos): `text(lang: "en", hyphenate: false, ...)`. Em pt o Typst repete o hífen na quebra de linha e corrompe o que for colado.
-- Laço de correção: `liafc doc check doc.typ --dados d.json --json` devolve `errors` (`E_TYPST` com linha e coluna), `warnings` com `fix` (`W_LAYOUT_OUT_OF_PAGE`, `W_LAYOUT_BLANK_PAGE`, `W_LAYOUT_EMPTY_TAIL`, `W_LAYOUT_LOW_CONTRAST` com a cor que passa) e `metrics`. Aplique os `fix`, rode de novo e pare quando não houver aviso ou as métricas pararem de melhorar (no máximo 3 rodadas). Se você enxerga imagem, `liafc doc preview doc.typ -o p.png` mostra a página.
+```liaf
+module tarefas
+
+struct Tarefa
+  id int
+  titulo str
+end
+
+struct NovaTarefa
+  titulo str
+end
+
+middleware exigir_token(req Request) (result Request Response)
+  let token = unwrap-or(request-header(req, "Authorization"), "")
+  if token != "Bearer segredo"
+    return err(json-error(401, "token obrigatorio"))
+  end
+  ok(request-set-header(req, "X-Usuario", "ana"))
+end
+
+route GET "/tarefas/{id}" (id int) Response
+  on-err motivo
+    json-error(500, motivo)
+  end
+  json-response(200, try json-encode(new Tarefa(id, "Aprender LIAF")))
+end
+
+route POST "/tarefas" with(exigir_token) (entrada NovaTarefa, req Request) Response effects(io)
+  on-err motivo
+    json-error(500, motivo)
+  end
+  let autor = unwrap-or(request-header(req, "X-Usuario"), "")
+  println(fmt("{} criou: {}", autor, entrada.titulo))
+  json-response(201, try json-encode(new Tarefa(1, entrada.titulo)))
+end
+
+fn main() void effects(fs, io, net)
+  let porta = unwrap-or(list-get(args(), 0), "8080")
+  println(fmt("ouvindo na porta {}", porta))
+  unwrap-or(serve-hybrid("./public", porta), false)
+end
+```
+
+- **A rota se registra sozinha** e só atende depois que o `main` chama `serve-hybrid`. Não
+  chame `http-get` para ela: essa é a forma antiga.
+- **Parâmetro de caminho:** cada `{nome}` precisa de um parâmetro de mesmo nome, `int` ou `str`
+  (`E_ROUTE_PARAM`). Um `{id}` que não é número responde 400 sozinho.
+- **Corpo JSON:** um parâmetro do tipo struct recebe o corpo já desserializado. Corpo malformado
+  vira 400, sem nenhuma linha sua.
+- **Parâmetro `Request`:** dá acesso a `request-header`, `request-query`, `request-cookie` e
+  `request-body`. Os três primeiros devolvem `(result str str)`.
+- **`json-response(status, texto)`** recebe texto, não struct: serialize com `json-encode`.
+  `(list T)` vira um array JSON nativo.
+- **Middleware:** a assinatura é fixa, `(req Request) (result Request Response)`. `ok(req)`
+  segue para a rota; `err(resposta)` encerra a cadeia com essa resposta. `with(a, b)` vem logo
+  depois do caminho e roda na ordem escrita. Para entregar contexto à rota, devolva
+  `request-set-header(req, ...)`, que também substitui um header de mesmo nome forjado pelo
+  cliente.
+- **`try` dentro de middleware:** o erro dele é `Response`, não `str`. Um `try` sobre um
+  builtin que falha com `str` não compila ali: use `unwrap-or` ou `match`.
+- **Os efeitos da rota** são só os do próprio corpo; o middleware declara os dele.
+
+## WebSocket
+
+```liaf
+module chat
+
+ws-route "/ws/{sala}" (sala str, req Request, conn WSConn) effects(io, net)
+  on-err motivo
+    println(motivo)
+  end
+  on-open
+    let nome = unwrap-or(request-query(req, "user"), "visitante")
+    ws-join(conn, sala)
+    try ws-broadcast(sala, fmt("{} entrou", nome))
+  end
+  on-message texto
+    try ws-broadcast(sala, texto)
+  end
+  on-close
+    println("saiu")
+  end
+end
+
+fn main() void effects(fs, net)
+  unwrap-or(serve-hybrid("./public", "8080"), false)
+end
+```
+
+- **Parâmetros:** exatamente um `WSConn`; opcionalmente um `Request` (o handshake); os demais
+  vêm dos `{nome}` do caminho (`E_WS_PARAM`). `effects` precisa incluir `net`.
+- **Tópicos:** a inscrição é explícita, com `ws-join`; fechar a conexão desinscreve de tudo.
+- **Retornos:** `ws-send`, `ws-broadcast` e `ws-close` devolvem `result`; `ws-join` não.
+- **Autenticação:** o navegador não envia `Authorization` no WebSocket. Leia o token da query
+  em `on-open` e recuse com `ws-close(conn, 4401, "motivo")`.
+
+## Banco de dados
+
+```liaf
+module banco
+
+struct Usuario
+  id int
+  nome str
+end
+
+fn listar() (result (list Usuario) str) effects(db)
+  let db = try db-connect("sqlite", "app.db")
+  try db-exec(db, "CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY, nome TEXT)")
+  try db-exec(db, "INSERT INTO usuarios (nome) VALUES (?)", "ana")
+  db-query(db, "SELECT id, nome FROM usuarios WHERE nome = ?", Usuario, "ana")
+end
+
+fn main() void effects(db, io)
+  match listar()
+    case ok(us)
+      println(fmt("{} usuario(s)", list-len(us)))
+    case err(msg)
+      println(msg)
+  end
+end
+```
+
+- **Drivers:** `"sqlite"`, `"postgres"`, `"mysql"` e `"redis"`, com o efeito próprio `db`.
+- **O SQL tem de ser um literal escrito no fonte.** Montá-lo com `concat`/`fmt` ou passar uma
+  variável é `E_SQL_INTERPOLATION`. Os valores vão como argumentos depois do SQL (`db-exec`) ou
+  do tipo de linha (`db-query`).
+- **Marcadores:** a quantidade de `?` (ou `$1`, `$2` no Postgres) precisa bater com a de
+  argumentos (`E_SQL_PARAM_COUNT`).
+- **`db-query`** recebe uma struct como tipo de linha e casa cada coluna com o campo de mesmo
+  nome.
+- **Transação:** `db-transaction db ... end` confirma ao chegar ao fim e desfaz tudo se um
+  `try` lá dentro sair da função.
+
+## Testes nativos
+
+```liaf
+module calculo
+
+fn total_com_desconto(total int, pct int) (result int str)
+  let desconto = try (total * pct / 100)
+  ok(total - desconto)
+end
+
+test "desconto de 10 por cento"
+  assert-eq(unwrap-or(total_com_desconto(200, 10), 0), 180, "200 com 10% deveria dar 180")
+end
+
+test "sem desconto"
+  assert(unwrap-or(total_com_desconto(50, 0), 0) == 50, "sem desconto o total nao muda")
+end
+
+fn main() void
+end
+```
+
+Asserções: `assert(cond, msg)`, `assert-true(cond)`, `assert-false(cond)` e
+`assert-eq(a, b, msg)`. `liafc test --json` devolve o relatório estruturado.
+
+## Armadilhas que o compilador atual impõe
+
+| Você escreveria | Escreva | Por quê |
+|---|---|---|
+| `else if cond` | `else` + `if cond ... end` aninhado | Não há encadeamento `else if` |
+| `case ok v` | `case ok(v)` | Sem parênteses, `v` não é ligado (`E_UNDEFINED_SYMBOL`) |
+| `try a / b` | `try (a / b)` | O `try` pega só o termo seguinte |
+| `n % 5` | `unwrap-or(mod(n, 5), 0)` | Não existe `%`; `mod` devolve `result` |
+| `let x = if c then a else b` | um `if` com `return`, ou `match` | `if` não é expressão na sintaxe linear |
+| `"a" + "b"` | `concat("a", "b")` ou `fmt` | `+` só aceita números |
+| `add(a, b)`, `div(a, b)` | `a + b`, `a / b` | São palavras reservadas, não funções |
+| `json-response(200, struct)` | `json-response(200, try json-encode(struct))` | O corpo é `str` |
+| `liafc fmt -w app.liaf` | `liafc check` | O `fmt` reescreve em S-expression |
+
+## Onde aprofundar
+
+- [REFERENCIA.md](REFERENCIA.md): todos os builtins, tipos, a biblioteca padrão (`std/auth`,
+  `std/jwt`, `std/cors`, `std/storage`, `std/time`, `std/regex`...) e todos os códigos de erro.
+- `pkg/codegen/testdata/task_api_v06.liaf` e `middleware_api.liaf`: APIs completas e
+  executadas em teste.
+- `examples/`: geração de PDF com Typst (`cobranca_pix_pdf`, `relatorio_lambari`).

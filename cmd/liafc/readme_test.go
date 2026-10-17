@@ -12,7 +12,17 @@ import (
 // completo (começa com `module`). Trechos soltos, sem `module`, ficam de fora: dependem de
 // declarações que o README não mostra.
 func TestReadmeExamplesCheck(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
+	checkDocExamples(t, "README.md", false)
+}
+
+// TestAIGuideExamplesCheck faz o mesmo no guia de agentes, mais estrito: lá todo bloco
+// ```liaf tem de ser um programa completo, porque é o que o agente copia.
+func TestAIGuideExamplesCheck(t *testing.T) {
+	checkDocExamples(t, filepath.Join("docs", "linguagem", "AI_GUIDE.md"), true)
+}
+
+func checkDocExamples(t *testing.T, doc string, allComplete bool) {
+	data, err := os.ReadFile(filepath.Join("..", "..", doc))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -21,6 +31,9 @@ func TestReadmeExamplesCheck(t *testing.T) {
 	checked := 0
 	for _, b := range blocks {
 		if !strings.HasPrefix(strings.TrimSpace(b.code), "module ") {
+			if allComplete {
+				t.Errorf("%s, bloco da linha %d: não é um programa completo (falta `module`)", doc, b.line)
+			}
 			continue
 		}
 		checked++
@@ -31,12 +44,12 @@ func TestReadmeExamplesCheck(t *testing.T) {
 			}
 			_, diags, _ := parseAndCheck(file)
 			for _, d := range diags {
-				t.Errorf("README.md, bloco da linha %d: %s", b.line, d.String())
+				t.Errorf("%s, bloco da linha %d: %s", doc, b.line, d.String())
 			}
 		})
 	}
 	if checked == 0 {
-		t.Fatal("nenhum programa completo encontrado nos blocos ```liaf do README")
+		t.Fatalf("nenhum programa completo encontrado nos blocos ```liaf de %s", doc)
 	}
 }
 

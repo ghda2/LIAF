@@ -91,5 +91,5 @@ func createProject(targetDir string, isNew bool) {
 }
 
 func runVersion() {
-	fmt.Println("LIAF Compiler & Toolchain (liafc) v0.7.0")
+	fmt.Println("LIAF Compiler & Toolchain (liafc) v1.0.0")
 }

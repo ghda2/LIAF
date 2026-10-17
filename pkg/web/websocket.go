@@ -11,6 +11,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -59,6 +61,19 @@ const (
 	WSCloseInternalError   = 1011
 )
 
+// Politica para lidar com clientes lentos cujos buffers transbordam (#017).
+type WSSlowClientPolicy int
+
+const (
+	WSSlowClientDisconnect WSSlowClientPolicy = iota
+	WSSlowClientDropOldest
+)
+
+const (
+	DefaultWSSendQueueSize = 64
+	DefaultWSRateLimit     = 100 // mensagens por segundo
+)
+
 // WSConn e uma conexao WebSocket aberta. Uma unica goroutine chama Next; as
 // escritas podem vir de qualquer goroutine (um broadcast parte da conexao de
 // outro cliente) e por isso passam por writeMu.
@@ -78,6 +93,16 @@ type WSConn struct {
 	topics map[string]bool
 	hub    *wsHub
 	done   chan struct{}
+
+	// Resiliência (#017): fila limitada e proteção contra slow clients
+	sendQueue  chan []byte
+	slowPolicy WSSlowClientPolicy
+
+	// Resiliência (#017): rate limiting por conexão
+	rateMu        sync.Mutex
+	rateWindowSec int64
+	rateCount     int
+	rateLimit     int // msgs/segundo (0 = ilimitado)
 }
 
 // --- Upgrade ----------------------------------------------------------------
@@ -131,17 +156,61 @@ func Upgrade(w http.ResponseWriter, r *http.Request) (*WSConn, error) {
 	}
 	_ = conn.SetWriteDeadline(time.Time{})
 
-	c := &WSConn{
-		conn:   conn,
-		r:      rw.Reader,
-		Remote: r.RemoteAddr,
-		Path:   r.URL.Path,
-		topics: map[string]bool{},
-		hub:    defaultHub,
-		done:   make(chan struct{}),
+	rateLimit := DefaultWSRateLimit
+	if v := os.Getenv("LIAF_WS_RATE_LIMIT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			rateLimit = n
+		}
 	}
+	queueSize := DefaultWSSendQueueSize
+	if v := os.Getenv("LIAF_WS_QUEUE_SIZE"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			queueSize = n
+		}
+	}
+
+	c := &WSConn{
+		conn:       conn,
+		r:          rw.Reader,
+		Remote:     r.RemoteAddr,
+		Path:       r.URL.Path,
+		topics:     map[string]bool{},
+		hub:        defaultHub,
+		done:       make(chan struct{}),
+		sendQueue:  make(chan []byte, queueSize),
+		slowPolicy: WSSlowClientDisconnect,
+		rateLimit:  rateLimit,
+	}
+	go c.writePump()
 	go c.keepalive()
 	return c, nil
+}
+
+// SetRateLimit ajusta o teto de mensagens por segundo deste cliente (0 desativa).
+func (c *WSConn) SetRateLimit(limit int) {
+	c.rateMu.Lock()
+	defer c.rateMu.Unlock()
+	c.rateLimit = limit
+}
+
+// SetSlowClientPolicy define se slow clients sao desconectados ou tem frames antigos descartados.
+func (c *WSConn) SetSlowClientPolicy(policy WSSlowClientPolicy) {
+	c.slowPolicy = policy
+}
+
+func (c *WSConn) checkRateLimit() bool {
+	c.rateMu.Lock()
+	defer c.rateMu.Unlock()
+	if c.rateLimit <= 0 {
+		return true
+	}
+	nowSec := time.Now().Unix()
+	if c.rateWindowSec != nowSec {
+		c.rateWindowSec = nowSec
+		c.rateCount = 0
+	}
+	c.rateCount++
+	return c.rateCount <= c.rateLimit
 }
 
 func wsAcceptKey(key string) string {
@@ -215,6 +284,11 @@ func (c *WSConn) Next() (string, bool) {
 			if opcode == wsOpBinary {
 				continue // a LIAF so expoe mensagens de texto
 			}
+			if !c.checkRateLimit() {
+				c.closeWith(WSClosePolicyViolation, "rate limit exceeded")
+				c.Close()
+				return "", false
+			}
 			if !utf8.Valid(payload) {
 				c.closeWith(WSCloseInvalidPayload, "invalid UTF-8")
 				c.Close()
@@ -241,6 +315,11 @@ func (c *WSConn) Next() (string, bool) {
 			message, fragmentOp = nil, 0
 			if !wasText {
 				continue
+			}
+			if !c.checkRateLimit() {
+				c.closeWith(WSClosePolicyViolation, "rate limit exceeded")
+				c.Close()
+				return "", false
 			}
 			if !utf8.Valid(complete) {
 				c.closeWith(WSCloseInvalidPayload, "invalid UTF-8")
@@ -361,17 +440,62 @@ func makeWSFrame(opcode byte, payload []byte) []byte {
 	return frame
 }
 
-func (c *WSConn) writeRawFrame(frame []byte) error {
+func (c *WSConn) writeDirect(frame []byte) error {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
 	if c.isClosed() {
 		return errors.New("connection is closed")
 	}
 	_ = c.conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
-	if _, err := c.conn.Write(frame); err != nil {
-		return err
+	_, err := c.conn.Write(frame)
+	return err
+}
+
+func (c *WSConn) writePump() {
+	defer c.Close()
+	for {
+		select {
+		case <-c.done:
+			return
+		case frame, ok := <-c.sendQueue:
+			if !ok {
+				return
+			}
+			if err := c.writeDirect(frame); err != nil {
+				return
+			}
+		}
 	}
-	return nil
+}
+
+func (c *WSConn) writeRawFrame(frame []byte) error {
+	if c.isClosed() {
+		return errors.New("connection is closed")
+	}
+	select {
+	case <-c.done:
+		return errors.New("connection is closed")
+	case c.sendQueue <- frame:
+		return nil
+	default:
+		// Queue cheia: protecao contra slow client acumulando memoria
+		if c.slowPolicy == WSSlowClientDisconnect {
+			c.closeWith(WSClosePolicyViolation, "slow consumer")
+			_ = c.Close()
+			return errors.New("slow consumer: send queue full")
+		}
+		// Politica drop-oldest
+		select {
+		case <-c.sendQueue:
+		default:
+		}
+		select {
+		case c.sendQueue <- frame:
+			return nil
+		default:
+			return errors.New("failed to enqueue frame")
+		}
+	}
 }
 
 func (c *WSConn) writeFrame(opcode byte, payload []byte) error {
@@ -392,7 +516,8 @@ func (c *WSConn) closeWith(code int, reason string) {
 		reason = reason[:123]
 	}
 	payload := binary.BigEndian.AppendUint16(nil, uint16(code))
-	_ = c.writeFrame(wsOpClose, append(payload, reason...))
+	frame := makeWSFrame(wsOpClose, append(payload, reason...))
+	_ = c.writeDirect(frame)
 }
 
 // Close encerra a conexao e tira o cliente de todos os topicos. E idempotente:

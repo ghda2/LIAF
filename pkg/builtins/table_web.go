@@ -481,4 +481,24 @@ func init() {
 		GoCall:       "rt.WSTopicSize",
 		UnsupportedC: true,
 	})
+
+	Register(&Builtin{
+		Name:         "ws-enable-redis",
+		Category:     "ws",
+		Arity:        ExactArity(1),
+		Effects:      []string{"net"},
+		Return:       "(result bool str)",
+		GoCall:       "rt.WSEnableRedisPubSub",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "ws-disable-redis",
+		Category:     "ws",
+		Arity:        ExactArity(0),
+		Effects:      []string{"net"},
+		Return:       "bool",
+		GoCall:       "rt.WSDisableRedisPubSub",
+		UnsupportedC: true,
+	})
 }

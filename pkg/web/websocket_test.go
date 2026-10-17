@@ -423,3 +423,67 @@ func TestSendAfterCloseFails(t *testing.T) {
 		t.Fatal("envio numa conexao fechada foi aceito")
 	}
 }
+
+func TestWebSocketRateLimitDisconnectsFlooder(t *testing.T) {
+	connCh := make(chan *WSConn, 1)
+	server := wsServer(t, func(conn *WSConn) {
+		conn.SetRateLimit(3) // teto estrito de 3 msgs/segundo
+		connCh <- conn
+		for {
+			if _, ok := conn.Next(); !ok {
+				break
+			}
+		}
+	})
+	client := dialWS(t, server, "/ws")
+	<-connCh
+
+	// Envia 5 mensagens imediatamente na mesma janela de 1s
+	for i := 0; i < 5; i++ {
+		client.send(fmt.Sprintf("msg %d", i))
+	}
+
+	opcode, payload := client.read()
+	if opcode != wsOpClose {
+		t.Fatalf("esperado frame de close por rate limit, obteve opcode %d", opcode)
+	}
+	code := binary.BigEndian.Uint16(payload[:2])
+	if code != WSClosePolicyViolation {
+		t.Fatalf("codigo de fechamento esperado %d (Policy Violation), obteve %d", WSClosePolicyViolation, code)
+	}
+	reason := string(payload[2:])
+	if !strings.Contains(reason, "rate limit") {
+		t.Fatalf("motivo inesperado: %q", reason)
+	}
+}
+
+func TestWebSocketSlowClientDisconnect(t *testing.T) {
+	connCh := make(chan *WSConn, 1)
+	server := wsServer(t, func(conn *WSConn) {
+		conn.SetSlowClientPolicy(WSSlowClientDisconnect)
+		connCh <- conn
+		for {
+			if _, ok := conn.Next(); !ok {
+				break
+			}
+		}
+	})
+	client := dialWS(t, server, "/ws")
+	conn := <-connCh
+
+	// Enche a sendQueue ate transbordar
+	for i := 0; i < cap(conn.sendQueue)+5; i++ {
+		_ = conn.Send(fmt.Sprintf("spam %d", i))
+	}
+
+	// Como a política é Disconnect, o cliente deve receber close por slow consumer
+	// ou a conexão cair
+	opcode, payload := client.read()
+	if opcode == wsOpClose {
+		code := binary.BigEndian.Uint16(payload[:2])
+		if code != WSClosePolicyViolation {
+			t.Fatalf("esperado Policy Violation para slow consumer, obteve %d", code)
+		}
+	}
+}
+

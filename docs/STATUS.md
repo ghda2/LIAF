@@ -15,7 +15,6 @@ Como as pastas estão organizadas: [README.md](README.md).
 | [#007 Deploy](a-fazer/ISSUE_007_AUTONOMOUS_AI_DEPLOY_PIPELINE.md) | Implementada | Esta revisão não foi instalada em servidor |
 | [#001 SSG](a-fazer/ISSUE_001_SSG_EVOLUTION.md) | Implementada | Metas de desempenho (RAM <5 MB, reload <5 ms) nunca medidas sob carga definida |
 | [#006 Result](a-fazer/ISSUE_006_STRUCTURED_ERROR_HANDLING.md) | Implementada | Revisão de fluxo entre ramos e loops, sem registro de andamento desde 16/09 |
-| [#017 Tempo real](a-fazer/ISSUE_017_REALTIME_CHANNELS_RESILIENCY.md) | Proposta | Resiliência e rate limit por conexão |
 | [#031 Guia](a-fazer/ISSUE_031_GUIA_PROXIMAS_ISSUES.md) | Aberta | Itens 0.1 e 0.2 feitos; faltam transformar as seções B e C em issues |
 | **#029** `std/storage` | Concluída / Pendente commit | Upload multipart/raw, compressão WebP sem perdas e serviço de imagens |
 
@@ -24,6 +23,7 @@ Como as pastas estão organizadas: [README.md](README.md).
 
 | Issue | Evidência |
 |---|---|
+| [**#017** Tempo real, resiliência e cluster](feito/ISSUE_017_REALTIME_CHANNELS_RESILIENCY.md) | Bounded buffer (`sendQueue`), desconexão/drop de slow clients, rate limiting nativo, pub/sub escalável Redis multi-instância e builtins `ws-enable-redis` / `ws-disable-redis` |
 | [**#042** Server-Driven UI e `std/html`](feito/ISSUE_042_SERVER_DRIVEN_UI_HTML.md) | Módulo `std/html`, builtins `html-response` e `html-escape` (anti-XSS), exemplo funcional `server_driven_ui.liaf` e teste de integração `TestCodegenServerDrivenUI` |
 | [**#041** Expansão Propósito Geral](feito/ISSUE_041_EXPANSAO_PROPOSITO_GERAL.md) | Módulos `std/cli`, `std/fs` e `std/csv`, builtins de argumentos de processo, subprocessos, CSV e filesystem; execução standalone sem servidor web validada em teste `TestCodegenGeneralPurposeStandaloneCLI` |
 | [**#040** Backlog Sua Cidade Online](feito/ISSUE_040_BACKLOG_MELHORIAS_SUA_CIDADE_ONLINE.md) | Todos os 18 itens (P0, P1 e P2) implementados, validados com testes automatizados e documentados |

@@ -40,3 +40,18 @@ func WSLeave(c *web.WSConn, topic string) { web.WSLeave(c, topic) }
 
 // WSTopicSize informa quantos clientes estao inscritos no topico.
 func WSTopicSize(topic string) int64 { return int64(web.WSTopicSize(topic)) }
+
+// WSEnableRedisPubSub conecta ao cluster Redis para sincronizar broadcasts entre multiplas instancias (#017).
+func WSEnableRedisPubSub(dsn string) Result[bool, string] {
+	if err := web.EnableRedisPubSub(dsn); err != nil {
+		return Err[bool, string](err.Error())
+	}
+	return Ok[bool, string](true)
+}
+
+// WSDisableRedisPubSub desconecta do cluster Redis e volta ao modo pub/sub local.
+func WSDisableRedisPubSub() bool {
+	web.DisableRedisPubSub()
+	return true
+}
+

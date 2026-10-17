@@ -126,3 +126,14 @@ Saem de `liafc doc check doc.typ --dados d.json --json`; detalhes na skill `liaf
 | `W_LAYOUT_BLANK_PAGE` | Página em branco no meio | Remova a quebra de página sobrando |
 | `W_LAYOUT_EMPTY_TAIL` | Última página quase vazia | Compacte para caber na anterior |
 | `W_LAYOUT_LOW_CONTRAST` | Texto sem contraste WCAG AA | Use a cor que o `fix` sugere |
+
+## Conteúdo e postagens (`liafc post`)
+
+| Código | Causa | Correção |
+|---|---|---|
+| `E_POST_PARSE_ERROR` | Frontmatter malformado ou delimitador `---` ausente | Comece o arquivo com `---`, feche com `---` e use sintaxe chave: valor |
+| `E_CONTENT_MISSING_TITLE` | Campo `title` ausente no frontmatter | Adicione `title: "Meu Post"` dentro do cabeçalho `---` |
+| `E_CONTENT_MISSING_SLUG` | Campo `slug` ausente e título em branco | Adicione `slug: "meu-artigo"` ou preencha o `title` |
+| `E_CONTENT_INVALID_SLUG` | Slug com caracteres inválidos ou maiúsculas | Use apenas letras minúsculas, números e hífens: `slug: "meu-post"` |
+| `E_CONTENT_IMAGE_NOT_FOUND` | Imagem de capa declarada em `image:` não existe localmente | Verifique se o arquivo da imagem está presente na pasta |
+| `E_CONTENT_EMBED_IMAGE_NOT_FOUND` | Imagem no corpo markdown `![...](img.png)` não existe | Coloque o arquivo de imagem na pasta indicada ou corrija o caminho |

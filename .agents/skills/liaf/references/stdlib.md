@@ -389,6 +389,7 @@ end
 module std_util
 
 import "std/cli"
+import "std/content"
 import "std/csv"
 import "std/fs"
 import "std/regex"
@@ -451,6 +452,21 @@ test "std/time"
   assert-true(time-is-future(time-now-unix() + 3600))
   assert-true(time-now-ms() > 0)
   assert-true(str-len(time-now()) > 0)
+end
+
+test "std/content"
+  let slug = slugify("Deploy Instantâneo")
+  assert-eq(slug, "deploy-instantaneo", "slugify")
+  let html = render-markdown("**texto em negrito**")
+  assert-true(str-contains(html, "<strong>texto em negrito</strong>"))
+  let raw = "---\ntitle: \"Meu Artigo\"\n---\nConteudo"
+  match parse-post(raw)
+    case ok(p)
+      assert-eq(p.title, "Meu Artigo", "parse-post title")
+      assert-eq(p.slug, "meu-artigo", "parse-post slug")
+    case err(e)
+      assert(false, e)
+  end
 end
 
 fn main() void effects(io)

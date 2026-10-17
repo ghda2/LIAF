@@ -21,6 +21,7 @@ Como as pastas estão organizadas: [README.md](README.md).
 
 | Issue | Evidência |
 |---|---|
+| [**#048** Motor de Conteúdo IA-First (`std/content` + `liafc post`)](feito/ISSUE_048_MOTOR_CONTEUDO_IA_FIRST_STD_CONTENT.md) | Módulo `std/content`, parsing de frontmatter/Markdown, validação com diagnósticos acionáveis de auto-cura, subcomando `liafc post` com upload de imagens e publicação HTTP instantânea |
 | [**#047** Language Server (`liafc lsp`)](feito/ISSUE_047_LSP_LANGUAGE_SERVER.md) | Servidor LSP nativo (JSON-RPC 2.0 / stdin/stdout) com diagnósticos em tempo real, hover com assinaturas e docs, autocompleção de keywords/builtins/símbolos locais e formatação de código |
 | [**#045** Middlewares HTTP](feito/ISSUE_045_MIDDLEWARES_HTTP.md) | Declaração `middleware` e `with(...)` em rotas (linear e S-exp, `fmt` idempotente), builtin `request-set-header`, diagnósticos `E_MIDDLEWARE_SIGNATURE`/`E_UNKNOWN_MIDDLEWARE`/`E_DUPLICATE_MIDDLEWARE`, teste ponta a ponta `TestExecuteMiddlewareAPI` (401, 200 com contexto, ordem da cadeia, header forjado descartado). Escopo global ficou de fora |
 | [**#044** Testes Nativos (`liafc test`)](feito/ISSUE_044_TESTES_NATIVOS_LIAFC_TEST.md) | Blocos de teste declarativos lineares e S-exp, builtins `assert*`, executor `liafc test [--json]` unificado e conformidade `044_test_block.liaf` |

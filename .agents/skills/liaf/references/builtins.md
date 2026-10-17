@@ -30,6 +30,7 @@ Convenções das tabelas:
 9. [WebSocket](#9-websocket)
 10. [Concorrência](#10-concorrência)
 11. [Testes](#11-testes)
+12. [Conteúdo e Markdown](#12-conteúdo-e-markdown)
 
 ---
 
@@ -884,3 +885,33 @@ Os blocos `test "nome" ... end` rodam com `liafc test arquivo.liaf` (ou `--json`
 os efeitos estão liberados, mas `try` não é aceito (não há `on-err`): ponha o cenário numa `fn`
 que devolve `result` e confira com `unwrap-or`, como em [Banco de dados](#7-banco-de-dados).
 Todas as seções acima usam asserções; veja qualquer uma delas como exemplo.
+
+## 12. Conteúdo e Markdown
+
+| Função | Retorno | Efeito | Notas |
+|---|---|---|---|
+| `content-parse(raw)` | `(result str str)` | — | Faz o parse de frontmatter YAML e devolve JSON com campos estruturados |
+| `content-slugify(titulo)` | `str` | — | Converte título para slug URL-friendly |
+| `markdown-to-html(md)` | `str` | — | Converte markdown em HTML higienizado contra XSS |
+
+```liaf
+module exemplo_conteudo
+
+test "builtins de conteudo"
+  let slug = content-slugify("Meu Artigo Incrível")
+  assert-eq(slug, "meu-artigo-incrivel", "slug limpo")
+
+  let html = markdown-to-html("# Titulo\ntexto")
+  assert-true(str-contains(html, "<h1>Titulo</h1>"))
+
+  match content-parse("---\ntitle: Post\n---\nCorpo")
+    case ok(j)
+      assert-true(str-contains(j, "Post"))
+    case err(e)
+      assert(false, e)
+  end
+end
+
+fn main() void
+end
+```

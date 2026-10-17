@@ -1,0 +1,17 @@
+;; issue: #046
+;; status: done
+;; effects: io
+;; out: true true false 42 um-dois-tres
+
+(let email_valido bool (unwrap-or (regex-match "^[a-z]+@[a-z]+\\.[a-z]+$" "dev@liaf.org") false))
+(let num_match bool (unwrap-or (regex-match "^\\d+$" "12345") false))
+(let invalido bool (unwrap-or (regex-match "^\\d+$" "abc") false))
+(let achou (option str) (unwrap-or (regex-find "\\d+" "pedido 42") (none str)))
+(let primeiro_num str (unwrap-or achou ""))
+(let substituido str (unwrap-or (regex-replace "\\s+" "um  dois   tres" "-") ""))
+
+(println (concat (str-from-bool email_valido) " " 
+                 (str-from-bool num_match) " " 
+                 (str-from-bool invalido) " " 
+                 primeiro_num " " 
+                 substituido))

@@ -115,7 +115,38 @@ func normalize(s string) string {
 	return strings.ReplaceAll(s, "_", "-")
 }
 
-// Helper para construir tipos AST a partir de string de especificação
+func splitTypeParts(s string) []string {
+	var parts []string
+	var current strings.Builder
+	depth := 0
+	for _, r := range s {
+		switch r {
+		case '(':
+			depth++
+			current.WriteRune(r)
+		case ')':
+			depth--
+			current.WriteRune(r)
+		case ' ', '\t', '\n', '\r':
+			if depth == 0 {
+				if current.Len() > 0 {
+					parts = append(parts, current.String())
+					current.Reset()
+				}
+			} else {
+				current.WriteRune(r)
+			}
+		default:
+			current.WriteRune(r)
+		}
+	}
+	if current.Len() > 0 {
+		parts = append(parts, current.String())
+	}
+	return parts
+}
+
+// Helper para construir tipos AST a partir de string de especificacao
 func ParseType(spec string) ast.Type {
 	spec = strings.TrimSpace(spec)
 	if spec == "" {
@@ -123,7 +154,7 @@ func ParseType(spec string) ast.Type {
 	}
 	if strings.HasPrefix(spec, "(") && strings.HasSuffix(spec, ")") {
 		inner := strings.TrimSpace(spec[1 : len(spec)-1])
-		parts := strings.Fields(inner)
+		parts := splitTypeParts(inner)
 		if len(parts) == 0 {
 			return nil
 		}

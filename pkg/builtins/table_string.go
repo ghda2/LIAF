@@ -192,4 +192,44 @@ func init() {
 		GoCall:   "rt.StrGet",
 		CCall:    "vstrget",
 	})
+
+	Register(&Builtin{
+		Name:         "regex-match",
+		Category:     "string",
+		Arity:        ExactArity(2),
+		Params:       []string{"str", "str"},
+		Return:       "(result bool str)",
+		GoCall:       "rt.RegexMatch",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "regex-find",
+		Category:     "string",
+		Arity:        ExactArity(2),
+		Params:       []string{"str", "str"},
+		Return:       "(result (option str) str)",
+		GoCall:       "rt.RegexFind",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "regex-find-all",
+		Category:     "string",
+		Arity:        ExactArity(2),
+		Params:       []string{"str", "str"},
+		Return:       "(result (list str) str)",
+		GoCall:       "rt.RegexFindAll",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "regex-replace",
+		Category:     "string",
+		Arity:        ExactArity(3),
+		Params:       []string{"str", "str", "str"},
+		Return:       "(result str str)",
+		GoCall:       "rt.RegexReplace",
+		UnsupportedC: true,
+	})
 }

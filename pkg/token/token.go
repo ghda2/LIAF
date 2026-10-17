@@ -67,6 +67,9 @@ const (
 	// Banco de dados (issue #015)
 	DB_TRANSACTION TokenType = "db-transaction"
 
+	// Testes nativos (issue #044)
+	TEST TokenType = "test"
+
 	// Expressions
 	CALL TokenType = "call"
 	TRY  TokenType = "try"
@@ -95,6 +98,7 @@ var keywords = map[string]TokenType{
 	"ws-route": WS_ROUTE, "on-open": ON_OPEN, "on-message": ON_MESSAGE, "on-close": ON_CLOSE,
 	"db-transaction": DB_TRANSACTION,
 	"pub":     PUB,
+	"test":    TEST,
 	"module":  MODULE,
 	"import":  IMPORT,
 	"struct":  STRUCT,

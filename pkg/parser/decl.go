@@ -52,8 +52,10 @@ func (p *Parser) parseTopLevel() ast.TopLevel {
 		return p.parseRoute()
 	case token.WS_ROUTE:
 		return p.parseWSRoute()
+	case token.TEST:
+		return p.parseTestDecl()
 	default:
-		p.addError(fmt.Sprintf("Declaração inválida: esperado 'import', 'struct', 'enum', 'fn', 'route' ou 'ws-route', mas obteve %q", p.curToken.Literal), "E_INVALID_TOPLEVEL")
+		p.addError(fmt.Sprintf("Declaração inválida: esperado 'import', 'struct', 'enum', 'fn', 'route', 'ws-route' ou 'test', mas obteve %q", p.curToken.Literal), "E_INVALID_TOPLEVEL")
 		return nil
 	}
 }
@@ -207,7 +209,7 @@ func (p *Parser) parseFunc() *ast.FuncDecl {
 	line, col := p.curToken.Line, p.curToken.Col
 	p.nextToken() // consome 'fn'
 
-	if !p.curTokenIs(token.IDENT) {
+	if !token.IsName(p.curToken) {
 		p.addError("Esperado identificador para o nome da função", "E_EXPECTED_FN_NAME")
 		return nil
 	}
@@ -487,4 +489,37 @@ func (p *Parser) parseBody() []ast.Stmt {
 
 	p.expectCur(token.RPAREN)
 	return stmts
+}
+
+func (p *Parser) parseTestDecl() *ast.TestDecl {
+	line, col := p.curToken.Line, p.curToken.Col
+	p.nextToken() // consome 'test'
+
+	if !p.curTokenIs(token.STRING) {
+		p.addError("Esperado nome em string para 'test'", "E_EXPECTED_TEST_NAME")
+		return nil
+	}
+	name := p.curToken.Literal
+	p.nextToken()
+
+	var body []ast.Stmt
+	if p.curTokenIs(token.LPAREN) && p.peekTokenIs(token.BODY) {
+		p.nextToken() // consome '('
+		body = p.parseBody()
+	} else {
+		for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+			stmt := p.parseStatement()
+			if stmt != nil {
+				body = append(body, stmt)
+			}
+		}
+	}
+	p.expectCur(token.RPAREN)
+
+	return &ast.TestDecl{
+		Name: name,
+		Body: body,
+		Line: line,
+		Col:  col,
+	}
 }

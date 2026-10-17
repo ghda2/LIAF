@@ -16,6 +16,7 @@ type Info struct {
 	Enums     map[string]*ast.EnumDecl
 	Routes    []*ast.RouteDecl
 	WSRoutes  []*ast.WSRouteDecl
+	Tests     []*ast.TestDecl
 }
 
 // knownEffects e a lista unica de efeitos declaraveis. `db` entrou com a
@@ -116,6 +117,8 @@ func Check(mod *ast.Module, file string) (*Info, []diagnostic.Diagnostic) {
 			c.Info.Routes = append(c.Info.Routes, v)
 		case *ast.WSRouteDecl:
 			c.Info.WSRoutes = append(c.Info.WSRoutes, v)
+		case *ast.TestDecl:
+			c.Info.Tests = append(c.Info.Tests, v)
 		case *ast.ImportDecl:
 			c.error(v, "E_UNRESOLVED_IMPORT", "Imports must be resolved before checking")
 		}
@@ -281,7 +284,22 @@ func Check(mod *ast.Module, file string) (*Info, []diagnostic.Diagnostic) {
 			c.wsRoute(w)
 		}
 	}
-	if c.Info.Functions["main"] == nil {
+	for _, d := range mod.Decls {
+		if t, ok := d.(*ast.TestDecl); ok {
+			c.currentModule = mod.Name
+			c.fn = &ast.FuncDecl{
+				Name:       t.Name,
+				ReturnType: &ast.PrimitiveType{Name: "void"},
+				Effects:    []string{"io", "clock", "net", "fs", "db", "rand", "env"},
+			}
+			c.scopes = nil
+			c.push()
+			c.loops = 0
+			c.statements(t.Body)
+			c.pop()
+		}
+	}
+	if c.Info.Functions["main"] == nil && len(c.Info.Tests) == 0 {
 		c.error(mod, "E_MISSING_MAIN", "Module requires main")
 	}
 	return c.Info, c.Errors

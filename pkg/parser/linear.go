@@ -27,7 +27,7 @@ func (p *Parser) parseLinearModule() *ast.Module {
 	if p.curTokenIs(token.MODULE) {
 		startLine, startCol = p.curToken.Line, p.curToken.Col
 		p.nextToken() // consome 'module'
-		if !p.curTokenIs(token.IDENT) {
+		if !token.IsName(p.curToken) {
 			p.addError("Esperado identificador para o nome do módulo", "E_EXPECTED_MODULE_NAME")
 			return nil
 		}
@@ -93,10 +93,12 @@ func (p *Parser) parseLinearTopLevel() ast.TopLevel {
 		return p.parseLinearRoute()
 	case token.WS_ROUTE:
 		return p.parseLinearWSRoute()
+	case token.TEST:
+		return p.parseLinearTest()
 	case token.LPAREN:
 		return p.parseTopLevel()
 	default:
-		p.addError(fmt.Sprintf("Declaração inválida: esperado 'import', 'struct', 'enum', 'fn', 'route' ou 'ws-route', mas obteve %q", p.curToken.Literal), "E_INVALID_TOPLEVEL")
+		p.addError(fmt.Sprintf("Declaração inválida: esperado 'import', 'struct', 'enum', 'fn', 'route', 'ws-route' ou 'test', mas obteve %q", p.curToken.Literal), "E_INVALID_TOPLEVEL")
 		return nil
 	}
 }
@@ -336,7 +338,7 @@ func (p *Parser) parseLinearFunc() *ast.FuncDecl {
 	line, col := p.curToken.Line, p.curToken.Col
 	p.nextToken() // consome 'fn'
 
-	if !p.curTokenIs(token.IDENT) {
+	if !token.IsName(p.curToken) {
 		p.addError("Esperado identificador para o nome da função", "E_EXPECTED_FN_NAME")
 		return nil
 	}
@@ -1242,5 +1244,33 @@ func (p *Parser) parseLinearPrimaryBase() ast.Expr {
 	default:
 		p.addError(fmt.Sprintf("Token inesperado ao iniciar expressão linear: %q (%s)", p.curToken.Literal, p.curToken.Type), "E_UNEXPECTED_TOKEN")
 		return nil
+	}
+}
+
+func (p *Parser) parseLinearTest() *ast.TestDecl {
+	line, col := p.curToken.Line, p.curToken.Col
+	p.nextToken() // consome 'test'
+
+	if !p.curTokenIs(token.STRING) {
+		p.addError("Esperado nome em string para 'test'", "E_EXPECTED_TEST_NAME")
+		return nil
+	}
+	name := p.curToken.Literal
+	p.nextToken()
+
+	var body []ast.Stmt
+	for !p.curTokenIs(token.END) && !p.curTokenIs(token.EOF) {
+		stmt := p.parseLinearStatement()
+		if stmt != nil {
+			body = append(body, stmt)
+		}
+	}
+	p.expectCur(token.END)
+
+	return &ast.TestDecl{
+		Name: name,
+		Body: body,
+		Line: line,
+		Col:  col,
 	}
 }

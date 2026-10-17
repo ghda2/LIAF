@@ -205,6 +205,20 @@ type WSRouteDecl struct {
 func (w *WSRouteDecl) Pos() (int, int) { return w.Line, w.Col }
 func (w *WSRouteDecl) topLevelNode()   {}
 
+// TestDecl representa um bloco nativo de teste (issue #044):
+// test "nome do teste"
+//   instrucoes...
+// end
+type TestDecl struct {
+	Name string
+	Body []Stmt
+	Line int
+	Col  int
+}
+
+func (t *TestDecl) Pos() (int, int) { return t.Line, t.Col }
+func (t *TestDecl) topLevelNode()   {}
+
 type Param struct {
 	Name string
 	Type Type

@@ -12,7 +12,6 @@ Como as pastas estão organizadas: [README.md](README.md).
 
 | Issue | Estado | O que falta de fato |
 |---|---|---|
-| [#044 Testes Nativos](a-fazer/ISSUE_044_TESTES_NATIVOS_LIAFC_TEST.md) | Aberta | Blocos `test "..."` e executor `liafc test [--json]` |
 | [#045 Middlewares HTTP](a-fazer/ISSUE_045_MIDDLEWARES_HTTP.md) | Aberta | Interceptadores declarativos de requisições web |
 | [#001 SSG](a-fazer/ISSUE_001_SSG_EVOLUTION.md) | Implementada | Metas de desempenho (RAM <5 MB, reload <5 ms) nunca medidas sob carga definida |
 | [#006 Result](a-fazer/ISSUE_006_STRUCTURED_ERROR_HANDLING.md) | Implementada | Revisão de fluxo entre ramos e loops, sem registro de andamento desde 16/09 |
@@ -23,6 +22,7 @@ Como as pastas estão organizadas: [README.md](README.md).
 
 | Issue | Evidência |
 |---|---|
+| [**#044** Testes Nativos (`liafc test`)](feito/ISSUE_044_TESTES_NATIVOS_LIAFC_TEST.md) | Blocos de teste declarativos lineares e S-exp, builtins `assert*`, executor `liafc test [--json]` unificado e conformidade `044_test_block.liaf` |
 | [**#046** Expressões Regulares (`std/regex`)](feito/ISSUE_046_EXPRESSOES_REGULARES_REGEX.md) | Módulo `std/regex`, motor RE2 thread-safe, validadores de formato (e-mail, CPF, CNPJ, slug, uuid) e conformidade `046_regex.liaf` |
 | [**#043** Data e Hora (`std/time`)](feito/ISSUE_043_DATA_E_HORA_STD_TIME.md) | Módulo `std/time`, builtins `time-*`, testes unitários `pkg/runtime/time_test.go`, conformidade `043_time_operations.liaf` e execução via `liafc run` |
 | [**#029** `std/storage` e WebP](feito/ISSUE_029_STDLIB_STORAGE_AND_WEBP.md) | Módulo `std/storage`, upload multipart/raw, compressão WebP sem perdas (lossless VP8L), sanitização anti-traversal e testes `TestStorageLifecycle`, `TestImageToWebPLossless` |

@@ -21,6 +21,7 @@ type Generator struct {
 	extraImports   map[string]bool
 	privateFuncs   map[string]string
 	privateStructs map[string]string
+	testCases      []liafTestCase
 }
 
 const extraImportsMarker = "\t// liaf:extra-imports\n"
@@ -61,6 +62,7 @@ func (g *Generator) Generate() string {
 	g.sb.WriteString("import (\n")
 	g.sb.WriteString("\t\"encoding/json\"\n")
 	g.sb.WriteString("\t\"fmt\"\n")
+	g.sb.WriteString("\t\"os\"\n")
 	g.sb.WriteString("\t\"strconv\"\n")
 	g.sb.WriteString("\t\"strings\"\n")
 	g.sb.WriteString("\t\"time\"\n")
@@ -72,6 +74,7 @@ func (g *Generator) Generate() string {
 	g.sb.WriteString("var (\n")
 	g.sb.WriteString("\t_ = json.Marshal\n")
 	g.sb.WriteString("\t_ = fmt.Sprint\n")
+	g.sb.WriteString("\t_ = os.Getenv\n")
 	g.sb.WriteString("\t_ = strconv.FormatInt\n")
 	g.sb.WriteString("\t_ = strings.Builder{}\n")
 	g.sb.WriteString("\t_ = time.Sleep\n")
@@ -132,12 +135,19 @@ func (g *Generator) Generate() string {
 	g.sb.WriteString("\ttime.Sleep(time.Duration(ms) * time.Millisecond)\n")
 	g.sb.WriteString("}\n\n")
 
-	for _, decl := range g.mod.Decls {
+	for idx, decl := range g.mod.Decls {
 		switch d := decl.(type) {
 		case *ast.StructDecl:
 			g.genStruct(d)
 		case *ast.EnumDecl:
 			g.genEnum(d)
+		case *ast.TestDecl:
+			g.genTest(d, idx)
+		}
+	}
+
+	for _, decl := range g.mod.Decls {
+		switch d := decl.(type) {
 		case *ast.FuncDecl:
 			g.genFunc(d)
 		case *ast.RouteDecl:
@@ -145,6 +155,23 @@ func (g *Generator) Generate() string {
 		case *ast.WSRouteDecl:
 			g.genWSRoute(d)
 		}
+	}
+
+	if g.info.Functions["main"] == nil && len(g.testCases) > 0 {
+		g.sb.WriteString("func main() {\n")
+		g.indent++
+		g.writeIndent()
+		g.sb.WriteString("rt.RunTests([]rt.TestCase{\n")
+		g.indent++
+		for _, tc := range g.testCases {
+			g.writeIndent()
+			g.sb.WriteString(fmt.Sprintf("{Name: %q, Fn: %s},\n", tc.name, tc.fn))
+		}
+		g.indent--
+		g.writeIndent()
+		g.sb.WriteString("})\n")
+		g.indent--
+		g.sb.WriteString("}\n\n")
 	}
 
 	return strings.Replace(g.sb.String(), extraImportsMarker, g.importLines(), 1)
@@ -208,6 +235,27 @@ func (g *Generator) genFunc(f *ast.FuncDecl) {
 
 	g.sb.WriteString(fmt.Sprintf("func %s(%s)%s {\n", fnName, strings.Join(params, ", "), ret))
 	g.indent++
+
+	if f.Name == "main" && len(g.testCases) > 0 {
+		g.writeIndent()
+		g.sb.WriteString("if os.Getenv(\"LIAF_TEST_MODE\") == \"1\" {\n")
+		g.indent++
+		g.writeIndent()
+		g.sb.WriteString("rt.RunTests([]rt.TestCase{\n")
+		g.indent++
+		for _, tc := range g.testCases {
+			g.writeIndent()
+			g.sb.WriteString(fmt.Sprintf("{Name: %q, Fn: %s},\n", tc.name, tc.fn))
+		}
+		g.indent--
+		g.writeIndent()
+		g.sb.WriteString("})\n")
+		g.writeIndent()
+		g.sb.WriteString("return\n")
+		g.indent--
+		g.writeIndent()
+		g.sb.WriteString("}\n")
+	}
 
 	if f.OnErrVar != "" {
 		g.writeIndent()

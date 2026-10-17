@@ -60,6 +60,45 @@ func init() {
 	})
 
 	Register(&Builtin{
+		Name:         "assert",
+		Category:     "test",
+		Arity:        ExactArity(2),
+		Params:       []string{"bool", "str"},
+		Return:       "void",
+		GoCall:       "rt.Assert",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "assert-true",
+		Category:     "test",
+		Arity:        ExactArity(1),
+		Params:       []string{"bool"},
+		Return:       "void",
+		GoCall:       "rt.AssertTrue",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "assert-false",
+		Category:     "test",
+		Arity:        ExactArity(1),
+		Params:       []string{"bool"},
+		Return:       "void",
+		GoCall:       "rt.AssertFalse",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
+		Name:         "assert-eq",
+		Category:     "test",
+		Arity:        ExactArity(3),
+		Return:       "void",
+		GoCall:       "rt.AssertEq",
+		UnsupportedC: true,
+	})
+
+	Register(&Builtin{
 		Name:     "not",
 		Category: "core",
 		Arity:    ExactArity(1),

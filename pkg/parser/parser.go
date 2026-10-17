@@ -97,7 +97,7 @@ func (p *Parser) parseSExprModule() *ast.Module {
 	}
 	p.nextToken() // consome 'module'
 
-	if !p.curTokenIs(token.IDENT) {
+	if !token.IsName(p.curToken) {
 		p.addError("Esperado identificador para o nome do módulo", "E_EXPECTED_MODULE_NAME")
 		return nil
 	}

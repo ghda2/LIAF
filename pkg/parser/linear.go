@@ -55,6 +55,9 @@ func (p *Parser) parseLinearModule() *ast.Module {
 }
 
 func (p *Parser) parseLinearTopLevel() ast.TopLevel {
+	if isMiddlewareKeyword(p.curToken) || (p.curTokenIs(token.PUB) && isMiddlewareKeyword(p.peekToken)) {
+		return p.parseLinearMiddleware()
+	}
 	switch p.curToken.Type {
 	case token.PUB:
 		p.nextToken() // consome 'pub'
@@ -457,6 +460,7 @@ func (p *Parser) parseLinearRoute() *ast.RouteDecl {
 	path := p.curToken.Literal
 	p.nextToken()
 
+	middlewares := p.parseLinearWith()
 	params := p.parseLinearParams()
 
 	var retType ast.Type
@@ -539,16 +543,17 @@ func (p *Parser) parseLinearRoute() *ast.RouteDecl {
 	p.expectCur(token.END)
 
 	return &ast.RouteDecl{
-		Method:     method,
-		Path:       path,
-		Params:     params,
-		ReturnType: retType,
-		Effects:    effects,
-		OnErrVar:   onErrVar,
-		OnErrBody:  onErrBody,
-		Body:       body,
-		Line:       line,
-		Col:        col,
+		Method:      method,
+		Path:        path,
+		Params:      params,
+		ReturnType:  retType,
+		Effects:     effects,
+		OnErrVar:    onErrVar,
+		OnErrBody:   onErrBody,
+		Body:        body,
+		Line:        line,
+		Col:         col,
+		Middlewares: middlewares,
 	}
 }
 

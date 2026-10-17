@@ -1,0 +1,33 @@
+module middleware_api
+
+// Middlewares HTTP (issue #045): exigir_token barra a requisicao sem
+// Authorization e entrega o usuario a rota por um header; marcar prova que a
+// cadeia segue na ordem do with(...).
+middleware exigir_token(req Request) (result Request Response)
+  let token = unwrap-or(request-header(req, "Authorization"), "")
+  if token != "Bearer segredo"
+    return err(json-error(401, "token obrigatorio"))
+  end
+  ok(request-set-header(req, "X-Usuario", "ana"))
+end
+
+middleware marcar(req Request) (result Request Response)
+  let usuario = unwrap-or(request-header(req, "X-Usuario"), "ninguem")
+  ok(request-set-header(req, "X-Visto-Por-Marcar", usuario))
+end
+
+route GET "/health" () Response
+  json-response(200, "{\"status\":\"healthy\"}")
+end
+
+route GET "/painel/{id}" with(exigir_token, marcar) (id int, req Request) Response
+  let usuario = unwrap-or(request-header(req, "X-Usuario"), "")
+  let visto = unwrap-or(request-header(req, "X-Visto-Por-Marcar"), "")
+  json-response(200, fmt("{{\"id\":{},\"usuario\":\"{}\",\"visto\":\"{}\"}}", id, usuario, visto))
+end
+
+fn main() void effects(fs, io, net)
+  let port = unwrap-or(list-get(args(), 0), "8080")
+  println(concat("Middleware API rodando na porta ", port))
+  unwrap-or(serve-hybrid("./public", port), false)
+end

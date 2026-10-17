@@ -179,10 +179,14 @@ func isParenExpr(expr Expr) bool {
 }
 
 func (p *printer) printFunc(f *FuncDecl, suffix string) {
+	kind := "fn"
+	if f.IsMiddleware {
+		kind = "middleware"
+	}
 	if f.IsPub {
-		p.sb.WriteString("(pub fn " + f.Name + " ")
+		p.sb.WriteString("(pub " + kind + " " + f.Name + " ")
 	} else {
-		p.sb.WriteString("(fn " + f.Name + " ")
+		p.sb.WriteString("(" + kind + " " + f.Name + " ")
 	}
 
 	// Params
@@ -250,6 +254,9 @@ func (p *printer) printFunc(f *FuncDecl, suffix string) {
 
 func (p *printer) printRoute(r *RouteDecl, suffix string) {
 	p.sb.WriteString(fmt.Sprintf("(route %s %q ", r.Method, r.Path))
+	if len(r.Middlewares) > 0 {
+		p.sb.WriteString("(with " + strings.Join(r.Middlewares, " ") + ") ")
+	}
 
 	// Params
 	if len(r.Params) == 0 {

@@ -58,6 +58,21 @@ func (g *Generator) genRoute(r *ast.RouteDecl) {
 	g.sb.WriteString(fmt.Sprintf("\tweb.Register(%q, %q, func(req web.Request) web.Response {\n", strings.ToUpper(r.Method), r.Path))
 	g.indent += 2
 
+	// Middlewares do with(...), na ordem declarada: err(resposta) encerra a
+	// cadeia; ok(req) segue adiante com a Request devolvida (issue #045).
+	for _, mw := range r.Middlewares {
+		g.writeIndent()
+		g.sb.WriteString(fmt.Sprintf("if mw := %s(req); !mw.OK {\n", g.middlewareIdent(mw)))
+		g.writeIndent()
+		g.sb.WriteString("\treturn mw.Error\n")
+		g.writeIndent()
+		g.sb.WriteString("} else {\n")
+		g.writeIndent()
+		g.sb.WriteString("\treq = mw.Value\n")
+		g.writeIndent()
+		g.sb.WriteString("}\n")
+	}
+
 	// Indice de cada {nome} no padrao do path. Usar sempre o ultimo segmento
 	// quebraria rotas como /users/{id}/tasks.
 	pathIndex := map[string]int{}
@@ -172,4 +187,25 @@ func (g *Generator) genRoute(r *ast.RouteDecl) {
 	g.indent -= 2
 	g.sb.WriteString("\t})\n")
 	g.sb.WriteString("}\n")
+}
+
+// middlewareIdent devolve o nome Go de um middleware, com o mesmo mangling das
+// funcoes privadas de modulos importados. Um middleware do modulo raiz vence.
+func (g *Generator) middlewareIdent(name string) string {
+	ident := ""
+	for _, d := range g.mod.Decls {
+		f, ok := d.(*ast.FuncDecl)
+		if !ok || !f.IsMiddleware || f.Name != name {
+			continue
+		}
+		if mangled, ok := g.privateFuncs[f.Module+":"+f.Name]; ok {
+			ident = mangled
+			continue
+		}
+		return sanitizeIdent(f.Name)
+	}
+	if ident == "" {
+		ident = sanitizeIdent(name)
+	}
+	return ident
 }

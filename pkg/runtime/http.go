@@ -4,6 +4,7 @@ import (
 	"io"
 	"mime"
 	"mime/multipart"
+	"net/http"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -50,6 +51,17 @@ func RequestForm(req web.Request, name string) Result[string, string] {
 		return Ok[string, string](values[0])
 	}
 	return Err[string, string]("form field not found: " + name)
+}
+
+// RequestSetHeader devolve uma copia da requisicao com o header substituido. O
+// http.Header e clonado: a Request original, vista por quem a passou, nao muda.
+func RequestSetHeader(req web.Request, name, value string) web.Request {
+	req.Header = req.Header.Clone()
+	if req.Header == nil {
+		req.Header = http.Header{}
+	}
+	req.Header.Set(name, value)
+	return req
 }
 
 func ResponseSetHeader(res web.Response, name, value string) web.Response {

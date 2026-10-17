@@ -12,7 +12,6 @@ Como as pastas estão organizadas: [README.md](README.md).
 
 | Issue | Estado | O que falta de fato |
 |---|---|---|
-| [#045 Middlewares HTTP](a-fazer/ISSUE_045_MIDDLEWARES_HTTP.md) | Aberta | Interceptadores declarativos de requisições web |
 | [#001 SSG](a-fazer/ISSUE_001_SSG_EVOLUTION.md) | Implementada | Metas de desempenho (RAM <5 MB, reload <5 ms) nunca medidas sob carga definida |
 | [#006 Result](a-fazer/ISSUE_006_STRUCTURED_ERROR_HANDLING.md) | Implementada | Revisão de fluxo entre ramos e loops, sem registro de andamento desde 16/09 |
 | [#031 Guia](a-fazer/ISSUE_031_GUIA_PROXIMAS_ISSUES.md) | Aberta | Itens 0.1 e 0.2 feitos; faltam transformar as seções B e C em issues |
@@ -22,6 +21,7 @@ Como as pastas estão organizadas: [README.md](README.md).
 
 | Issue | Evidência |
 |---|---|
+| [**#045** Middlewares HTTP](feito/ISSUE_045_MIDDLEWARES_HTTP.md) | Declaração `middleware` e `with(...)` em rotas (linear e S-exp, `fmt` idempotente), builtin `request-set-header`, diagnósticos `E_MIDDLEWARE_SIGNATURE`/`E_UNKNOWN_MIDDLEWARE`/`E_DUPLICATE_MIDDLEWARE`, teste ponta a ponta `TestExecuteMiddlewareAPI` (401, 200 com contexto, ordem da cadeia, header forjado descartado). Escopo global ficou de fora |
 | [**#044** Testes Nativos (`liafc test`)](feito/ISSUE_044_TESTES_NATIVOS_LIAFC_TEST.md) | Blocos de teste declarativos lineares e S-exp, builtins `assert*`, executor `liafc test [--json]` unificado e conformidade `044_test_block.liaf` |
 | [**#046** Expressões Regulares (`std/regex`)](feito/ISSUE_046_EXPRESSOES_REGULARES_REGEX.md) | Módulo `std/regex`, motor RE2 thread-safe, validadores de formato (e-mail, CPF, CNPJ, slug, uuid) e conformidade `046_regex.liaf` |
 | [**#043** Data e Hora (`std/time`)](feito/ISSUE_043_DATA_E_HORA_STD_TIME.md) | Módulo `std/time`, builtins `time-*`, testes unitários `pkg/runtime/time_test.go`, conformidade `043_time_operations.liaf` e execução via `liafc run` |

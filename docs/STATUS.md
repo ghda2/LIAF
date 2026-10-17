@@ -15,13 +15,13 @@ Como as pastas estão organizadas: [README.md](README.md).
 | [#001 SSG](a-fazer/ISSUE_001_SSG_EVOLUTION.md) | Implementada | Metas de desempenho (RAM <5 MB, reload <5 ms) nunca medidas sob carga definida |
 | [#006 Result](a-fazer/ISSUE_006_STRUCTURED_ERROR_HANDLING.md) | Implementada | Revisão de fluxo entre ramos e loops, sem registro de andamento desde 16/09 |
 | [#031 Guia](a-fazer/ISSUE_031_GUIA_PROXIMAS_ISSUES.md) | Aberta | Itens 0.1 e 0.2 feitos; faltam transformar as seções B e C em issues |
-| **#029** `std/storage` | Concluída / Pendente commit | Upload multipart/raw, compressão WebP sem perdas e serviço de imagens |
 
 
 ## Feito — [feito/](feito/)
 
 | Issue | Evidência |
 |---|---|
+| [**#029** `std/storage` e WebP](feito/ISSUE_029_STDLIB_STORAGE_AND_WEBP.md) | Módulo `std/storage`, upload multipart/raw, compressão WebP sem perdas (lossless VP8L), sanitização anti-traversal e testes `TestStorageLifecycle`, `TestImageToWebPLossless` |
 | [**#007** Pipeline de Deploy Autônomo](feito/ISSUE_007_AUTONOMOUS_AI_DEPLOY_PIPELINE.md) | HTTP Publish API (`POST /_liaf/publish`), `liafc publish`, gerador systemd `liafc service install` e conector Caddy Admin API `liafc deploy caddy-bind` |
 | [**#017** Tempo real, resiliência e cluster](feito/ISSUE_017_REALTIME_CHANNELS_RESILIENCY.md) | Bounded buffer (`sendQueue`), desconexão/drop de slow clients, rate limiting nativo, pub/sub escalável Redis multi-instância e builtins `ws-enable-redis` / `ws-disable-redis` |
 | [**#042** Server-Driven UI e `std/html`](feito/ISSUE_042_SERVER_DRIVEN_UI_HTML.md) | Módulo `std/html`, builtins `html-response` e `html-escape` (anti-XSS), exemplo funcional `server_driven_ui.liaf` e teste de integração `TestCodegenServerDrivenUI` |

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -151,7 +150,7 @@ func runPost(args []string) {
 	// Modo publicação instantânea para o servidor
 	client := &http.Client{Timeout: 30 * time.Second}
 
-	// 1. Upload de imagens associadas (se houver)
+	// 1. Upload de imagens associadas (se houver) via HTTP Publish API
 	for _, imgName := range localImages {
 		imgPath := filepath.Join(baseDir, imgName)
 		imgData, err := os.ReadFile(imgPath)
@@ -159,16 +158,13 @@ func runPost(args []string) {
 			continue
 		}
 
-		uploadURL := strings.TrimRight(url, "/") + "/_liaf/storage/upload"
-		var bodyBuf bytes.Buffer
-		mw := multipart.NewWriter(&bodyBuf)
-		part, err := mw.CreateFormFile("file", filepath.Base(imgName))
-		if err == nil {
-			_, _ = part.Write(imgData)
-			_ = mw.Close()
+		publishEndpoint := strings.TrimRight(url, "/") + "/_liaf/publish"
+		targetImgPath := filepath.ToSlash(imgName)
+		targetImgPath = strings.TrimPrefix(targetImgPath, "/")
 
-			req, _ := http.NewRequest("POST", uploadURL, &bodyBuf)
-			req.Header.Set("Content-Type", mw.FormDataContentType())
+		req, err := http.NewRequest("POST", publishEndpoint, bytes.NewReader(imgData))
+		if err == nil {
+			req.Header.Set("X-LIAF-Path", targetImgPath)
 			if token != "" {
 				req.Header.Set("Authorization", "Bearer "+token)
 			}

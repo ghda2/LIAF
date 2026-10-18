@@ -1,0 +1,78 @@
+{
+  "nome": "Marina Albuquerque",
+  "cargo": "Engenheira de Software Sênior",
+  "resumo": "Engenheira de backend com 9 anos construindo sistemas de pagamento e logística. Gosto de transformar domínios complexos em APIs simples, medir antes de otimizar e deixar o time mais rápido do que encontrei.",
+  "email": "marina@exemplo.dev",
+  "telefone": "+55 11 98765-4321",
+  "local": "São Paulo, SP",
+  "site": "marina.dev",
+  "linkedin": "linkedin.com/in/marina",
+  "github": "github.com/marina",
+  "cor": "#0f766e",
+  "experiencias": [
+    {
+      "cargo": "Engenheira de Software Sênior",
+      "empresa": "Pagar Fácil",
+      "periodo": "2022 — atual",
+      "local": "Remoto",
+      "descricao": "Lidero a plataforma de cobranças Pix, que processa 2 milhões de transações por dia.",
+      "destaques": [
+        "Reduzi a latência p99 da API de cobrança de 480 ms para 90 ms.",
+        "Desenhei a idempotência ponta a ponta que eliminou cobranças duplicadas.",
+        "Mentorei 4 pessoas até o nível pleno."
+      ],
+      "tecnologias": ["Go", "PostgreSQL", "Kafka", "Kubernetes"]
+    },
+    {
+      "cargo": "Engenheira de Software",
+      "empresa": "Rota Certa Logística",
+      "periodo": "2018 — 2022",
+      "local": "Campinas, SP",
+      "descricao": "Backend de roteirização e rastreio de entregas em tempo real.",
+      "destaques": [
+        "Migrei o monólito de rastreio para serviços orientados a eventos.",
+        "Criei o painel de SLA usado por 300 transportadoras."
+      ],
+      "tecnologias": ["Python", "Redis", "WebSockets"]
+    },
+    {
+      "cargo": "Desenvolvedora Júnior",
+      "empresa": "Agência Pixel",
+      "periodo": "2016 — 2018",
+      "local": "São Paulo, SP",
+      "descricao": "Sites e APIs para clientes de varejo.",
+      "destaques": [],
+      "tecnologias": ["PHP", "MySQL"]
+    }
+  ],
+  "projetos": [
+    {
+      "nome": "LIAF",
+      "descricao": "Linguagem de programação pensada para modelos de IA, compilada para Go.",
+      "link": "github.com/marina/liaf",
+      "tecnologias": ["Go", "Typst"]
+    }
+  ],
+  "formacao": [
+    {
+      "curso": "Bacharelado em Ciência da Computação",
+      "instituicao": "Universidade de São Paulo",
+      "periodo": "2012 — 2016",
+      "descricao": ""
+    }
+  ],
+  "habilidades": [
+    {"nome": "Go", "nivel": 5},
+    {"nome": "Arquitetura de sistemas", "nivel": 5},
+    {"nome": "PostgreSQL", "nivel": 4},
+    {"nome": "Kubernetes", "nivel": 3},
+    {"nome": "Python", "nivel": 4}
+  ],
+  "idiomas": [
+    {"nome": "Português", "nivel": "Nativo"},
+    {"nome": "Inglês", "nivel": "Fluente"},
+    {"nome": "Espanhol", "nivel": "Intermediário"}
+  ],
+  "certificacoes": ["AWS Solutions Architect", "CKA — Kubernetes"],
+  "interesses": ["Tipografia", "Corrida", "Open source"]
+}

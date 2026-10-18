@@ -1,0 +1,5 @@
+# Versão fixa do Rust: o .wasm embutido precisa sair igual no CI e em qualquer máquina.
+[toolchain]
+channel = "1.98.1"
+targets = ["wasm32-wasip1"]
+profile = "minimal"

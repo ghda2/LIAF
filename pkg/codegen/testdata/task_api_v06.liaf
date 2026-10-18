@@ -1,0 +1,90 @@
+// API de tarefas de referencia - Sintaxe LIAF v0.6 (Linear / Sem parenteses aninhados)
+module task-api-v06
+
+struct Task
+  id int
+  title str
+  done bool
+end
+
+struct State
+  next_id int
+  tasks (list Task)
+end
+
+struct CreateInput
+  title str
+end
+
+struct UpdateInput
+  title str
+  done bool
+end
+
+struct ApiError
+  error str
+end
+
+fn error_response(status int, message str) Response
+  on-err fail
+    json-response(500, "{\"error\":\"Serialization failure\"}")
+  end
+  let payload = try json-encode(new ApiError(message))
+  json-response(status, payload)
+end
+
+fn load_state() (result State str) effects(fs)
+  if not(fs-exists("task-api-v06-data.json"))
+    return ok(new State(1, make-list(Task)))
+  end
+  let text = try fs-read-file("task-api-v06-data.json")
+  let state = try json-decode(text, State)
+  ok(state)
+end
+
+fn save_state(state State) (result bool str) effects(fs)
+  let text = try json-encode(state)
+  try fs-write-atomic("task-api-v06-data.json", text)
+  ok(true)
+end
+
+fn tasks_response(state State) Response
+  on-err message
+    error_response(500, message)
+  end
+  let payload = try json-encode(state.tasks)
+  json-response(200, payload)
+end
+
+route GET "/health" () Response
+  json-response(200, "{\"status\":\"healthy\"}")
+end
+
+route GET "/tasks" () Response effects(fs)
+  on-err message
+    error_response(500, message)
+  end
+  let state = try load_state()
+  tasks_response(state)
+end
+
+route POST "/tasks" (input CreateInput) Response effects(fs)
+  on-err message
+    error_response(500, message)
+  end
+  let state = try load_state()
+  let task = new Task(state.next_id, input.title, false)
+  let updated_tasks = state.tasks
+  list-push(updated_tasks, task)
+  let next_id = state.next_id + 1
+  let new_state = new State(next_id, updated_tasks)
+  try save_state(new_state)
+  let payload = try json-encode(task)
+  json-response(201, payload)
+end
+
+fn main() void effects(fs, io, net)
+  let port = unwrap-or(list-get(args(), 0), "8080")
+  println(concat("Task API v0.6 Linear rodando na porta ", port))
+  unwrap-or(serve-hybrid("./public", port), false)
+end

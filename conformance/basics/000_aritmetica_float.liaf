@@ -1,0 +1,8 @@
+;; issue: base
+;; status: done
+;; out: 4
+;; out: 3.5
+;; out: 0.3333333333333333
+(println (add 1.5 2.5))
+(println (div 7.0 2.0))
+(println (div 1.0 3.0))

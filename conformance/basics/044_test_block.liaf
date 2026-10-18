@@ -1,0 +1,21 @@
+;; issue: #044
+;; status: done
+;; out: ok assercoes passaram
+
+(module conformance
+  (test "assercoes basicas"
+    (assert (== 1 1) "um deve ser igual a um")
+    (assert-true true)
+    (assert-false false)
+    (assert-eq 10 10 "10 igual a 10"))
+
+  (test "assercoes strings"
+    (assert-eq "liaf" "liaf" "strings devem ser iguais"))
+
+  (fn main (params) (returns void) (effects io)
+    (body
+      (assert (== 1 1) "um deve ser um")
+      (assert-true true)
+      (assert-false false)
+      (assert-eq "liaf" "liaf" "strings iguais")
+      (println "ok assercoes passaram"))))

@@ -1,0 +1,12 @@
+;; issue: base
+;; status: done
+;; out: true
+;; out: false
+;; out: true
+;; out: false
+;; out: true
+(println (lt 1 2))
+(println (eq 1 2))
+(println (neq 1 2))
+(println (not true))
+(println (and true (or false true)))

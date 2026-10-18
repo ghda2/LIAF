@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: liaf-test-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: liaf
+      POSTGRES_PASSWORD: liaf_pass
+      POSTGRES_DB: liaf_test
+
+  mysql:
+    image: mysql:8.0
+    container_name: liaf-test-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: liaf_root
+      MYSQL_DATABASE: liaf_test
+      MYSQL_USER: liaf
+      MYSQL_PASSWORD: liaf_pass
+    command: --default-authentication-plugin=caching_sha2_password
+
+  redis:
+    image: redis:7-alpine
+    container_name: liaf-test-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass liaf_redis_pass

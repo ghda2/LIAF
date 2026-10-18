@@ -1,0 +1,135 @@
+;; Exercita std/auth e std/cors pela rede, para TestExecuteStdWeb.
+;; Uso: std_web 8080   (exige ./public ao lado do binario)
+(module std_web
+  (import "std/auth")
+  (import "std/cors")
+  (import "std/cookie")
+
+  (fn origens (params) (returns (list str)) (effects)
+    (body (return (list "https://painel.exemplo.com"))))
+
+  (fn texto (params (status int) (v str)) (returns Response) (effects)
+    (body (return (json-response status (concat "{\"v\":\"" v "\"}")))))
+
+  (route GET "/token" (params (req Request)) (returns Response) (effects)
+    (body
+      (match (auth-bearer-token req)
+        (ok t (return (texto 200 t)))
+        (err e (return (texto 401 e))))))
+
+  (route GET "/auth/basic" (params (req Request)) (returns Response) (effects)
+    (body
+      (let creds BasicAuth (new BasicAuth "" ""))
+      (match (auth-basic req)
+        (ok c (set creds c))
+        (err e (return (texto 401 e))))
+      (if (auth-validate-basic creds "admin" "militar123")
+        (then (return (texto 200 (concat creds.user ":" creds.password))))
+        (else (return (texto 403 "forbidden: invalid credentials"))))))
+
+  (route GET "/auth/api-key" (params (req Request)) (returns Response) (effects)
+    (body
+      (let key str "")
+      (match (auth-api-key req "")
+        (ok k (set key k))
+        (err e (return (texto 401 e))))
+      (if (auth-validate-api-key key "militar-super-secret-key-2026")
+        (then (return (texto 200 key)))
+        (else (return (texto 403 "forbidden: invalid key"))))))
+
+  (route GET "/auth/api-key-custom" (params (req Request)) (returns Response) (effects)
+    (body
+      (let key str "")
+      (match (auth-api-key req "X-Custom-Auth")
+        (ok k (set key k))
+        (err e (return (texto 401 e))))
+      (if (auth-validate-api-key key "custom-key-999")
+        (then (return (texto 200 key)))
+        (else (return (texto 403 "forbidden: invalid custom key"))))))
+
+  (route GET "/auth/cookie" (params (req Request)) (returns Response) (effects)
+    (body
+      (match (auth-cookie req "session_id")
+        (ok sess (return (texto 200 sess)))
+        (err e (return (texto 401 e))))))
+
+  (route GET "/auth/set-cookie" (params (req Request)) (returns Response) (effects)
+    (body
+      (let c Cookie (new Cookie "session_id" "segredo123" 3600 "/app" "exemplo.com" true true "Lax"))
+      (let r Response (texto 200 "cookie set"))
+      (return (response-set-header r "Set-Cookie" (auth-format-cookie c)))))
+
+  (route GET "/auth/jwt" (params (req Request)) (returns Response) (effects clock)
+    (body
+      (match (auth-jwt-bearer req "chave-secreta-militar-32-bytes-ok!")
+        (ok payload (return (texto 200 payload)))
+        (err e (return (texto 401 e))))))
+
+  (route POST "/auth/password" (params (req Request)) (returns Response) (effects rand)
+    (body
+      (let senha str "minha-senha-secreta")
+      (let hash str "")
+      (match (auth-hash-password senha)
+        (ok h (set hash h))
+        (err e (return (texto 400 e))))
+      (let ok1 bool (auth-verify-password senha hash))
+      (let ok2 bool (auth-verify-password "senha-errada" hash))
+      (if (and ok1 (not ok2))
+        (then (return (texto 200 "password verify ok")))
+        (else (return (texto 500 "password verify failed"))))))
+
+  (route GET "/cors" (params (req Request)) (returns Response) (effects)
+    (body
+      (let r Response (texto 200 "ok"))
+      (match (cors-origin req (origens))
+        (ok origem (return (cors-headers r origem)))
+        (err e (return (response-set-header r "X-Cors-Erro" e))))))
+
+  (route OPTIONS "/cors" (params (req Request)) (returns Response) (effects)
+    (body
+      (match (cors-origin req (origens))
+        (ok origem (return (cors-preflight origem "GET, OPTIONS" "Authorization")))
+        (err e (return (texto 403 e))))))
+
+  (route GET "/cors-cookie" (params (req Request)) (returns Response) (effects)
+    (body
+      (let r Response (texto 200 "ok"))
+      (match (cors-origin req (origens))
+        (ok origem (return (cors-headers-credentials r origem)))
+        (err e (return r)))))
+
+  (route OPTIONS "/cors-cookie" (params (req Request)) (returns Response) (effects)
+    (body
+      (match (cors-origin req (origens))
+        (ok origem (return (cors-preflight-credentials origem "POST" "Content-Type")))
+        (err e (return (texto 403 e))))))
+
+  (route GET "/cookie/set" (params (req Request)) (returns Response) (effects)
+    (body
+      (let r Response (texto 200 "cookies-definidos"))
+      (let c1 str (cookie-make "sid" "xyz789" 3600 "/" true true "Lax"))
+      (let c2 str (cookie-make "theme" "dark" 86400 "/" false false "Lax"))
+      (let r1 Response (response-set-cookie r c1))
+      (return (response-set-cookie r1 c2))))
+
+  (route GET "/cookie/get" (params (req Request)) (returns Response) (effects)
+    (body
+      (match (request-cookie req "sid")
+        (ok valor (return (texto 200 valor)))
+        (err e (return (texto 404 e))))))
+
+  (route GET "/cookie/del" (params (req Request)) (returns Response) (effects)
+    (body
+      (let r Response (texto 200 "cookie-apagado"))
+      (return (response-delete-cookie r "sid" "/"))))
+
+  (fn main (params) (returns void) (effects fs io net)
+    (body
+      (let port str "8080")
+      (match (list-get (args) 0)
+        (ok p (set port p))
+        (err ignored (set port "8080")))
+      (match (serve-hybrid "./public" port)
+        (ok stopped (println "Servidor parado"))
+        (err message (println message)))))
+)

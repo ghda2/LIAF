@@ -3,8 +3,8 @@
 .env.*
 !.env.example
 
-# Documentação interna, logs e rascunhos de desenvolvimento
-.docs/
+# Documentação privada: logs e notas de servidor (IPs, hosts)
+/docs/privado/
 
 # Binários
 *.exe
@@ -14,14 +14,18 @@
 *.dylib
 /liafc
 /liafc.exe
+/bin/liafc
+/bin/liafc.exe
 /liaf_server.exe
 /liaf_linux
 /liaf_server_linux
 /server
 /server.exe
+/server_*
+*.db
+node_modules/
 
-# Pipelines internos e automações locais
-/pipeline
+
 
 # Cache, builds e dados temporários
 .liaf_cache/
@@ -35,3 +39,7 @@ __pycache__/
 Thumbs.db
 .DS_Store
 
+/examples/tw_chat/server_tw_linux
+
+# Build do motor de documentos (Rust -> WASM); o artefato versionado fica em pkg/typst/wasm
+/engines/typst/target/

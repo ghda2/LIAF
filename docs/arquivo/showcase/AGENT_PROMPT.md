@@ -1,0 +1,3 @@
+# Prompt para agentes LIAF
+
+Escreva LIAF v0.3 em S-expressions. Leia `docs/AI_GUIDE.md` e os exemplos relevantes antes de gerar código. Escreva chamadas diretas, sem `call`. Use tipos explícitos e declare exatamente os efeitos que o corpo usa — efeito declarado e não usado é erro. Trate Result com `try`/`on-err` quando só precisar propagar o erro, e com `match` quando os dois lados diferirem; não ignore erros. Execute `liafc check ARQUIVO --json`, corrija os diagnósticos e execute testes comportamentais. Não use a sintaxe histórica `[fn ... /fn ...]`. Não presuma suporte a um recurso apenas porque aparece na especificação. Nunca inclua tokens de deploy ou chaves de API no código.

@@ -1,0 +1,35 @@
+;; std/content - Motor de conteúdo IA-First, Markdown e frontmatter para postagens instantâneas.
+;;
+;;   (import "std/content")
+;;   (let post Post (unwrap-or (parse-post markdown-raw) (new Post ...)))
+;;   (let html str (render-markdown "# Título"))
+(module content
+  (pub struct Post
+    (title str)
+    (slug str)
+    (date str)
+    (author str)
+    (summary str)
+    (image str)
+    (content_markdown str)
+    (content_html str)
+    (reading_time_min int)
+    (word_count int))
+
+  ;; Faz o parse de um post completo em Markdown com frontmatter YAML/LIAF.
+  (pub fn parse-post (params (raw str)) (returns (result Post str)) (effects)
+    (body
+      (match (content-parse raw)
+        (ok j (return (json-decode j Post)))
+        (err e (return (err e))))))
+
+  ;; Converte uma string de título em um slug canônico URL-friendly.
+  (pub fn slugify (params (title str)) (returns str) (effects)
+    (body
+      (return (content-slugify title))))
+
+  ;; Converte texto em Markdown puro para HTML higienizado contra XSS.
+  (pub fn render-markdown (params (md str)) (returns str) (effects)
+    (body
+      (return (markdown-to-html md))))
+)

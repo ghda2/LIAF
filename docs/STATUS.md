@@ -1,0 +1,65 @@
+# Status das issues — LIAF
+
+**Conferido em 26/09/2026**, contra o código e os testes da branch `feat/liaf-v03` (commit `64cf5d4` e
+alterações posteriores). `go test ./...` e `go vet ./...` passam; 48 casos em `conformance/basics/`.
+
+O que fazer a seguir: [PROXIMOS_PASSOS.md](a-fazer/PROXIMOS_PASSOS.md). Como criar uma issue nova: seção 2 da
+[#031](a-fazer/ISSUE_031_GUIA_PROXIMAS_ISSUES.md).
+
+Como as pastas estão organizadas: [README.md](README.md).
+
+## A fazer — [a-fazer/](a-fazer/)
+
+| Issue | Estado | O que falta de fato |
+|---|---|---|
+| [#001 SSG](a-fazer/ISSUE_001_SSG_EVOLUTION.md) | Implementada | Metas de desempenho (RAM <5 MB, reload <5 ms) nunca medidas sob carga definida |
+| [#006 Result](a-fazer/ISSUE_006_STRUCTURED_ERROR_HANDLING.md) | Implementada | Revisão de fluxo entre ramos e loops, sem registro de andamento desde 16/09 |
+| [#031 Guia](a-fazer/ISSUE_031_GUIA_PROXIMAS_ISSUES.md) | Aberta | Itens 0.1 e 0.2 feitos; faltam transformar as seções B e C em issues |
+
+
+## Feito — [feito/](feito/)
+
+| Issue | Evidência |
+|---|---|
+| [**#048** Motor de Conteúdo IA-First (`std/content` + `liafc post`)](feito/ISSUE_048_MOTOR_CONTEUDO_IA_FIRST_STD_CONTENT.md) | Módulo `std/content`, parsing de frontmatter/Markdown, validação com diagnósticos acionáveis de auto-cura, subcomando `liafc post` com upload de imagens e publicação HTTP instantânea |
+| [**#047** Language Server (`liafc lsp`)](feito/ISSUE_047_LSP_LANGUAGE_SERVER.md) | Servidor LSP nativo (JSON-RPC 2.0 / stdin/stdout) com diagnósticos em tempo real, hover com assinaturas e docs, autocompleção de keywords/builtins/símbolos locais e formatação de código |
+| [**#045** Middlewares HTTP](feito/ISSUE_045_MIDDLEWARES_HTTP.md) | Declaração `middleware` e `with(...)` em rotas (linear e S-exp, `fmt` idempotente), builtin `request-set-header`, diagnósticos `E_MIDDLEWARE_SIGNATURE`/`E_UNKNOWN_MIDDLEWARE`/`E_DUPLICATE_MIDDLEWARE`, teste ponta a ponta `TestExecuteMiddlewareAPI` (401, 200 com contexto, ordem da cadeia, header forjado descartado). Escopo global ficou de fora |
+| [**#044** Testes Nativos (`liafc test`)](feito/ISSUE_044_TESTES_NATIVOS_LIAFC_TEST.md) | Blocos de teste declarativos lineares e S-exp, builtins `assert*`, executor `liafc test [--json]` unificado e conformidade `044_test_block.liaf` |
+| [**#046** Expressões Regulares (`std/regex`)](feito/ISSUE_046_EXPRESSOES_REGULARES_REGEX.md) | Módulo `std/regex`, motor RE2 thread-safe, validadores de formato (e-mail, CPF, CNPJ, slug, uuid) e conformidade `046_regex.liaf` |
+| [**#043** Data e Hora (`std/time`)](feito/ISSUE_043_DATA_E_HORA_STD_TIME.md) | Módulo `std/time`, builtins `time-*`, testes unitários `pkg/runtime/time_test.go`, conformidade `043_time_operations.liaf` e execução via `liafc run` |
+| [**#029** `std/storage` e WebP](feito/ISSUE_029_STDLIB_STORAGE_AND_WEBP.md) | Módulo `std/storage`, upload multipart/raw, compressão WebP sem perdas (lossless VP8L), sanitização anti-traversal e testes `TestStorageLifecycle`, `TestImageToWebPLossless` |
+| [**#007** Pipeline de Deploy Autônomo](feito/ISSUE_007_AUTONOMOUS_AI_DEPLOY_PIPELINE.md) | HTTP Publish API (`POST /_liaf/publish`), `liafc publish`, gerador systemd `liafc service install` e conector Caddy Admin API `liafc deploy caddy-bind` |
+| [**#017** Tempo real, resiliência e cluster](feito/ISSUE_017_REALTIME_CHANNELS_RESILIENCY.md) | Bounded buffer (`sendQueue`), desconexão/drop de slow clients, rate limiting nativo, pub/sub escalável Redis multi-instância e builtins `ws-enable-redis` / `ws-disable-redis` |
+| [**#042** Server-Driven UI e `std/html`](feito/ISSUE_042_SERVER_DRIVEN_UI_HTML.md) | Módulo `std/html`, builtins `html-response` e `html-escape` (anti-XSS), exemplo funcional `server_driven_ui.liaf` e teste de integração `TestCodegenServerDrivenUI` |
+| [**#041** Expansão Propósito Geral](feito/ISSUE_041_EXPANSAO_PROPOSITO_GERAL.md) | Módulos `std/cli`, `std/fs` e `std/csv`, builtins de argumentos de processo, subprocessos, CSV e filesystem; execução standalone sem servidor web validada em teste `TestCodegenGeneralPurposeStandaloneCLI` |
+| [**#040** Backlog Sua Cidade Online](feito/ISSUE_040_BACKLOG_MELHORIAS_SUA_CIDADE_ONLINE.md) | Todos os 18 itens (P0, P1 e P2) implementados, validados com testes automatizados e documentados |
+| [**#039** Funções privadas e `pub`](feito/ISSUE_039_FUNCOES_PRIVADAS_E_VISIBILIDADE.md) | Visibilidade explícita `pub` em `fn`, `struct` e `enum`, diagnóstico `E_PRIVATE_SYMBOL`, isolamento de colisões por arquivo no loader, mangling de símbolos privados no codegen e teste ponta a ponta `TestCodegenVisibilityPubAndPrivate` |
+| [#038 Tipos soma / Enums](feito/ISSUE_038_TIPOS_SOMA_ENUMS.md) | Declaração de enums lineares e S-exp, pattern matching com checagem de exaustividade (`E_NONEXHAUSTIVE_MATCH`), detecção de duplicadas e variantes inexistentes, codegen Go com switch exaustivo e testes de conformidade |
+| [#034 Motor de documentos](feito/ISSUE_034_DOCUMENTOS_PDF_NATIVOS.md) | Typst 0.15.1 em WASM embutido no compilador via wazero, builtins `pdf-typst*` e `png-typst*`, pacotes de fontes com gzip, determinação por SHA-256 e exemplos de ponta a ponta (`curriculo.liaf`, `cobranca.liaf`, `relatorio.liaf`) |
+| [#037 Qualidade e laço do agente](feito/ISSUE_037_QUALIDADE_E_LACO_DO_AGENTE.md) | Subcomandos `liafc doc check/preview/watch`, cálculo de métricas de ocupação de página, detecção e sugestão de correção automática para contraste WCAG AA e regressão visual testada |
+| [#033 Sintaxe linear v0.6](feito/ISSUE_033_LIAF_V06_SINTAXE_LINEAR_SEM_PARENTESES.md) | Sintaxe sem parênteses envolventes implementada no lexer e parser linear (`linear.go`, `linear_test.go`); gerada mesma AST; redução comprovada de 69,3% de tokens BPE frente à v0.3; executado servidor HTTP fim a fim em `TestExecuteV06TaskAPI` |
+| [#015 Bancos](feito/ISSUE_015_DATABASE_DRIVERS_NETWORK.md) | Drivers nativos testados e validados contra PostgreSQL 16, MySQL 8 (caching_sha2_password) e Redis 7 reais via Docker; programas `db_postgres.liaf`, `db_mysql.liaf` e `db_redis.liaf` executados |
+| [#030 Modularização dos monólitos](feito/ISSUE_030_MODULARIZACAO_MONOLITOS.md) | Modularizados os 6 monólitos críticos (cache, table, builtins_hooks, parser, checker, codegen), 4 módulos de prioridade média (mysql, postgres, websocket, liafc) e funções longas |
+| [#032 Compilar fora do repositório](feito/ISSUE_032_COMPILADOR_AUTONOMO_RUNTIME_EMBUTIDO.md) | Runtime embutido (`runtime_embed.go`, `pkg/toolchain`); `TestLiafcBuildsOutsideRepository` compila e roda fora da árvore com `GOPROXY=off`. Ainda exige o comando `go` |
+| [#012 Ergonomia](feito/ISSUE_012_SYNTAX_SUGAR_AND_TOKEN_EFFICIENCY.md) | `s.campo` e `E_REDUNDANT_BOOL_COMPARE`: `field_path_test.go`, `checker_canonical_test.go`, caso `012_campo_ponto` |
+| [#028 Sintaxe compacta v0.5](feito/ISSUE_028_SINTAXE_COMPACTA_E_EXPRESSOES.md) | Parser, checker, `liafc fmt` canônico compacto, documentação na `SPEC.md` e `SKILL.md` |
+| [#009 Benchmark AI-First](feito/ISSUE_009_AI_FIRST_BENCHMARK_AND_SHOWCASE.md) | Medição e comparação LIAF vs Python em consumo de tokens realizada |
+| [#027 Segurança web e std](feito/ISSUE_027_SEGURANCA_WEB_E_STD.md) | 7 casos `027_*`, `TestExecutePedidosAPI`, `TestExecuteCobrancaPix`, `TestExecuteStdWeb`. Pendências de auth listadas na issue |
+| [#026 Sistema](feito/ISSUE_026_INTERACAO_COM_O_SISTEMA.md) | Casos `026_*` |
+| [#025 `if` como expressão](feito/ISSUE_025_IF_COMO_EXPRESSAO.md) | Caso `025_if_valor` |
+| [#024 Coleções e `option`](feito/ISSUE_024_COLECOES_COMPLETAS.md) | Casos `024_*` |
+| [#023 Strings e UTF-8](feito/ISSUE_023_STRINGS_E_UTF8.md) | Casos `023_*` |
+| [#022 Semântica numérica](feito/ISSUE_022_SEMANTICA_NUMERICA_SEGURA.md) | Casos `022_*` |
+| [#021 Conversões](feito/ISSUE_021_CONVERSOES_DE_TIPO.md) | Casos `021_*` |
+| [#020 Aritmética](feito/ISSUE_020_ARITMETICA_BASICA.md) | Casos `020_*` |
+| [#019 Tabela de builtins](feito/ISSUE_019_TABELA_UNICA_DE_BUILTINS.md) | `pkg/builtins/table.go` (virou monólito: ver #030) |
+| [#018 Diagnósticos](feito/ISSUE_018_DIAGNOSTICOS_PRECIOSOS_AUTO_CURA.md) | `let` sem tipo; o cabeçalho dizia "Aberta" por engano |
+| [#016 WebSockets](feito/ISSUE_016_WEBSOCKETS_BIDIRECTIONAL.md) | Teste ponta a ponta com `chat_ws`. Carga nunca medida |
+| [#013 I/O atômico e JSON](feito/ISSUE_013_STDLIB_ATOMIC_FS_AND_CLEAN_JSON.md) | Teste de execução |
+| [#008 Streaming](feito/ISSUE_008_HYBRID_STORAGE_AND_STREAMING.md) | Range 206/416 testados |
+| [#002–#005](feito/) | Loops, coleções, rotas HTTP, FS/JSON |
+| [#014 Modularização](arquivo/ISSUE_014_MODULARIZACAO_CODEBASE.md) | **Substituída** pela #030; está em `arquivo/` |
+| [#035 Declaração `doc`](arquivo/ISSUE_035_DECLARACAO_DOC.md) | **Descartada** em 30/09: substituída pelo uso direto de Typst (`pdf-typst`) com dados em JSON, sem sobretaxa de tokens |
+| [#036 Biblioteca de documentos](arquivo/ISSUE_036_BIBLIOTECA_DE_DOCUMENTOS.md) | **Descartada** em 30/09: sem modelos prontos, o documento é código; está em `arquivo/` |
+| [#010 Backend C nativo](arquivo/ISSUE_010_GO_INDEPENDENCE_NATIVE_BACKEND.md) | **Descartada** em 04/10: decisão de manter Go como runtime definitivo para usufruir de GC, scheduler e ecossistema sem reinvenção |
+| [#011 Self-hosting](arquivo/ISSUE_011_SELF_HOSTING_COMPILER.md) | **Descartada** em 04/10: foco em produtividade e estabilidade sobre o ecossistema Go |

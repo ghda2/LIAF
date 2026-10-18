@@ -1,0 +1,28 @@
+;; std/html - Server-Driven UI e renderização declarativa de componentes HTML seguros.
+;;
+;;   (import "std/html")
+;;   (let resp Response (html-render 200 "<h1>Olá Mundo</h1>"))
+;;   (let seguro str (html-safe "<script>alert(1)</script>"))
+(module html
+  ;; Cria uma resposta HTTP com Content-Type text/html; charset=utf-8.
+  (pub fn html-render (params (status int) (conteudo str)) (returns Response) (effects)
+    (body
+      (return (html-response status conteudo))))
+
+  ;; Escapa caracteres perigosos (<, >, &, ", ') para prevenir injeção XSS.
+  (pub fn html-safe (params (texto str)) (returns str) (effects)
+    (body
+      (return (html-escape texto))))
+
+  ;; Envolve um conteúdo em uma tag HTML com atributos opcionais.
+  (pub fn html-elem (params (tag str) (attrs str) (conteudo str)) (returns str) (effects)
+    (body
+      (if (str-eq attrs "")
+        (then (return (fmt "<{}>{}</{}>" tag conteudo tag)))
+        (else (return (fmt "<{} {}>{}</{}>" tag attrs conteudo tag))))))
+
+  ;; Cria um fragmento HTML identificado por ID para troca instantânea no DOM (swap).
+  (pub fn html-fragment (params (id str) (conteudo str)) (returns str) (effects)
+    (body
+      (return (fmt "<div id=\"{}\">{}</div>" id conteudo))))
+)

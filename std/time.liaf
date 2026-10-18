@@ -1,0 +1,103 @@
+;; std/time - Manipulação de data, hora, fusos e timestamps Unix.
+;;
+;;   (import "std/time")
+;;   (let agora str (time-now))
+;;   (let ts int (time-now-unix))
+;;   (let expiracao int (time-add-hours ts 24))
+;;   (let legivel str (time-format ts "DD/MM/YYYY HH:mm:ss"))
+(module time
+  ;; Devolve a data e hora atual em formato ISO 8601 UTC (ex: "2026-10-17T12:00:00Z").
+  (pub fn time-now (params) (returns str) (effects clock)
+    (body
+      (return (time-now))))
+
+  ;; Devolve o timestamp Unix atual em segundos.
+  (pub fn time-now-unix (params) (returns int) (effects clock)
+    (body
+      (return (time-now-unix))))
+
+  ;; Devolve o timestamp Unix atual em milissegundos.
+  (pub fn time-now-ms (params) (returns int) (effects clock)
+    (body
+      (return (time-now-ms))))
+
+  ;; Interpreta uma string de data (ISO 8601, RFC 3339 ou DD/MM/YYYY) devolvendo o Unix timestamp.
+  (pub fn time-parse (params (data_str str)) (returns (result int str)) (effects)
+    (body
+      (return (time-parse-iso data_str))))
+
+  ;; Formata um Unix timestamp em string usando mascaras como "YYYY-MM-DD", "DD/MM/YYYY HH:mm:ss" ou "iso".
+  (pub fn time-format (params (unix_ts int) (mascara str)) (returns str) (effects)
+    (body
+      (return (time-format unix_ts mascara))))
+
+  ;; Adiciona segundos a um Unix timestamp.
+  (pub fn time-add (params (unix_ts int) (segundos int)) (returns int) (effects)
+    (body
+      (return (time-add-seconds unix_ts segundos))))
+
+  ;; Adiciona minutos a um Unix timestamp.
+  (pub fn time-add-minutes (params (unix_ts int) (minutos int)) (returns int) (effects)
+    (body
+      (return (time-add-seconds unix_ts (mul minutos 60)))))
+
+  ;; Adiciona horas a um Unix timestamp.
+  (pub fn time-add-hours (params (unix_ts int) (horas int)) (returns int) (effects)
+    (body
+      (return (time-add-seconds unix_ts (mul horas 3600)))))
+
+  ;; Adiciona dias a um Unix timestamp.
+  (pub fn time-add-days (params (unix_ts int) (dias int)) (returns int) (effects)
+    (body
+      (return (time-add-seconds unix_ts (mul dias 86400)))))
+
+  ;; Devolve a diferenca em segundos entre dois timestamps (ts_a - ts_b).
+  (pub fn time-diff (params (ts_a int) (ts_b int)) (returns int) (effects)
+    (body
+      (return (time-diff-seconds ts_a ts_b))))
+
+  ;; Verifica se um Unix timestamp ja passou em relacao ao momento atual.
+  (pub fn time-is-past (params (unix_ts int)) (returns bool) (effects clock)
+    (body
+      (return (lt unix_ts (time-now-unix)))))
+
+  ;; Verifica se um Unix timestamp esta no futuro em relacao ao momento atual.
+  (pub fn time-is-future (params (unix_ts int)) (returns bool) (effects clock)
+    (body
+      (return (gt unix_ts (time-now-unix)))))
+
+  ;; Devolve o ano UTC de um timestamp (ex: 2026).
+  (pub fn time-year (params (unix_ts int)) (returns int) (effects)
+    (body
+      (return (time-year unix_ts))))
+
+  ;; Devolve o mes UTC de um timestamp (1 a 12).
+  (pub fn time-month (params (unix_ts int)) (returns int) (effects)
+    (body
+      (return (time-month unix_ts))))
+
+  ;; Devolve o dia do mes UTC de um timestamp (1 a 31).
+  (pub fn time-day (params (unix_ts int)) (returns int) (effects)
+    (body
+      (return (time-day unix_ts))))
+
+  ;; Devolve a hora UTC de um timestamp (0 a 23).
+  (pub fn time-hour (params (unix_ts int)) (returns int) (effects)
+    (body
+      (return (time-hour unix_ts))))
+
+  ;; Devolve o minuto UTC de um timestamp (0 a 59).
+  (pub fn time-minute (params (unix_ts int)) (returns int) (effects)
+    (body
+      (return (time-minute unix_ts))))
+
+  ;; Devolve o segundo UTC de um timestamp (0 a 59).
+  (pub fn time-second (params (unix_ts int)) (returns int) (effects)
+    (body
+      (return (time-second unix_ts))))
+
+  ;; Devolve o dia da semana UTC (0 = Domingo, 1 = Segunda, ..., 6 = Sabado).
+  (pub fn time-weekday (params (unix_ts int)) (returns int) (effects)
+    (body
+      (return (time-weekday unix_ts))))
+)

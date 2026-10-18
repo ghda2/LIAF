@@ -1,0 +1,21 @@
+;; issue: #043
+;; status: done
+;; effects: io clock
+;; out: 2026 10 17 12 17/10/2026 true true
+
+(let ts int (unwrap-or (time-parse-iso "2026-10-17T12:00:00Z") 0))
+(let ano int (time-year ts))
+(let mes int (time-month ts))
+(let dia int (time-day ts))
+(let hora int (time-hour ts))
+(let fmt_data str (time-format ts "DD/MM/YYYY"))
+(let futuro bool (gt (time-add-seconds ts 3600) ts))
+(let clock_valido bool (gt (time-now-unix) 0))
+
+(println (concat (str-from-int ano) " " 
+                 (str-from-int mes) " " 
+                 (str-from-int dia) " " 
+                 (str-from-int hora) " " 
+                 fmt_data " " 
+                 (str-from-bool futuro) " " 
+                 (str-from-bool clock_valido)))

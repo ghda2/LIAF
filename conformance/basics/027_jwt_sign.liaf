@@ -1,0 +1,21 @@
+;; issue: #027
+;; status: done
+;; out: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.xTauSR2dlM1bJuIiwlRHy0Sj-66g5_7qL2RKWT2u5J4
+;; out: jwt: secret must have at least 32 bytes
+;; out: jwt: secret must have at least 32 bytes
+(module caso
+  (import "std/jwt")
+
+  (fn mostrar (params (r (result str str))) (returns void) (effects io)
+    (body
+      (match r
+        (ok v (println v))
+        (err e (println e)))))
+
+  (fn main (params) (returns void) (effects io)
+    (body
+      ;; Vetor calculado fora da LIAF, com o crypto do Node.
+      (mostrar (jwt-sign "a-string-secret-at-least-256-bits-long" "{\"sub\":\"1234567890\",\"name\":\"John Doe\",\"iat\":1516239022}"))
+      ;; Segredo vazio (variavel de ambiente ausente) e segredo de 31 bytes.
+      (mostrar (jwt-sign "" "{\"exp\":4102444800}"))
+      (mostrar (jwt-sign "0123456789012345678901234567890" "{\"exp\":4102444800}")))))

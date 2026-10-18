@@ -1,0 +1,39 @@
+// Exemplo de Server-Driven UI (HTML Over The Wire / HTMX)
+module server_driven_ui_exemplo
+
+import "std/html"
+import "std/cli"
+
+pub struct Item
+  id int
+  nome str
+  preco float
+end
+
+// Rota que entrega a página HTML principal
+route GET "/" () Response
+  let cabecalho = "<!DOCTYPE html><html lang=\"pt-BR\"><head><meta charset=\"UTF-8\"><title>LIAF Server-Driven UI</title><script src=\"https://unpkg.com/htmx.org@2.0.2\"></script><style>body{font-family:system-ui,sans-serif;max-width:600px;margin:40px auto;}.card{background:#f3f4f6;padding:16px;border-radius:8px;margin-top:12px;}button{background:#2563eb;color:white;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;}</style></head>"
+  let corpo = "<body><h1>Painel Dinâmico</h1><button hx-get=\"/componente/produtos\" hx-target=\"#conteudo\" hx-swap=\"innerHTML\">Carregar Produtos</button><div id=\"conteudo\" class=\"card\">Clique no botão acima para carregar do servidor.</div></body></html>"
+  let html_pagina = concat(cabecalho, corpo)
+  html-render(200, html_pagina)
+end
+
+// Rota que retorna apenas o fragmento HTML renderizado no backend (sem JSON no front)
+route GET "/componente/produtos" () Response
+  let p1 = new Item(1, "Café Especial", 18.5)
+  let p2 = new Item(2, "Leite Integral", 6.0)
+
+  let itens_html = fmt("<ul><li>{} - R$ {}</li><li>{} - R$ {}</li></ul>",
+    html-safe(p1.nome), str-from-float(p1.preco),
+    html-safe(p2.nome), str-from-float(p2.preco)
+  )
+
+  let fragmento = html-elem("div", "", concat("<h3>Lista de Produtos Atualizada:</h3>", itens_html))
+  html-render(200, fragmento)
+end
+
+fn main() void effects(fs, io, net)
+  let porta = cli-get-arg(0, "8080")
+  println(fmt("Servidor rodando em http://localhost:{}", porta))
+  let _ = serve-hybrid("./public", porta)
+end

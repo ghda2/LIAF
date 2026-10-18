@@ -1,0 +1,33 @@
+;; std/fs - Manipulação de sistema de arquivos e diretórios.
+;;
+;;   (import "std/fs")
+;;   (try (fs-make-dir "dados/backup"))
+;;   (let arquivos (list str) (try (fs-read-dir "dados")))
+;;   (if (fs-is-directory "dados/backup") (println "É diretório"))
+;;   (try (fs-delete "dados/backup"))
+(module fs
+  ;; Cria a árvore de diretórios especificada (equivalente a mkdir -p).
+  (pub fn fs-make-dir (params (dir str)) (returns (result bool str)) (effects fs)
+    (body
+      (return (fs-mkdir-all dir))))
+
+  ;; Remove arquivo ou diretório recursivamente (equivalente a rm -rf).
+  (pub fn fs-delete (params (path str)) (returns (result bool str)) (effects fs)
+    (body
+      (return (fs-remove-all path))))
+
+  ;; Lista todos os arquivos e pastas dentro de um diretório.
+  (pub fn fs-read-dir (params (path str)) (returns (result (list str) str)) (effects fs)
+    (body
+      (return (fs-list-dir path))))
+
+  ;; Verifica se o caminho especificado é um diretório.
+  (pub fn fs-is-directory (params (path str)) (returns bool) (effects fs)
+    (body
+      (return (fs-is-dir path))))
+
+  ;; Devolve o tamanho em bytes do arquivo especificado.
+  (pub fn fs-size (params (path str)) (returns (result int str)) (effects fs)
+    (body
+      (return (fs-file-size path))))
+)

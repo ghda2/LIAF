@@ -1,0 +1,17 @@
+;; issue: crypto
+;; status: done
+;; effects: io rand
+;; out: true
+;; out: true
+;; out: false
+;; out: false
+;; out: 43
+;; out: false
+(let h str (password-hash "correct horse"))
+(println (str-starts-with h "$argon2id$v=19$"))
+(println (password-verify "correct horse" h))
+(println (password-verify "correct horsE" h))
+(println (password-verify "correct horse" "texto qualquer"))
+(let t1 str (random-token))
+(println (str-len t1))
+(println (str-eq t1 (random-token)))

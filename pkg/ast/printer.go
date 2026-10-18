@@ -53,47 +53,33 @@ func (p *printer) printTopLevel(decl TopLevel, isLastDecl bool) {
 		p.sb.WriteString(fmt.Sprintf("(import %q)%s", d.Path, suffix))
 	case *StructDecl:
 		p.printStruct(d, suffix)
+	case *EnumDecl:
+		p.printEnum(d, suffix)
 	case *FuncDecl:
 		p.printFunc(d, suffix)
+	case *RouteDecl:
+		p.printRoute(d, suffix)
+	case *WSRouteDecl:
+		p.printWSRoute(d, suffix)
 	}
 }
 
-func (p *printer) printStruct(s *StructDecl, suffix string) {
-	p.sb.WriteString("(struct " + s.Name + "\n")
-	p.indent++
-	p.writeIndent()
-	if len(s.Fields) == 0 {
-		p.sb.WriteString("(fields))" + suffix)
-		p.indent--
-		return
-	}
-	p.sb.WriteString("(fields\n")
-	p.indent++
-	for i, f := range s.Fields {
-		p.writeIndent()
-		if i == len(s.Fields)-1 {
-			p.sb.WriteString(fmt.Sprintf("(%s %s)))%s", f.Name, f.Type.String(), suffix))
-		} else {
-			p.sb.WriteString(fmt.Sprintf("(%s %s)\n", f.Name, f.Type.String()))
-		}
-	}
-	p.indent -= 2
-}
-
-func (p *printer) printFunc(f *FuncDecl, suffix string) {
-	p.sb.WriteString("(fn " + f.Name + "\n")
+// printWSRoute imprime a forma canonica de (ws-route ...). Blocos opcionais
+// vazios sao omitidos: um (on-close) sem instrucao nenhuma seria ruido, e a
+// forma canonica precisa ser unica para o fmt ser idempotente.
+func (p *printer) printWSRoute(w *WSRouteDecl, suffix string) {
+	p.sb.WriteString(fmt.Sprintf("(ws-route %q\n", w.Path))
 	p.indent++
 
-	// Params
 	p.writeIndent()
-	if len(f.Params) == 0 {
+	if len(w.Params) == 0 {
 		p.sb.WriteString("(params)\n")
 	} else {
 		p.sb.WriteString("(params\n")
 		p.indent++
-		for i, param := range f.Params {
+		for i, param := range w.Params {
 			p.writeIndent()
-			if i == len(f.Params)-1 {
+			if i == len(w.Params)-1 {
 				p.sb.WriteString(fmt.Sprintf("(%s %s))\n", param.Name, param.Type.String()))
 			} else {
 				p.sb.WriteString(fmt.Sprintf("(%s %s)\n", param.Name, param.Type.String()))
@@ -102,13 +88,126 @@ func (p *printer) printFunc(f *FuncDecl, suffix string) {
 		p.indent--
 	}
 
-	// Returns
-	p.writeIndent()
-	p.sb.WriteString(fmt.Sprintf("(returns %s)\n", f.ReturnType.String()))
-
-	// Effects
 	p.writeIndent()
 	p.sb.WriteString("(effects")
+	effects := append([]string(nil), w.Effects...)
+	sort.Strings(effects)
+	for _, eff := range effects {
+		p.sb.WriteString(" " + eff)
+	}
+	p.sb.WriteString(")\n")
+
+	// O ultimo bloco impresso carrega o fechamento da propria ws-route.
+	last := "on-message"
+	if len(w.OnClose) > 0 {
+		last = "on-close"
+	}
+
+	if w.OnErrVar != "" {
+		p.writeIndent()
+		p.sb.WriteString("(on-err " + w.OnErrVar)
+		p.printBlock(w.OnErrBody, "\n")
+	}
+	if len(w.OnOpen) > 0 {
+		p.writeIndent()
+		p.sb.WriteString("(on-open")
+		p.printBlock(w.OnOpen, "\n")
+	}
+
+	p.writeIndent()
+	p.sb.WriteString("(on-message " + w.MsgVar)
+	if last == "on-message" {
+		p.printBlock(w.OnMessage, ")"+suffix)
+	} else {
+		p.printBlock(w.OnMessage, "\n")
+		p.writeIndent()
+		p.sb.WriteString("(on-close")
+		p.printBlock(w.OnClose, ")"+suffix)
+	}
+
+	p.indent--
+}
+
+func (p *printer) printStruct(s *StructDecl, suffix string) {
+	if s.IsPub {
+		p.sb.WriteString("(pub struct " + s.Name)
+	} else {
+		p.sb.WriteString("(struct " + s.Name)
+	}
+	if len(s.Fields) == 0 {
+		p.sb.WriteString(")" + suffix)
+		return
+	}
+	for _, f := range s.Fields {
+		p.sb.WriteString(fmt.Sprintf(" (%s %s)", f.Name, f.Type.String()))
+	}
+	p.sb.WriteString(")" + suffix)
+}
+
+func (p *printer) printEnum(e *EnumDecl, suffix string) {
+	if e.IsPub {
+		p.sb.WriteString("(pub enum " + e.Name)
+	} else {
+		p.sb.WriteString("(enum " + e.Name)
+	}
+	for _, v := range e.Variants {
+		if len(v.Fields) == 0 {
+			p.sb.WriteString(" " + v.Name)
+		} else {
+			p.sb.WriteString(" (" + v.Name)
+			for _, f := range v.Fields {
+				p.sb.WriteString(fmt.Sprintf(" (%s %s)", f.Name, f.Type.String()))
+			}
+			p.sb.WriteString(")")
+		}
+	}
+	p.sb.WriteString(")" + suffix)
+}
+
+func isParenExpr(expr Expr) bool {
+	switch e := expr.(type) {
+	case *CallExpr:
+		// s.campo e um atomo impresso sem parenteses: como retorno implicito
+		// seria lido como comando, entao fica (return s.campo).
+		_, isPath := fieldPath(e)
+		return !isPath
+	case *BinaryOpExpr, *IfExpr, *MatchExpr, *TryExpr:
+		return true
+	default:
+		return false
+	}
+}
+
+func (p *printer) printFunc(f *FuncDecl, suffix string) {
+	kind := "fn"
+	if f.IsMiddleware {
+		kind = "middleware"
+	}
+	if f.IsPub {
+		p.sb.WriteString("(pub " + kind + " " + f.Name + " ")
+	} else {
+		p.sb.WriteString("(" + kind + " " + f.Name + " ")
+	}
+
+	// Params
+	if len(f.Params) == 0 {
+		p.sb.WriteString("()")
+	} else {
+		p.sb.WriteString("(")
+		for i, param := range f.Params {
+			if i > 0 {
+				p.sb.WriteString(" ")
+			}
+			p.sb.WriteString(fmt.Sprintf("(%s %s)", param.Name, param.Type.String()))
+		}
+		p.sb.WriteString(")")
+	}
+
+	// Returns
+	p.sb.WriteString(" " + f.ReturnType.String())
+
+	// Effects
+	p.sb.WriteString(" (effects")
 	if len(f.Effects) > 0 {
 		effects := append([]string(nil), f.Effects...)
 		sort.Strings(effects)
@@ -116,27 +215,109 @@ func (p *printer) printFunc(f *FuncDecl, suffix string) {
 			p.sb.WriteString(" " + eff)
 		}
 	}
-	p.sb.WriteString(")\n")
+	p.sb.WriteString(")")
 
-	// Body
-	p.writeIndent()
-	if len(f.Body) == 0 {
-		p.sb.WriteString("(body))" + suffix)
-	} else {
-		p.sb.WriteString("(body\n")
+	// On-Err (opcional)
+	if f.OnErrVar != "" {
+		p.sb.WriteString("\n")
 		p.indent++
-		for i, stmt := range f.Body {
-			p.writeIndent()
-			if i == len(f.Body)-1 {
-				p.printStmt(stmt, "))"+suffix)
-			} else {
-				p.printStmt(stmt, "")
-				p.sb.WriteString("\n")
-			}
-		}
+		p.writeIndent()
+		p.sb.WriteString("(on-err " + f.OnErrVar)
+		p.printBlock(f.OnErrBody, "")
 		p.indent--
 	}
 
+	// Body sem tag (body ...)
+	if len(f.Body) == 0 {
+		p.sb.WriteString(")" + suffix)
+		return
+	}
+
+	p.sb.WriteString("\n")
+	p.indent++
+	for i, stmt := range f.Body {
+		p.writeIndent()
+		isLast := i == len(f.Body)-1
+		if isLast {
+			if retStmt, ok := stmt.(*ReturnStmt); ok && f.ReturnType.String() != "void" && retStmt.Value != nil && isParenExpr(retStmt.Value) {
+				p.sb.WriteString(formatExpr(retStmt.Value) + ")" + suffix)
+				continue
+			}
+			p.printStmt(stmt, ")"+suffix)
+		} else {
+			p.printStmt(stmt, "")
+			p.sb.WriteString("\n")
+		}
+	}
+	p.indent--
+}
+
+func (p *printer) printRoute(r *RouteDecl, suffix string) {
+	p.sb.WriteString(fmt.Sprintf("(route %s %q ", r.Method, r.Path))
+	if len(r.Middlewares) > 0 {
+		p.sb.WriteString("(with " + strings.Join(r.Middlewares, " ") + ") ")
+	}
+
+	// Params
+	if len(r.Params) == 0 {
+		p.sb.WriteString("()")
+	} else {
+		p.sb.WriteString("(")
+		for i, param := range r.Params {
+			if i > 0 {
+				p.sb.WriteString(" ")
+			}
+			p.sb.WriteString(fmt.Sprintf("(%s %s)", param.Name, param.Type.String()))
+		}
+		p.sb.WriteString(")")
+	}
+
+	// Returns
+	p.sb.WriteString(" " + r.ReturnType.String())
+
+	// Effects
+	p.sb.WriteString(" (effects")
+	if len(r.Effects) > 0 {
+		effects := append([]string(nil), r.Effects...)
+		sort.Strings(effects)
+		for _, eff := range effects {
+			p.sb.WriteString(" " + eff)
+		}
+	}
+	p.sb.WriteString(")")
+
+	// On-Err (opcional)
+	if r.OnErrVar != "" {
+		p.sb.WriteString("\n")
+		p.indent++
+		p.writeIndent()
+		p.sb.WriteString("(on-err " + r.OnErrVar)
+		p.printBlock(r.OnErrBody, "")
+		p.indent--
+	}
+
+	// Body sem tag (body ...)
+	if len(r.Body) == 0 {
+		p.sb.WriteString(")" + suffix)
+		return
+	}
+
+	p.sb.WriteString("\n")
+	p.indent++
+	for i, stmt := range r.Body {
+		p.writeIndent()
+		isLast := i == len(r.Body)-1
+		if isLast {
+			if retStmt, ok := stmt.(*ReturnStmt); ok && r.ReturnType.String() != "void" && retStmt.Value != nil && isParenExpr(retStmt.Value) {
+				p.sb.WriteString(formatExpr(retStmt.Value) + ")" + suffix)
+				continue
+			}
+			p.printStmt(stmt, ")"+suffix)
+		} else {
+			p.printStmt(stmt, "")
+			p.sb.WriteString("\n")
+		}
+	}
 	p.indent--
 }
 
@@ -155,19 +336,61 @@ func (p *printer) printStmt(stmt Stmt, suffix string) {
 			p.sb.WriteString(" " + s.Name + " " + formatExpr(s.Collection))
 		}
 		p.printBlock(s.Body, suffix)
+	case *DBTransactionStmt:
+		p.sb.WriteString("(db-transaction " + s.Conn)
+		p.printBlock(s.Body, suffix)
 	case *MatchStmt:
+		if len(s.Cases) > 0 {
+			p.sb.WriteString("(match " + formatExpr(s.Value) + "\n")
+			p.indent++
+			for i, c := range s.Cases {
+				p.writeIndent()
+				suf := ""
+				if i == len(s.Cases)-1 {
+					suf = ")" + suffix
+				}
+				vars := ""
+				if len(c.Variables) > 0 {
+					vars = " (" + strings.Join(c.Variables, " ") + ")"
+				}
+				p.sb.WriteString(fmt.Sprintf("(case %s%s", c.Pattern, vars))
+				p.printBlock(c.Body, suf)
+				if i < len(s.Cases)-1 {
+					p.sb.WriteString("\n")
+				}
+			}
+			p.indent--
+			return
+		}
 		p.sb.WriteString("(match " + formatExpr(s.Value) + "\n")
 		p.indent++
 		p.writeIndent()
-		p.sb.WriteString("(ok " + s.OKName)
-		p.printBlock(s.OK, "")
-		p.sb.WriteString("\n")
-		p.writeIndent()
-		p.sb.WriteString("(err " + s.ErrName)
-		p.printBlock(s.Err, ")"+suffix)
+		if s.IsOption {
+			p.sb.WriteString("(some " + s.OKName)
+			p.printBlock(s.OK, "")
+			p.sb.WriteString("\n")
+			p.writeIndent()
+			if s.ErrName != "" {
+				p.sb.WriteString("(none " + s.ErrName)
+			} else {
+				p.sb.WriteString("(none")
+			}
+			p.printBlock(s.Err, ")"+suffix)
+		} else {
+			p.sb.WriteString("(ok " + s.OKName)
+			p.printBlock(s.OK, "")
+			p.sb.WriteString("\n")
+			p.writeIndent()
+			p.sb.WriteString("(err " + s.ErrName)
+			p.printBlock(s.Err, ")"+suffix)
+		}
 		p.indent--
 	case *LetStmt:
-		p.sb.WriteString(fmt.Sprintf("(let %s %s %s)%s", s.Name, s.Type.String(), formatExpr(s.Value), suffix))
+		if s.Type != nil {
+			p.sb.WriteString(fmt.Sprintf("(let %s %s %s)%s", s.Name, s.Type.String(), formatExpr(s.Value), suffix))
+		} else {
+			p.sb.WriteString(fmt.Sprintf("(let %s %s)%s", s.Name, formatExpr(s.Value), suffix))
+		}
 	case *SetStmt:
 		p.sb.WriteString(fmt.Sprintf("(set %s %s)%s", s.Name, formatExpr(s.Value), suffix))
 	case *ReturnStmt:
@@ -183,7 +406,13 @@ func (p *printer) printStmt(stmt Stmt, suffix string) {
 	case *SendStmt:
 		p.sb.WriteString(fmt.Sprintf("(send %s %s)%s", formatExpr(s.Channel), formatExpr(s.Value), suffix))
 	case *ExprStmt:
-		p.sb.WriteString(fmt.Sprintf("(do %s)%s", formatExpr(s.Expr), suffix))
+		if call, ok := s.Expr.(*CallExpr); ok && !call.HasCall && strings.HasPrefix(formatExpr(call), "(") {
+			p.sb.WriteString(formatExpr(s.Expr) + suffix)
+		} else if _, ok := s.Expr.(*TryExpr); ok {
+			p.sb.WriteString(formatExpr(s.Expr) + suffix)
+		} else {
+			p.sb.WriteString(fmt.Sprintf("(do %s)%s", formatExpr(s.Expr), suffix))
+		}
 	}
 }
 
@@ -269,6 +498,33 @@ func (p *printer) printIf(s *IfStmt, suffix string) {
 	p.indent--
 }
 
+// FormatExpr devolve a forma canonica de uma expressao, a mesma que liafc fmt
+// imprime. O checker a usa para montar o SuggestedPatch dos diagnosticos.
+func FormatExpr(expr Expr) string { return formatExpr(expr) }
+
+// fieldPath devolve a forma canonica com ponto (issue #012) de um acesso a
+// campo cuja base e uma variavel ou outra cadeia de campos: (field s x) vira
+// s.x e (field (field a b) c) vira a.b.c. Outras bases, como
+// (field (get xs 0) nome), ficam na forma com parenteses.
+func fieldPath(e *CallExpr) (string, bool) {
+	if e.Func != "field" || len(e.Args) != 2 {
+		return "", false
+	}
+	name, ok := e.Args[1].(*IdentExpr)
+	if !ok || name.Name == "true" || name.Name == "false" {
+		return "", false
+	}
+	switch base := e.Args[0].(type) {
+	case *IdentExpr:
+		return base.Name + "." + name.Name, true
+	case *CallExpr:
+		if inner, ok := fieldPath(base); ok {
+			return inner + "." + name.Name, true
+		}
+	}
+	return "", false
+}
+
 func formatExpr(expr Expr) string {
 	switch e := expr.(type) {
 	case *IntLiteral:
@@ -285,16 +541,52 @@ func formatExpr(expr Expr) string {
 	case *IdentExpr:
 		return e.Name
 	case *CallExpr:
-		res := "(call " + e.Func
+		if path, ok := fieldPath(e); ok {
+			return path
+		}
+		var res string
+		if e.HasCall {
+			res = "(call " + e.Func
+		} else {
+			res = "(" + e.Func
+		}
 		for _, arg := range e.Args {
 			res += " " + formatExpr(arg)
 		}
 		res += ")"
 		return res
+	case *TryExpr:
+		return fmt.Sprintf("(try %s)", formatExpr(e.Expr))
 	case *BinaryOpExpr:
 		return fmt.Sprintf("(%s %s %s)", e.Op, formatExpr(e.Left), formatExpr(e.Right))
 	case *RecvExpr:
 		return fmt.Sprintf("(recv %s)", formatExpr(e.Channel))
+	case *IfExpr:
+		if e.Else != nil {
+			return fmt.Sprintf("(if %s (then %s) (else %s))", formatExpr(e.Condition), formatExpr(e.Then), formatExpr(e.Else))
+		}
+		return fmt.Sprintf("(if %s (then %s))", formatExpr(e.Condition), formatExpr(e.Then))
+	case *MatchExpr:
+		if len(e.Cases) > 0 {
+			var parts []string
+			for _, c := range e.Cases {
+				vars := ""
+				if len(c.Variables) > 0 {
+					vars = " (" + strings.Join(c.Variables, " ") + ")"
+				}
+				parts = append(parts, fmt.Sprintf("(case %s%s %s)", c.Pattern, vars, formatExpr(c.ExprBody)))
+			}
+			return fmt.Sprintf("(match %s %s)", formatExpr(e.Value), strings.Join(parts, " "))
+		}
+		if e.IsOption {
+			nonePart := "(none"
+			if e.ErrName != "" && e.ErrName != "_" {
+				nonePart += " " + e.ErrName
+			}
+			nonePart += " " + formatExpr(e.Err) + ")"
+			return fmt.Sprintf("(match %s (some %s %s) %s)", formatExpr(e.Value), e.OKName, formatExpr(e.OK), nonePart)
+		}
+		return fmt.Sprintf("(match %s (ok %s %s) (err %s %s))", formatExpr(e.Value), e.OKName, formatExpr(e.OK), e.ErrName, formatExpr(e.Err))
 	default:
 		return ""
 	}

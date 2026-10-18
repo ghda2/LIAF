@@ -1,0 +1,50 @@
+// Exemplo de Ferramenta CLI e Processamento de Dados (Propósito Geral)
+module cli_tool_exemplo
+
+import "std/cli"
+import "std/fs"
+import "std/csv"
+
+fn exibir_ajuda() void effects(io)
+  println("Utilitário de Linha de Comando LIAF")
+  println("Uso:")
+  println("  cli_tool --entrada=dados.csv --saida=processado.csv")
+  println("  cli_tool --ajuda")
+end
+
+fn processar_csv(entrada str, saida str) (result bool str) effects(fs, io)
+  if not(fs-exists(entrada))
+    return err(fmt("Arquivo '{}' não encontrado.", entrada))
+  end
+
+  let conteudo = try fs-read-file(entrada)
+  let linhas = try csv-decode(conteudo)
+
+  println(fmt("Total de registros lidos: {}", list-len(linhas)))
+
+  let csv_gerado = csv-serialize(linhas)
+  let _ = fs-write-file(saida, csv_gerado)
+  println(fmt("Relatório salvo com sucesso em: {}", saida))
+  ok(true)
+end
+
+fn main() void effects(io, fs)
+  // Checar flag de ajuda
+  if cli-has-flag("--ajuda") || cli-has-flag("-h")
+    exibir_ajuda()
+    cli-exit(0)
+  end
+
+  let arquivo_entrada = cli-get-flag("--entrada", "dados.csv")
+  let arquivo_saida = cli-get-flag("--saida", "relatorio.csv")
+
+  println(fmt("Processando arquivo: {}", arquivo_entrada))
+
+  match processar_csv(arquivo_entrada, arquivo_saida)
+    case ok(_)
+      println("Processamento concluído com sucesso.")
+    case err(msg)
+      println(fmt("Erro no processamento: {}", msg))
+      cli-exit(1)
+  end
+end

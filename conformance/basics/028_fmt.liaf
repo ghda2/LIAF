@@ -1,0 +1,15 @@
+;; issue: #028
+;; status: done
+;; out: Ola, Maria! Voce tem 30 anos.
+;; out: Coordenadas: x=10, y=20
+;; out: Chaves escapadas: {valor}
+
+(let nome str "Maria")
+(let idade int 30)
+(println (fmt "Ola, {}! Voce tem {} anos." nome idade))
+
+(let x int 10)
+(let y int 20)
+(println (fmt "Coordenadas: x={}, y={}" x y))
+
+(println (fmt "Chaves escapadas: {{{}}}" "valor"))

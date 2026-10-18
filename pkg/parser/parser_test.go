@@ -48,7 +48,11 @@ func TestParseCanonicalMathExample(t *testing.T) {
 	}
 
 	formatted := ast.Format(mod)
-	expectedClean := strings.TrimSpace(input)
+	expectedClean := strings.TrimSpace(`(module example
+  (fn sum ((a int) (b int)) int (effects)
+    (add a b))
+  (fn main () void (effects io)
+    (do (call println (call sum 20 22)))))`)
 	formattedClean := strings.TrimSpace(formatted)
 
 	if expectedClean != formattedClean {
@@ -122,8 +126,20 @@ func TestParseConcurrencyExample(t *testing.T) {
 	}
 
 	formatted := ast.Format(mod)
-	if strings.TrimSpace(formatted) != strings.TrimSpace(input) {
-		t.Errorf("formatação canônica divergente!\nEsperado:\n%s\nObtido:\n%s", strings.TrimSpace(input), strings.TrimSpace(formatted))
+	expectedClean := strings.TrimSpace(`(module concurrency-example
+  (fn worker ((channel (chan str)) (id int)) void (effects clock)
+    (do (call sleep-ms 50))
+    (send channel (call concat "worker-" (call str-from-int id))))
+  (fn main () void (effects io spawn)
+    (let channel (chan str) (call make-chan str))
+    (spawn (call worker channel 1))
+    (spawn (call worker channel 2))
+    (let first str (recv channel))
+    (let second str (recv channel))
+    (do (call println first))
+    (do (call println second))))`)
+	if strings.TrimSpace(formatted) != expectedClean {
+		t.Errorf("formatação canônica divergente!\nEsperado:\n%s\nObtido:\n%s", expectedClean, strings.TrimSpace(formatted))
 	}
 }
 
@@ -207,19 +223,19 @@ func TestParseIfThenElse(t *testing.T) {
 }
 
 func TestParseErrors(t *testing.T) {
-	badInput := `(module erro (fn foo (params) (returns void) (effects) (body)))`
+	badInput := `(outro modulo)`
 	l := lexer.New(badInput)
 	p := New(l, "erro.liaf")
 	mod := p.ParseModule()
-	if len(p.Diagnostics) == 0 && mod != nil {
-		t.Logf("ParseModule com sucesso: %v", mod.Name)
+	if mod != nil || len(p.Diagnostics) == 0 {
+		t.Errorf("esperava falha ao não ter 'module' após '('")
 	}
 
-	badInput2 := `module sem-parenteses`
+	badInput2 := `42`
 	l2 := lexer.New(badInput2)
 	p2 := New(l2, "erro2.liaf")
 	mod2 := p2.ParseModule()
 	if mod2 != nil || len(p2.Diagnostics) == 0 {
-		t.Errorf("esperava falha ao não iniciar com '('")
+		t.Errorf("esperava falha ao ter top-level inválido na sintaxe linear")
 	}
 }

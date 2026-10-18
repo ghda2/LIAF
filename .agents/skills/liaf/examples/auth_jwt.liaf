@@ -1,0 +1,73 @@
+// Autenticação JWT, hash de senhas (Argon2id) e rotas protegidas.
+module auth_jwt_exemplo
+
+import "std/auth"
+import "std/jwt"
+
+pub struct LoginInput
+  email str
+  senha str
+end
+
+pub struct UsuarioClaims
+  sub str
+  role str
+  exp int
+end
+
+pub struct TokenResposta
+  token str
+  tipo str
+end
+
+pub struct BoasVindas
+  mensagem str
+  role str
+end
+
+// O segredo vem do ambiente (pelo menos 32 bytes); jwt-sign recusa um segredo curto,
+// então uma variável esquecida vira erro em vez de um token forjável.
+fn segredo_jwt() str effects(env)
+  unwrap-or(env-get("JWT_SEGREDO"), "")
+end
+
+// Em produção o hash vem do banco; aqui ele é gerado na hora só para o exemplo.
+route POST "/api/login" (input LoginInput) Response effects(clock, env, rand)
+  on-err msg
+    json-error(400, msg)
+  end
+  let hash_esperado = try auth-hash-password("senha-de-exemplo")
+  if !auth-verify-password(input.senha, hash_esperado)
+    return json-error(401, "credenciais invalidas")
+  end
+
+  let expira = time-now-unix() + 86400
+  let claims = new UsuarioClaims(input.email, "admin", expira)
+  let token = try jwt-sign(segredo_jwt(), try json-encode(claims))
+  json-response(200, try json-encode(new TokenResposta(token, "Bearer")))
+end
+
+// auth-guard-jwt devolve o payload, ou já uma Response 401 pronta: o erro dele é
+// Response, não str, então ele se trata com match (um try aqui não compila).
+route GET "/api/painel" (req Request) Response effects(clock, env, io)
+  match auth-guard-jwt(req, segredo_jwt())
+    case ok(payload)
+      painel(payload)
+    case err(negado)
+      negado
+  end
+end
+
+fn painel(payload str) Response effects(io)
+  on-err msg
+    json-error(401, msg)
+  end
+  let claims = try json-decode(payload, UsuarioClaims)
+  println(fmt("acesso autorizado para {}", claims.sub))
+  json-response(200, try json-encode(new BoasVindas(fmt("Bem-vindo, {}", claims.sub), claims.role)))
+end
+
+fn main() void effects(fs, io, net)
+  println("Servidor de autenticação em http://localhost:8080 (defina JWT_SEGREDO)")
+  unwrap-or(serve-hybrid("./public", "8080"), false)
+end

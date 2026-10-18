@@ -1,0 +1,30 @@
+;; issue: #028
+;; status: done
+;; out: Ok: sucesso
+;; out: Fallback: padrao
+;; out: Some: 42
+;; out: None: 0
+
+(let r1 (result str str) (ok "sucesso"))
+(let msg1 str (match r1
+  (ok v (fmt "Ok: {}" v))
+  (err _ "Err")))
+(println msg1)
+
+(let r2 (result str str) (err "falha"))
+(let msg2 str (match r2
+  (ok v (fmt "Ok: {}" v))
+  (err _ "Fallback: padrao")))
+(println msg2)
+
+(let o1 (option int) (some 42))
+(let val1 int (match o1
+  (some n n)
+  (none 0)))
+(println (fmt "Some: {}" val1))
+
+(let o2 (option int) (none int))
+(let val2 int (match o2
+  (some n n)
+  (none 0)))
+(println (fmt "None: {}" val2))

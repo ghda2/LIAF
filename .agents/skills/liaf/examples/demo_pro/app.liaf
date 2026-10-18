@@ -1,0 +1,333 @@
+// Mission Control — Kanban colaborativo em tempo real, 100% Server-Driven UI.
+//
+// O navegador não tem framework, nem estado, nem build: tudo que aparece na tela
+// (colunas, cartões, gráficos SVG, avisos) é HTML renderizado AQUI e trocado no
+// DOM pelo HTMX. Vários navegadores ficam sincronizados por um WebSocket.
+module mission_control
+
+import "std/html"
+import "std/cli"
+
+pub struct Card
+  id int
+  title str
+  owner str
+  status str
+  priority int
+  created int
+end
+
+pub struct CountRow
+  total int
+end
+
+// ---------------------------------------------------------------------------
+// Banco (SQLite). db-connect compartilha o pool, então conectar por requisição
+// é o jeito idiomático.
+// ---------------------------------------------------------------------------
+
+fn conectar() (result DBConnection str) effects(db)
+  db-connect("sqlite", "board.db")
+end
+
+fn iniciar_banco() (result bool str) effects(db)
+  let conn = try conectar()
+  try db-exec(conn, "CREATE TABLE IF NOT EXISTS cards (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, owner TEXT NOT NULL, status TEXT NOT NULL, priority INTEGER NOT NULL, created INTEGER NOT NULL)")
+  let existentes = try db-query(conn, "SELECT COUNT(*) AS total FROM cards", CountRow)
+  let vazio = match list-get(existentes, 0)
+    case ok(linha)
+      linha.total == 0
+    case err(_)
+      true
+  end
+  if vazio
+    try db-exec(conn, "INSERT INTO cards (title, owner, status, priority, created) VALUES (?1, ?2, ?3, ?4, 0)", "Desenhar a landing page", "Ana", "todo", 2)
+    try db-exec(conn, "INSERT INTO cards (title, owner, status, priority, created) VALUES (?1, ?2, ?3, ?4, 0)", "Configurar CI/CD", "Bruno", "todo", 1)
+    try db-exec(conn, "INSERT INTO cards (title, owner, status, priority, created) VALUES (?1, ?2, ?3, ?4, 0)", "Corrigir bug do checkout", "Carla", "doing", 3)
+    try db-exec(conn, "INSERT INTO cards (title, owner, status, priority, created) VALUES (?1, ?2, ?3, ?4, 0)", "Migrar banco para Postgres", "Diego", "doing", 2)
+    try db-exec(conn, "INSERT INTO cards (title, owner, status, priority, created) VALUES (?1, ?2, ?3, ?4, 0)", "Publicar v1.0", "Ana", "done", 3)
+    try db-exec(conn, "INSERT INTO cards (title, owner, status, priority, created) VALUES (?1, ?2, ?3, ?4, 0)", "Escrever documentação", "Bruno", "done", 1)
+  end
+  ok(true)
+end
+
+fn contar(conn DBConnection, status str) int effects(db)
+  let linhas = match db-query(conn, "SELECT COUNT(*) AS total FROM cards WHERE status = ?1", CountRow, status)
+    case ok(l)
+      l
+    case err(_)
+      make-list(CountRow)
+  end
+  match list-get(linhas, 0)
+    case ok(linha)
+      linha.total
+    case err(_)
+      0
+  end
+end
+
+// ---------------------------------------------------------------------------
+// Utilidades
+// ---------------------------------------------------------------------------
+
+fn campo(req Request, nome str) str
+  let valor = match request-form(req, nome)
+    case ok(v)
+      v
+    case err(_)
+      ""
+  end
+  valor
+end
+
+fn proporcao(parte int, total int, maximo int) int
+  if total == 0
+    return 0
+  end
+  let r = match parte * maximo / total
+    case ok(v)
+      v
+    case err(_)
+      0
+  end
+  r
+end
+
+fn aviso(classe str, mensagem str) Response
+  let fragmento = concat("<div class=\"toast ", classe, "\">", html-safe(mensagem), "</div>")
+  response-set-header(response-set-header(html-render(200, fragmento), "HX-Retarget", "#toast"), "HX-Reswap", "innerHTML")
+end
+
+fn avisar_todos() void effects(net)
+  let _ = ws-broadcast("board", "refresh")
+end
+
+// ---------------------------------------------------------------------------
+// Componentes HTML (cada função devolve um pedaço de tela)
+// ---------------------------------------------------------------------------
+
+fn botao_mover(id str, destino str, rotulo str, classe str) str
+  concat("<button class=\"mv ", classe, "\" title=\"Mover\" hx-post=\"/cards/", id, "/move?to=", destino, "\">", rotulo, "</button>")
+end
+
+fn card_html(c Card) str
+  let id = str-from-int(c.id)
+  let classe = "prio-baixa"
+  let rotulo = "Baixa"
+  if c.priority == 2
+    set classe = "prio-media"
+    set rotulo = "Média"
+  end
+  if c.priority >= 3
+    set classe = "prio-alta"
+    set rotulo = "Alta"
+  end
+
+  let esquerda = ""
+  let direita = ""
+  if str-eq(c.status, "doing")
+    set esquerda = botao_mover(id, "todo", "←", "")
+    set direita = botao_mover(id, "done", "→", "")
+  end
+  if str-eq(c.status, "todo")
+    set direita = botao_mover(id, "doing", "→", "")
+  end
+  if str-eq(c.status, "done")
+    set esquerda = botao_mover(id, "doing", "←", "")
+  end
+
+  let titulo = concat("<span class=\"title\" title=\"Duplo clique para editar\" hx-get=\"/cards/", id, "/edit\" hx-trigger=\"dblclick\" hx-target=\"closest .card\" hx-swap=\"outerHTML\">", html-safe(c.title), "</span>")
+  let topo = concat("<div class=\"card-top\">", titulo, "<button class=\"del\" title=\"Excluir\" hx-delete=\"/cards/", id, "\" hx-confirm=\"Excluir este cartão?\">×</button></div>")
+  let rodape = concat("<div class=\"card-foot\"><span class=\"owner\"><i>", html-safe(str-slice-safe(c.owner)), "</i>", html-safe(c.owner), "</span><span class=\"badge ", classe, "\">", rotulo, "</span><span class=\"moves\">", esquerda, direita, "</span></div>")
+  concat("<article class=\"card\" id=\"card-", id, "\">", topo, rodape, "</article>")
+end
+
+fn str-slice-safe(texto str) str
+  match str-slice(texto, 0, 1)
+    case ok(inicial)
+      inicial
+    case err(_)
+      "?"
+  end
+end
+
+fn coluna_html(titulo str, status str, cards (list Card)) str
+  let itens = ""
+  let n = 0
+  for-each c cards
+    if str-eq(c.status, status)
+      set itens = concat(itens, card_html(c))
+      set n = n + 1
+    end
+  end
+  if n == 0
+    set itens = "<p class=\"vazio\">Nenhum cartão</p>"
+  end
+  concat("<section class=\"col col-", status, "\"><header><h2>", titulo, "</h2><span class=\"count\">", str-from-int(n), "</span></header><div class=\"cards\">", itens, "</div></section>")
+end
+
+fn quadro(req Request) (result str str) effects(db)
+  let q = campo(req, "q")
+  let dono = campo(req, "owner")
+  let conn = try conectar()
+  let padrao = concat("%", q, "%")
+  let cards = try db-query(conn, "SELECT id, title, owner, status, priority, created FROM cards WHERE title LIKE ?1 AND (?2 = '' OR owner = ?2) ORDER BY priority DESC, id ASC", Card, padrao, dono)
+  let html_quadro = concat(coluna_html("A fazer", "todo", cards), coluna_html("Em andamento", "doing", cards), coluna_html("Concluído", "done", cards))
+  ok(html_quadro)
+end
+
+fn barra(rotulo str, valor int, total int, cor str) str
+  let largura = proporcao(valor, total, 200)
+  concat("<text x=\"0\" y=\"14\" class=\"svg-label\">", rotulo, "</text><rect x=\"110\" y=\"3\" width=\"200\" height=\"14\" rx=\"7\" class=\"svg-track\"/><rect x=\"110\" y=\"3\" width=\"", str-from-int(largura), "\" height=\"14\" rx=\"7\" fill=\"", cor, "\"/><text x=\"320\" y=\"14\" class=\"svg-value\">", str-from-int(valor), "</text>")
+end
+
+fn painel_stats() (result str str) effects(db)
+  let conn = try conectar()
+  let a_fazer = contar(conn, "todo")
+  let andamento = contar(conn, "doing")
+  let feitos = contar(conn, "done")
+  let total = a_fazer + andamento + feitos
+  let pct = proporcao(feitos, total, 100)
+  let arco = proporcao(pct, 100, 251)
+
+  let barras = concat(
+    "<g transform=\"translate(0,6)\">", barra("A fazer", a_fazer, total, "#64748b"), "</g>",
+    "<g transform=\"translate(0,32)\">", barra("Em andamento", andamento, total, "#f59e0b"), "</g>",
+    "<g transform=\"translate(0,58)\">", barra("Concluído", feitos, total, "#22c55e"), "</g>"
+  )
+  let grafico = concat("<svg viewBox=\"0 0 350 84\" class=\"bars\">", barras, "</svg>")
+  let anel = concat("<svg viewBox=\"0 0 100 100\" class=\"ring\"><circle cx=\"50\" cy=\"50\" r=\"40\" class=\"ring-bg\"/><circle cx=\"50\" cy=\"50\" r=\"40\" class=\"ring-fg\" stroke-dasharray=\"", str-from-int(arco), " 251\" transform=\"rotate(-90 50 50)\"/><text x=\"50\" y=\"56\" class=\"ring-text\">", str-from-int(pct), "%</text></svg>")
+  ok(concat("<div class=\"stats\"><div class=\"stat-total\"><strong>", str-from-int(total), "</strong><span>cartões</span></div>", grafico, anel, "</div>"))
+end
+
+// ---------------------------------------------------------------------------
+// Rotas — todas devolvem HTML pronto; nenhuma devolve JSON.
+// ---------------------------------------------------------------------------
+
+route GET "/board" (req Request) Response effects(db)
+  on-err msg
+    aviso("erro", msg)
+  end
+  let conteudo = try quadro(req)
+  html-render(200, conteudo)
+end
+
+route GET "/stats" () Response effects(db)
+  on-err msg
+    aviso("erro", msg)
+  end
+  let conteudo = try painel_stats()
+  html-render(200, conteudo)
+end
+
+route POST "/cards" (req Request) Response effects(db, net, clock)
+  on-err msg
+    aviso("erro", msg)
+  end
+  if not(rate-limit(concat("add:", req-client-ip(req)), 8, 60))
+    return aviso("erro", "Calma! Limite de 8 cartões por minuto atingido.")
+  end
+  let titulo = str-trim(campo(req, "title"))
+  if str-len(titulo) < 3
+    return aviso("erro", "O título precisa ter pelo menos 3 caracteres.")
+  end
+  let dono = campo(req, "owner")
+  let prioridade = match int-from-str(campo(req, "priority"))
+    case ok(p)
+      p
+    case err(_)
+      1
+  end
+  let conn = try conectar()
+  try db-exec(conn, "INSERT INTO cards (title, owner, status, priority, created) VALUES (?1, ?2, 'todo', ?3, ?4)", titulo, dono, prioridade, now-ms())
+  avisar_todos()
+  let conteudo = try quadro(req)
+  response-set-header(html-render(200, conteudo), "HX-Trigger", "cardAdded")
+end
+
+route POST "/cards/{id}/move" (id int, req Request) Response effects(db, net)
+  on-err msg
+    aviso("erro", msg)
+  end
+  let destino = try request-query(req, "to")
+  let valido = str-eq(destino, "todo") || str-eq(destino, "doing") || str-eq(destino, "done")
+  if not(valido)
+    return aviso("erro", "Coluna inválida.")
+  end
+  let conn = try conectar()
+  try db-exec(conn, "UPDATE cards SET status = ?1 WHERE id = ?2", destino, id)
+  avisar_todos()
+  let conteudo = try quadro(req)
+  html-render(200, conteudo)
+end
+
+route GET "/cards/{id}/edit" (id int) Response effects(db)
+  on-err msg
+    aviso("erro", msg)
+  end
+  let conn = try conectar()
+  let achados = try db-query(conn, "SELECT id, title, owner, status, priority, created FROM cards WHERE id = ?1", Card, id)
+  let c = try list-get(achados, 0)
+  let formulario = concat("<form class=\"card editing\" hx-put=\"/cards/", str-from-int(c.id), "\" hx-target=\"#board\" hx-swap=\"innerHTML\"><input name=\"title\" value=\"", html-safe(c.title), "\" autofocus required minlength=\"3\"><button class=\"ok\">Salvar</button></form>")
+  html-render(200, formulario)
+end
+
+route PUT "/cards/{id}" (id int, req Request) Response effects(db, net)
+  on-err msg
+    aviso("erro", msg)
+  end
+  let titulo = str-trim(campo(req, "title"))
+  if str-len(titulo) < 3
+    return aviso("erro", "O título precisa ter pelo menos 3 caracteres.")
+  end
+  let conn = try conectar()
+  try db-exec(conn, "UPDATE cards SET title = ?1 WHERE id = ?2", titulo, id)
+  avisar_todos()
+  let conteudo = try quadro(req)
+  html-render(200, conteudo)
+end
+
+route DELETE "/cards/{id}" (id int, req Request) Response effects(db, net)
+  on-err msg
+    aviso("erro", msg)
+  end
+  let conn = try conectar()
+  try db-exec(conn, "DELETE FROM cards WHERE id = ?1", id)
+  avisar_todos()
+  let conteudo = try quadro(req)
+  html-render(200, conteudo)
+end
+
+// Tempo real: cada aba conectada entra na sala "board". Qualquer mudança faz o
+// servidor mandar "refresh"; as abas pedem o HTML novo e trocam no DOM.
+ws-route "/ws" (req Request, conn WSConn) effects(net)
+  on-open
+    ws-join(conn, "board")
+    let _ = ws-broadcast("board", fmt("online:{}", ws-topic-size("board")))
+  end
+
+  on-message texto
+    let _ = ws-send(conn, "pong")
+  end
+
+  on-close
+    ws-leave(conn, "board")
+    let _ = ws-broadcast("board", fmt("online:{}", ws-topic-size("board")))
+  end
+end
+
+fn main() void effects(fs, io, net, db)
+  let porta = cli-get-flag("--porta", "8080")
+  match iniciar_banco()
+    case ok(_)
+      println("✓ Banco pronto (board.db)")
+    case err(msg)
+      println(fmt("✗ Falha ao iniciar o banco: {}", msg))
+      cli-exit(1)
+  end
+  println("==================================================")
+  println("🚀 Mission Control — Server-Driven UI")
+  println(fmt("👉 Abra em duas abas: http://localhost:{}", porta))
+  println("==================================================")
+  let _ = serve-hybrid("./public", porta)
+end

@@ -60,7 +60,7 @@ func (l *Lexer) skipWhitespaceAndComments() {
 			l.line++
 			l.col = 0
 			l.readChar()
-		} else if l.ch == ';' {
+		} else if l.ch == ';' || (l.ch == '/' && l.peekChar() == '/') {
 			// Comentário até o fim da linha
 			for l.ch != '\n' && l.ch != 0 {
 				l.readChar()
@@ -92,6 +92,88 @@ func (l *Lexer) NextToken() token.Token {
 	case ')':
 		tok = token.Token{Type: token.RPAREN, Literal: ")", Line: tokLine, Col: tokCol}
 		l.readChar()
+	case ',':
+		tok = token.Token{Type: token.COMMA, Literal: ",", Line: tokLine, Col: tokCol}
+		l.readChar()
+	case ':':
+		tok = token.Token{Type: token.COLON, Literal: ":", Line: tokLine, Col: tokCol}
+		l.readChar()
+	case '.':
+		tok = token.Token{Type: token.DOT, Literal: ".", Line: tokLine, Col: tokCol}
+		l.readChar()
+	case '=':
+		if l.peekChar() == '=' {
+			l.readChar()
+			tok = token.Token{Type: token.EQ, Literal: "eq", Line: tokLine, Col: tokCol}
+		} else {
+			tok = token.Token{Type: token.ASSIGN, Literal: "=", Line: tokLine, Col: tokCol}
+		}
+		l.readChar()
+	case '!':
+		if l.peekChar() == '=' {
+			l.readChar()
+			tok = token.Token{Type: token.NEQ, Literal: "neq", Line: tokLine, Col: tokCol}
+		} else {
+			tok = token.Token{Type: token.NOT, Literal: "not", Line: tokLine, Col: tokCol}
+		}
+		l.readChar()
+	case '+':
+		tok = token.Token{Type: token.ADD, Literal: "add", Line: tokLine, Col: tokCol}
+		l.readChar()
+	case '-':
+		if isDigit(l.peekChar()) {
+			lit, isFloat, ok := l.readNumber()
+			if !ok {
+				tok = token.Token{Type: token.ILLEGAL, Literal: lit, Line: tokLine, Col: tokCol}
+			} else if isFloat {
+				tok = token.Token{Type: token.FLOAT, Literal: lit, Line: tokLine, Col: tokCol}
+			} else {
+				tok = token.Token{Type: token.INT, Literal: lit, Line: tokLine, Col: tokCol}
+			}
+		} else {
+			tok = token.Token{Type: token.SUB, Literal: "sub", Line: tokLine, Col: tokCol}
+			l.readChar()
+		}
+	case '*':
+		tok = token.Token{Type: token.MUL, Literal: "mul", Line: tokLine, Col: tokCol}
+		l.readChar()
+	case '/':
+		tok = token.Token{Type: token.DIV, Literal: "div", Line: tokLine, Col: tokCol}
+		l.readChar()
+	case '<':
+		if l.peekChar() == '=' {
+			l.readChar()
+			tok = token.Token{Type: token.LTE, Literal: "lte", Line: tokLine, Col: tokCol}
+		} else {
+			tok = token.Token{Type: token.LT, Literal: "lt", Line: tokLine, Col: tokCol}
+		}
+		l.readChar()
+	case '>':
+		if l.peekChar() == '=' {
+			l.readChar()
+			tok = token.Token{Type: token.GTE, Literal: "gte", Line: tokLine, Col: tokCol}
+		} else {
+			tok = token.Token{Type: token.GT, Literal: "gt", Line: tokLine, Col: tokCol}
+		}
+		l.readChar()
+	case '&':
+		if l.peekChar() == '&' {
+			l.readChar()
+			tok = token.Token{Type: token.AND, Literal: "and", Line: tokLine, Col: tokCol}
+			l.readChar()
+		} else {
+			tok = token.Token{Type: token.ILLEGAL, Literal: "&", Line: tokLine, Col: tokCol}
+			l.readChar()
+		}
+	case '|':
+		if l.peekChar() == '|' {
+			l.readChar()
+			tok = token.Token{Type: token.OR, Literal: "or", Line: tokLine, Col: tokCol}
+			l.readChar()
+		} else {
+			tok = token.Token{Type: token.ILLEGAL, Literal: "|", Line: tokLine, Col: tokCol}
+			l.readChar()
+		}
 	case '"':
 		str, ok := l.readString()
 		if !ok {
@@ -102,6 +184,9 @@ func (l *Lexer) NextToken() token.Token {
 	default:
 		if isLetter(l.ch) {
 			lit := l.readIdentifier()
+			if l.ch == '.' && isLetter(l.peekChar()) {
+				return l.readPath(lit, tokLine, tokCol)
+			}
 			tokType := token.LookupIdent(lit)
 			return token.Token{Type: tokType, Literal: lit, Line: tokLine, Col: tokCol}
 		} else if isDigit(l.ch) || (l.ch == '-' && isDigit(l.peekChar())) {
@@ -131,12 +216,41 @@ func (l *Lexer) readIdentifier() string {
 	return l.input[startPos:l.position]
 }
 
+// readPath continua um identificador ja lido com os segmentos ".campo" que o
+// seguem, sem espaco entre eles: state.tasks, req.user.name. Os segmentos
+// depois do primeiro sao nomes de campo, entao palavras reservadas valem
+// (claims.sub); o parser e quem valida a base e recusa true/false.
+func (l *Lexer) readPath(base string, line, col int) token.Token {
+	var sb strings.Builder
+	sb.WriteString(base)
+	for l.ch == '.' && isLetter(l.peekChar()) {
+		l.readChar()
+		sb.WriteByte('.')
+		sb.WriteString(l.readIdentifier())
+	}
+	return token.Token{Type: token.PATH, Literal: sb.String(), Line: line, Col: col}
+}
+
 func (l *Lexer) readNumber() (string, bool, bool) {
 	startPos := l.position
 	isFloat := false
 
 	if l.ch == '-' {
 		l.readChar()
+	}
+
+	// Hexadecimal (0x... / 0X...)
+	if l.ch == '0' && (l.peekChar() == 'x' || l.peekChar() == 'X') {
+		l.readChar() // '0'
+		l.readChar() // 'x' ou 'X'
+		if !isHex(l.ch) {
+			l.addError(fmt.Sprintf("Número hexadecimal malformado em %d:%d", l.line, l.col))
+			return l.input[startPos:l.position], false, false
+		}
+		for isHex(l.ch) {
+			l.readChar()
+		}
+		return l.input[startPos:l.position], false, true
 	}
 
 	for isDigit(l.ch) {
@@ -150,6 +264,22 @@ func (l *Lexer) readNumber() (string, bool, bool) {
 		}
 		isFloat = true
 		l.readChar()
+		for isDigit(l.ch) {
+			l.readChar()
+		}
+	}
+
+	// Notação científica (1e3, 2.5e-3, etc.)
+	if l.ch == 'e' || l.ch == 'E' {
+		isFloat = true
+		l.readChar()
+		if l.ch == '+' || l.ch == '-' {
+			l.readChar()
+		}
+		if !isDigit(l.ch) {
+			l.addError(fmt.Sprintf("Expoente científico malformado em %d:%d", l.line, l.col))
+			return l.input[startPos:l.position], false, false
+		}
 		for isDigit(l.ch) {
 			l.readChar()
 		}
@@ -232,7 +362,7 @@ func (l *Lexer) addError(msg string) {
 }
 
 func isLetter(ch rune) bool {
-	return ('a' <= ch && ch <= 'z') || ('A' <= ch && ch <= 'Z')
+	return ('a' <= ch && ch <= 'z') || ('A' <= ch && ch <= 'Z') || ch == '_'
 }
 
 func isDigit(ch rune) bool {

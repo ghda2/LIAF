@@ -22,6 +22,12 @@ func TestSemanticFailures(t *testing.T) {
 		{`(let r (result int str) (call ok 1)) (if true (then (match r (ok n) (err e))))`, "", "E_UNHANDLED_RESULT"},
 		{`(let r (result int str) (call ok 1)) (while false (match r (ok n) (err e)))`, "", "E_UNHANDLED_RESULT"},
 		{`(let r (result int str) (call ok 1)) (if true (then (return))) (match r (ok n) (err e))`, "", "E_UNHANDLED_RESULT"},
+		{`(let x int (if true (then 1)))`, "", "E_IF_EXPR_MISSING_ELSE"},
+		{`(let x int (if true (then 1) (else "bad")))`, "", "E_IF_EXPR_BRANCH_TYPE"},
+		{`(let n int (rand-int 5))`, "", "E_UNDECLARED_EFFECT"},
+		{`(match (env-get "FOO") (ok v (return)) (err e (return)))`, "", "E_UNDECLARED_EFFECT"},
+		{`(let n int 1)`, "rand", "E_UNUSED_EFFECT"},
+		{`(let n int 1)`, "env", "E_UNUSED_EFFECT"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.code+tc.body, func(t *testing.T) {

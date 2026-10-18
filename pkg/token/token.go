@@ -9,6 +9,11 @@ const (
 	// Delimiters
 	LPAREN TokenType = "("
 	RPAREN TokenType = ")"
+	COMMA  TokenType = ","
+	COLON  TokenType = ":"
+	DOT    TokenType = "."
+	ASSIGN TokenType = "="
+	END    TokenType = "end"
 
 	// Literals & Identifiers
 	IDENT  TokenType = "IDENT"
@@ -16,11 +21,16 @@ const (
 	FLOAT  TokenType = "FLOAT"
 	BOOL   TokenType = "BOOL"
 	STRING TokenType = "STRING"
+	// PATH e o acesso a campo com ponto (issue #012): obj.campo ou a.b.c.
+	// O parser o expande para (field obj campo).
+	PATH TokenType = "PATH"
 
 	// Keywords
+	PUB     TokenType = "pub"
 	MODULE  TokenType = "module"
 	IMPORT  TokenType = "import"
 	STRUCT  TokenType = "struct"
+	ENUM    TokenType = "enum"
 	FIELDS  TokenType = "fields"
 	FN      TokenType = "fn"
 	PARAMS  TokenType = "params"
@@ -44,9 +54,25 @@ const (
 	BREAK     TokenType = "break"
 	CONTINUE  TokenType = "continue"
 	MATCH     TokenType = "match"
+	CASE      TokenType = "case"
+	ON_ERR    TokenType = "on-err"
+	ROUTE     TokenType = "route"
+
+	// WebSocket (issue #016)
+	WS_ROUTE   TokenType = "ws-route"
+	ON_OPEN    TokenType = "on-open"
+	ON_MESSAGE TokenType = "on-message"
+	ON_CLOSE   TokenType = "on-close"
+
+	// Banco de dados (issue #015)
+	DB_TRANSACTION TokenType = "db-transaction"
+
+	// Testes nativos (issue #044)
+	TEST TokenType = "test"
 
 	// Expressions
 	CALL TokenType = "call"
+	TRY  TokenType = "try"
 	RECV TokenType = "recv"
 
 	// Operators
@@ -62,14 +88,21 @@ const (
 	LTE TokenType = "lte"
 	AND TokenType = "and"
 	OR  TokenType = "or"
+	NOT TokenType = "not"
 )
 
 var keywords = map[string]TokenType{
 	"while": WHILE, "for-range": FOR_RANGE, "for-each": FOR_EACH,
-	"break": BREAK, "continue": CONTINUE, "match": MATCH,
+	"break": BREAK, "continue": CONTINUE, "match": MATCH, "case": CASE,
+	"on-err": ON_ERR, "route": ROUTE, "try": TRY,
+	"ws-route": WS_ROUTE, "on-open": ON_OPEN, "on-message": ON_MESSAGE, "on-close": ON_CLOSE,
+	"db-transaction": DB_TRANSACTION,
+	"pub":     PUB,
+	"test":    TEST,
 	"module":  MODULE,
 	"import":  IMPORT,
 	"struct":  STRUCT,
+	"enum":    ENUM,
 	"fields":  FIELDS,
 	"fn":      FN,
 	"params":  PARAMS,
@@ -99,6 +132,7 @@ var keywords = map[string]TokenType{
 	"lte":     LTE,
 	"and":     AND,
 	"or":      OR,
+	"end":     END,
 	"true":    BOOL,
 	"false":   BOOL,
 }
@@ -111,10 +145,22 @@ func LookupIdent(ident string) TokenType {
 	return IDENT
 }
 
+// IsName diz se o token pode ocupar uma posicao de nome de campo. Alem de
+// identificadores, aceita as palavras reservadas: o nome de um campo e so um
+// rotulo (e a chave no JSON), e formatos externos usam nomes como "sub" e
+// "return" que a LIAF reserva. true e false ficam de fora porque tem valor.
+func IsName(tok Token) bool {
+	if tok.Type == IDENT {
+		return true
+	}
+	kw, ok := keywords[tok.Literal]
+	return ok && kw == tok.Type && tok.Type != BOOL
+}
+
 // IsOperator verifica se o tipo de token é um operador do núcleo
 func IsOperator(tok TokenType) bool {
 	switch tok {
-	case ADD, SUB, MUL, DIV, EQ, NEQ, GT, LT, GTE, LTE, AND, OR:
+	case ADD, SUB, MUL, DIV, EQ, NEQ, GT, LT, GTE, LTE, AND, OR, NOT:
 		return true
 	default:
 		return false

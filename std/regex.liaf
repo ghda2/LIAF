@@ -1,0 +1,66 @@
+;; std/regex - Expressões regulares seguras (RE2) e validadores de formato.
+;;
+;;   (import "std/regex")
+;;   (if (is-email "dev@liaf.org") (println "Email valido"))
+;;   (let numeros (list str) (regex-extract-all "\\d+" "itens 10 e 20"))
+(module regex
+  ;; Testa se o texto satisfaz o padrao de expressao regular.
+  (pub fn regex-is-match (params (padrao str) (texto str)) (returns bool) (effects)
+    (body
+      (match (regex-match padrao texto)
+        (ok m (return m))
+        (err _ (return false)))))
+
+  ;; Encontra a primeira ocorrencia do padrao no texto.
+  (pub fn regex-first (params (padrao str) (texto str)) (returns (option str)) (effects)
+    (body
+      (match (regex-find padrao texto)
+        (ok opt (return opt))
+        (err _ (return (none str))))))
+
+  ;; Encontra todas as ocorrencias do padrao no texto.
+  (pub fn regex-extract-all (params (padrao str) (texto str)) (returns (list str)) (effects)
+    (body
+      (match (regex-find-all padrao texto)
+        (ok itens (return itens))
+        (err _ (return (list))))))
+
+  ;; Substitui todas as correspondencias do padrao pelo texto de substituicao.
+  (pub fn regex-sub (params (padrao str) (texto str) (subst str)) (returns str) (effects)
+    (body
+      (match (regex-replace padrao texto subst)
+        (ok res (return res))
+        (err _ (return texto)))))
+
+  ;; Valida se o texto e um endereco de e-mail com formato aceito.
+  (pub fn is-email (params (texto str)) (returns bool) (effects)
+    (body
+      (return (regex-is-match "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$" texto))))
+
+  ;; Valida se o texto e um slug valido (apenas letras minusculas, numeros e hifens).
+  (pub fn is-slug (params (texto str)) (returns bool) (effects)
+    (body
+      (return (regex-is-match "^[a-z0-9]+(?:-[a-z0-9]+)*$" texto))))
+
+  ;; Valida se o texto contem exclusivamente digitos numericos.
+  (pub fn is-numeric (params (texto str)) (returns bool) (effects)
+    (body
+      (return (regex-is-match "^[0-9]+$" texto))))
+
+  ;; Valida formato de UUID (v4 / 36 caracteres com hifens).
+  (pub fn is-uuid (params (texto str)) (returns bool) (effects)
+    (body
+      (return (regex-is-match "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" texto))))
+
+  ;; Valida formato basico de CPF (com ou sem pontuacao).
+  (pub fn is-cpf (params (texto str)) (returns bool) (effects)
+    (body
+      (return (or (regex-is-match "^\\d{3}\\.\\d{3}\\.\\d{3}-\\d{2}$" texto)
+                  (regex-is-match "^\\d{11}$" texto)))))
+
+  ;; Valida formato basico de CNPJ (com ou sem pontuacao).
+  (pub fn is-cnpj (params (texto str)) (returns bool) (effects)
+    (body
+      (return (or (regex-is-match "^\\d{2}\\.\\d{3}\\.\\d{3}/\\d{4}-\\d{2}$" texto)
+                  (regex-is-match "^\\d{14}$" texto)))))
+)

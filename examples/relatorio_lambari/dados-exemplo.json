@@ -1,0 +1,20 @@
+{
+  "cidade": "Lambari",
+  "estado": "MG",
+  "estacao": "Estação Hidromineral do Parque das Águas",
+  "periodo": "24/09/2026 a 30/09/2026",
+  "gerado_em": "30/09/2026",
+  "temp_media": "21,6°C",
+  "precipitacao_total": "18 mm",
+  "resumo": "Semana de transição para a primavera no Sul de Minas: manhãs frescas típicas da Mantiqueira, tardes amenas e pancadas passageiras de chuva.",
+  "registros": [
+    {"data": "24/09", "dia_semana": "Qui", "temp_min": 14, "temp_max": 26, "umidade": 65, "condicao": "Ensolarado"},
+    {"data": "25/09", "dia_semana": "Sex", "temp_min": 15, "temp_max": 27, "umidade": 62, "condicao": "Ensolarado"},
+    {"data": "26/09", "dia_semana": "Sáb", "temp_min": 16, "temp_max": 28, "umidade": 58, "condicao": "Céu limpo"},
+    {"data": "27/09", "dia_semana": "Dom", "temp_min": 17, "temp_max": 28, "umidade": 68, "condicao": "Parcialmente nublado"},
+    {"data": "28/09", "dia_semana": "Seg", "temp_min": 16, "temp_max": 25, "umidade": 75, "condicao": "Chuva isolada"},
+    {"data": "29/09", "dia_semana": "Ter", "temp_min": 15, "temp_max": 23, "umidade": 82, "condicao": "Pancadas de chuva"},
+    {"data": "30/09", "dia_semana": "Qua", "temp_min": 14, "temp_max": 24, "umidade": 70, "condicao": "Estável"}
+  ],
+  "cor_tema": "#0369a1"
+}

@@ -1,0 +1,12 @@
+;; issue: base
+;; status: done
+;; out: abc
+;; out: true
+;; out: 3
+;; out: 42
+;; out: a	b
+(println (concat "a" "b" "c"))
+(println (eq "a" "a"))
+(println (str-len "abc"))
+(println (str-from-int 42))
+(println "a\tb")

@@ -23,15 +23,65 @@ type LoopControl struct {
 func (s *LoopControl) Pos() (int, int) { return s.Line, s.Col }
 func (s *LoopControl) stmtNode()       {}
 
+// DBTransactionStmt representa (db-transaction conn instrucoes...).
+//
+// Conn e o nome de uma variavel DBConnection. Dentro do bloco esse mesmo nome
+// passa a designar a transacao, para que as consultas do corpo nao precisem
+// ser reescritas — e para que nao exista a forma errada de usar o pool
+// original por engano no meio de uma transacao.
+type DBTransactionStmt struct {
+	Conn      string
+	Body      []Stmt
+	Line, Col int
+}
+
+func (s *DBTransactionStmt) Pos() (int, int) { return s.Line, s.Col }
+func (s *DBTransactionStmt) stmtNode()       {}
+
+type MatchCase struct {
+	Pattern   string
+	Variables []string
+	Body      []Stmt
+	ExprBody  Expr
+	Line, Col int
+}
+
 type MatchStmt struct {
 	Value           Expr
+	Cases           []MatchCase
 	OKName, ErrName string
 	OK, Err         []Stmt
+	IsOption        bool
 	Line, Col       int
 }
 
 func (s *MatchStmt) Pos() (int, int) { return s.Line, s.Col }
 func (s *MatchStmt) stmtNode()       {}
+
+// EnumDecl representa (enum Nome ...) ou na linear:
+// enum Nome
+//   Pendente
+//   Pago
+// end
+type EnumDecl struct {
+	Name     string
+	IsPub    bool
+	Module   string
+	Variants []EnumVariant
+	Line     int
+	Col      int
+}
+
+func (e *EnumDecl) Pos() (int, int) { return e.Line, e.Col }
+func (e *EnumDecl) topLevelNode()   {}
+
+type EnumVariant struct {
+	Name   string
+	Fields []Field
+	Line   int
+	Col    int
+}
+
 
 type TopLevel interface {
 	Node
@@ -77,6 +127,8 @@ func (i *ImportDecl) topLevelNode()   {}
 // StructDecl representa (struct Nome (fields (f1 T1) ...))
 type StructDecl struct {
 	Name   string
+	IsPub  bool
+	Module string
 	Fields []Field
 	Line   int
 	Col    int
@@ -94,19 +146,84 @@ type Field struct {
 
 func (f *Field) Pos() (int, int) { return f.Line, f.Col }
 
-// FuncDecl representa (fn nome (params ...) (returns T) (effects ...) (body ...))
+// FuncDecl representa (fn nome (params ...) (returns T) (effects ...) [(on-err var ...)] (body ...))
 type FuncDecl struct {
 	Name       string
+	IsPub      bool
+	Module     string
 	Params     []Param
 	ReturnType Type
 	Effects    []string
+	OnErrVar   string
+	OnErrBody  []Stmt
 	Body       []Stmt
 	Line       int
 	Col        int
+	// IsMiddleware marca uma declaracao (middleware ...): uma funcao de
+	// assinatura fixa (req Request) (result Request Response) que pode ser
+	// listada no with(...) de uma rota (issue #045).
+	IsMiddleware bool
 }
 
 func (f *FuncDecl) Pos() (int, int) { return f.Line, f.Col }
 func (f *FuncDecl) topLevelNode()   {}
+
+// RouteDecl representa (route METHOD PATH [(with mw ...)] (params ...) (returns T) (effects ...) [(on-err var ...)] (body ...))
+type RouteDecl struct {
+	Method     string
+	Path       string
+	Params     []Param
+	ReturnType Type
+	Effects    []string
+	OnErrVar   string
+	OnErrBody  []Stmt
+	Body       []Stmt
+	Line       int
+	Col        int
+	// Middlewares sao os nomes do with(...), na ordem em que rodam.
+	Middlewares []string
+}
+
+func (r *RouteDecl) Pos() (int, int) { return r.Line, r.Col }
+func (r *RouteDecl) topLevelNode()   {}
+
+// WSRouteDecl representa
+// (ws-route PATH (params ...) (effects ...) [(on-err var ...)]
+//   [(on-open ...)] (on-message var ...) [(on-close ...)])
+//
+// Nao tem (returns ...) nem (body ...): os tres blocos sao o corpo, cada um
+// disparado por um evento da conexao. A ausencia de retorno e proposital —
+// uma conexao bidirecional nao termina numa resposta.
+type WSRouteDecl struct {
+	Path      string
+	Params    []Param
+	Effects   []string
+	OnErrVar  string
+	OnErrBody []Stmt
+	OnOpen    []Stmt
+	MsgVar    string
+	OnMessage []Stmt
+	OnClose   []Stmt
+	Line      int
+	Col       int
+}
+
+func (w *WSRouteDecl) Pos() (int, int) { return w.Line, w.Col }
+func (w *WSRouteDecl) topLevelNode()   {}
+
+// TestDecl representa um bloco nativo de teste (issue #044):
+// test "nome do teste"
+//   instrucoes...
+// end
+type TestDecl struct {
+	Name string
+	Body []Stmt
+	Line int
+	Col  int
+}
+
+func (t *TestDecl) Pos() (int, int) { return t.Line, t.Col }
+func (t *TestDecl) topLevelNode()   {}
 
 type Param struct {
 	Name string
@@ -242,16 +359,27 @@ type IdentExpr struct {
 func (e *IdentExpr) Pos() (int, int) { return e.Line, e.Col }
 func (e *IdentExpr) exprNode()       {}
 
-// CallExpr representa (call func args...)
+// CallExpr representa chamada de função: (call func args...) ou diretamente (func args...)
 type CallExpr struct {
-	Func string
-	Args []Expr
-	Line int
-	Col  int
+	Func    string
+	Args    []Expr
+	HasCall bool
+	Line    int
+	Col     int
 }
 
 func (e *CallExpr) Pos() (int, int) { return e.Line, e.Col }
 func (e *CallExpr) exprNode()       {}
+
+// TryExpr representa (try expr)
+type TryExpr struct {
+	Expr Expr
+	Line int
+	Col  int
+}
+
+func (e *TryExpr) Pos() (int, int) { return e.Line, e.Col }
+func (e *TryExpr) exprNode()       {}
 
 // BinaryOpExpr representa (op expr1 expr2)
 type BinaryOpExpr struct {
@@ -274,6 +402,31 @@ type RecvExpr struct {
 
 func (e *RecvExpr) Pos() (int, int) { return e.Line, e.Col }
 func (e *RecvExpr) exprNode()       {}
+
+// IfExpr representa (if cond (then expr) [(else expr)])
+type IfExpr struct {
+	Condition Expr
+	Then      Expr
+	Else      Expr // pode ser nil se ausente
+	Line      int
+	Col       int
+}
+
+func (e *IfExpr) Pos() (int, int) { return e.Line, e.Col }
+func (e *IfExpr) exprNode()       {}
+
+// MatchExpr representa (match expr ...)
+type MatchExpr struct {
+	Value           Expr
+	Cases           []MatchCase
+	OKName, ErrName string
+	OK, Err         Expr
+	IsOption        bool
+	Line, Col       int
+}
+
+func (e *MatchExpr) Pos() (int, int) { return e.Line, e.Col }
+func (e *MatchExpr) exprNode()       {}
 
 // Tipos
 type PrimitiveType struct {

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Mission Control: Kanban colaborativo em tempo real renderizado 100% no servidor com LIAF.">
+  <title>Mission Control — LIAF Server-Driven UI</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/htmx.min.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="top">
+      <div>
+        <h1><span class="logo">◆</span> Mission Control</h1>
+        <p class="sub">Kanban em tempo real · HTML renderizado no servidor · zero framework JS</p>
+      </div>
+      <div class="presence" title="Abas conectadas agora via WebSocket">
+        <span class="dot" id="dot"></span>
+        <strong id="online">–</strong> online
+      </div>
+    </header>
+
+    <!-- Painel de métricas: o SVG inteiro nasce no backend -->
+    <section class="panel" id="stats" hx-get="/stats" hx-trigger="load, refresh from:body">
+      <p class="muted">Carregando métricas…</p>
+    </section>
+
+    <section class="toolbar">
+      <!-- Filtros: busca ao vivo (debounce de 250 ms) e filtro por responsável -->
+      <form id="filtros" class="filters" onsubmit="return false">
+        <input id="busca" type="search" name="q" placeholder="Buscar cartões…" autocomplete="off"
+               hx-get="/board" hx-target="#board" hx-trigger="input changed delay:250ms, search" hx-include="#filtros">
+        <select name="owner" aria-label="Responsável"
+                hx-get="/board" hx-target="#board" hx-trigger="change" hx-include="#filtros">
+          <option value="">Todos</option>
+          <option>Ana</option>
+          <option>Bruno</option>
+          <option>Carla</option>
+          <option>Diego</option>
+        </select>
+      </form>
+
+      <form class="add" hx-post="/cards" hx-target="#board" hx-swap="innerHTML" hx-include="#filtros"
+            hx-on::after-request="if (event.detail.successful && !event.detail.xhr.getResponseHeader('HX-Retarget')) this.reset()">
+        <input name="title" placeholder="Novo cartão…" required minlength="3" autocomplete="off">
+        <select name="owner" aria-label="Responsável do novo cartão">
+          <option>Ana</option><option>Bruno</option><option>Carla</option><option>Diego</option>
+        </select>
+        <select name="priority" aria-label="Prioridade">
+          <option value="1">Baixa</option>
+          <option value="2">Média</option>
+          <option value="3">Alta</option>
+        </select>
+        <button type="submit">Adicionar</button>
+      </form>
+    </section>
+
+    <div id="toast" class="toast-area" aria-live="polite"></div>
+
+    <!-- Todos os botões dentro do quadro herdam target e include destes atributos -->
+    <main hx-target="#board" hx-include="#filtros" hx-swap="innerHTML">
+      <div id="board" class="board" hx-get="/board" hx-trigger="load, refresh from:body" hx-include="#filtros">
+        <p class="muted">Carregando quadro…</p>
+      </div>
+    </main>
+
+    <footer class="foot">
+      Feito com <strong>LIAF</strong> · um único binário · <code>app.liaf</code> contém toda a lógica e toda a UI dinâmica.
+    </footer>
+  </div>
+
+  <script>
+    // Único JavaScript da aplicação: ouvir o servidor e pedir HTML novo.
+    (function connect() {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const ws = new WebSocket(proto + '://' + location.host + '/ws');
+      const dot = document.getElementById('dot');
+      ws.onopen = () => dot.classList.add('on');
+      ws.onmessage = (e) => {
+        if (e.data === 'refresh') htmx.trigger(document.body, 'refresh');
+        else if (e.data.startsWith('online:')) document.getElementById('online').textContent = e.data.slice(7);
+      };
+      ws.onclose = () => { dot.classList.remove('on'); setTimeout(connect, 1500); };
+    })();
+
+    // Avisos do servidor somem sozinhos.
+    document.body.addEventListener('htmx:afterSwap', (e) => {
+      if (e.target.id === 'toast') setTimeout(() => { e.target.innerHTML = ''; }, 3500);
+    });
+  </script>
+</body>
+</html>

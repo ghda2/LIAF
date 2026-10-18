@@ -1,0 +1,16 @@
+;; std/csv - Parser e serializador de arquivos e dados em formato CSV.
+;;
+;;   (import "std/csv")
+;;   (let linhas (list (list str)) (try (csv-decode "nome,idade\nAna,25\nBeto,30")))
+;;   (let csv-texto str (csv-serialize linhas))
+(module csv
+  ;; Converte uma string no formato CSV em uma lista de linhas (cada uma sendo uma lista de campos de texto).
+  (pub fn csv-decode (params (conteudo str)) (returns (result (list (list str)) str)) (effects)
+    (body
+      (return (csv-parse conteudo))))
+
+  ;; Serializa uma matriz de linhas de texto em uma string formatada como CSV.
+  (pub fn csv-serialize (params (linhas (list (list str)))) (returns str) (effects)
+    (body
+      (return (csv-encode linhas))))
+)

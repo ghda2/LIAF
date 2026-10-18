@@ -1,0 +1,39 @@
+// Recibo em PDF: dados tipados em LIAF, layout em recibo.typ.
+//
+//   liafc run recibo.liaf                  -> grava recibo.pdf
+//   liafc doc check recibo.typ --dados dados-exemplo.json --json   (conferir só o layout)
+module recibo
+
+struct Item
+  nome str
+  qtd int
+  preco_centavos int
+end
+
+struct Recibo
+  numero int
+  emitido_em str
+  loja str
+  cliente str
+  itens (list Item)
+  cor str
+end
+
+fn exemplo() Recibo
+  let itens = make-list(Item)
+  list-push(itens, new Item("Café coado", 2, 850))
+  list-push(itens, new Item("Pão de queijo", 3, 600))
+  list-push(itens, new Item("Bolo de cenoura", 1, 1490))
+  new Recibo(1042, "30/09/2026", "Padaria Pão Quente", "Ana Souza", itens, "#b45309")
+end
+
+fn main() void effects(fs, io)
+  on-err e
+    println(fmt("erro: {}", e))
+    exit(1)
+  end
+  let layout = try fs-read-file("recibo.typ")
+  let pdf = try pdf-typst(layout, try json-encode(exemplo()))
+  try fs-write-file("recibo.pdf", pdf)
+  println(fmt("recibo.pdf gerado ({} bytes)", str-byte-len(pdf)))
+end
